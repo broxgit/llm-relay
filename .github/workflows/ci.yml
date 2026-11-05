@@ -1,8 +1,26 @@
 name: CI
 
 on:
+  # The two paths-ignore lists must stay the same. cowork/ is left out on purpose: the tests read its SKILL.md.
   push:
+    branches: [main]
+    paths-ignore:
+      - "design-and-decisions/**"
+      - "docs/**"
+      - "README.md"
+      - "ROADMAP.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "LICENSE"
   pull_request:
+    paths-ignore:
+      - "design-and-decisions/**"
+      - "docs/**"
+      - "README.md"
+      - "ROADMAP.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "LICENSE"
 
 jobs:
   lint:

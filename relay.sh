@@ -29,6 +29,9 @@ RUNLIB="$SKILL_DIR/runlib.sh"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# The release this is. docs/releasing.md says how to make the next one.
+RELAY_VERSION="0.1.0"
+
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
 POLL="${RELAY_POLL:-5}"
@@ -85,6 +88,7 @@ usage() {
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
        relay [--dir ONEDRIVE_FOLDER] skills
        relay completion zsh|bash
+       relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
        relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki]
        relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--no-wiki]
@@ -585,6 +589,7 @@ cmd_scan() {
   # Cowork is about to be asked for something, so its copies of the user's skills should be current.
   if [ -z "$SKILLS_CHECKED" ]; then
     SKILLS_CHECKED=1
+    check_own_skill
     sync_skills quiet
   fi
   [ -n "$name" ] || die "can't name a scan after $root"
@@ -1222,6 +1227,7 @@ cmd_mr() {
   command -v glab >/dev/null 2>&1 || die "relay mr needs glab"
   command -v python3 >/dev/null 2>&1 || die "relay mr needs python3"
   SKILLS_CHECKED=1
+  check_own_skill
   sync_skills quiet
   while IFS= read -r url; do
     [ -n "$url" ] || continue
@@ -1692,6 +1698,22 @@ $(printf '%s\n' "$1" | tr ':' '\n')
 EOF
 }
 
+# The relay's own skill in Cowork's folder should be this relay's. After an upgrade it isn't,
+# until relay setup runs again, and Cowork goes on using the old one.
+check_own_skill() {
+  local d="$SKILLS_DIR/remote-pair-run" f
+  if [ ! -f "$d/SKILL.md" ]; then
+    echo "Cowork doesn't have the remote-pair-run skill yet. Run: relay setup" >&2
+    return 0
+  fi
+  for f in SKILL.md runlib.sh; do
+    if ! cmp -s "$SKILL_DIR/$f" "$d/$f"; then
+      echo "Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay setup" >&2
+      return 0
+    fi
+  done
+}
+
 # sync_skills <setup|quiet> [the list before]: brings Cowork's copies of the named skills into
 # step. Only setup asks, removes, or says that nothing changed. Returns 1 if a skill couldn't be
 # brought into step.
@@ -2034,6 +2056,7 @@ EOF
 case "${1:-}" in
   __complete) shift; cmd_complete "$@"; exit 0 ;;
   completion) shift; cmd_completion "$@"; exit 0 ;;
+  --version | version) echo "relay $RELAY_VERSION"; exit 0 ;;
 esac
 
 ONEDRIVE=""
