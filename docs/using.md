@@ -67,6 +67,14 @@ Run `relay run` in Apple's Terminal. macOS can refuse other terminal apps on One
 
 If OneDrive never catches up, the command gives up after 10 minutes, prints what your Mac sees for each file, and sends nothing. Paste that output to Cowork. If your OneDrive allows it, in Finder, right-click the task's `output` folder, choose **Always Keep on This Device**, and run it again.
 
+## Several attempts in one round
+
+When Cowork can see two or three plausible fixes, it can put them all in one deliverable. You still read it and press `y` once. The run tries them in order, each in a fresh copy of the code with git hooks off, and stops at the first that passes. Your checkout isn't touched, and the report says which attempt passed and why the others failed.
+
+`relay apply` then applies only the attempt that passed. It takes that from the report, and only if the report in OneDrive is the same file your Mac kept in `~/pair-run-reports`. If no run has passed, it applies nothing.
+
+This needs the skill from this version, so run `relay setup` after updating.
+
 ## Review a merge request
 
 If you keep a review skill, Cowork can follow it, using what this command sends in place of `glab` and your clones. Your skill only needs to add the rules Cowork can't otherwise see, such as ones in your agent's memory. Run it in any terminal:
@@ -75,6 +83,7 @@ If you keep a review skill, Cowork can follow it, using what this command sends 
 relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 ```
 
+- Cowork also looks in your Teams chats, email and SharePoint for the discussion behind a change, and says what it found. That's Cowork's own reach: the relay sends none of it.
 - It sends the merge request's discussions and diff, its source and target branches, your own Go libraries at the versions `go.mod` pins, your earlier review, and the wiki if there is one. It only fetches in your clone, and puts a prompt for Cowork on your clipboard.
 - `--also` sends another repository at origin's default branch, or only one folder of it, and `PATH@BRANCH` names a branch. Use it as many times as you like.
 - For a Go repository, it asks whether to run `go build`, `go vet`, `go test` and `go mod tidy -diff` first, and sends the results. They run on a temporary copy of the branch with git hooks off, so your clone and uncommitted work stay out of it, but the branch's code does run on your Mac. Each check stops after 10 minutes. `--checks` and `--no-checks` answer for you. `--checks` is the one place the relay runs code without asking, so it's yours to add. Cowork is told never to give you a command with it, so don't run one that has it.

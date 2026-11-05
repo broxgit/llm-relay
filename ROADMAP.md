@@ -16,6 +16,9 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off.
 
+- Attempts, with real Cowork. They have only run in smoke tests. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several sets of builds take in one run on real code.
+- The skill's instruction to look in Teams, email and SharePoint. It is text only, and nobody has seen what Cowork does with it.
+
 - Skill sync, with real Cowork and real OneDrive. It has only run in smoke tests. Not known: whether Cowork follows the note on a copied skill, whether the marker lines reach it, whether it cites the stamp in a review, and how the relay reads a copy that OneDrive has made cloud-only. `design-and-decisions/work-mac-session.md` part H is the test.
 
 - The prompt that reads `/dev/tty`. It has answered through a pseudo-terminal in the smoke tests, on macOS and Linux. Nobody has typed at it by hand in Apple's Terminal, and `v` hasn't opened a real pager through it.
@@ -26,6 +29,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The `remote-pair-run` skill and the relay on real code. Whole rounds passed on a throwaway repository from Apple's Terminal on 2026-11-04, with nothing attached and no Always Keep. The relay's refusal message has only run against an imitation, because iTerm wasn't refused in that test, and later read a file it had been refused an hour before. Why is unknown.
 
 ## Done
+
+### Several attempts in one run (2026-11-05)
+
+- **Why:** every round costs a keypress and a few minutes of OneDrive. When Cowork couldn't tell which of two or three fixes would work, it had to try them in separate rounds.
+- **What changed:** `runlib.sh` version 5 has `attempt`, which runs one way of doing it in a fresh worktree with hooks off, and keeps its results to itself. A run passes if one attempt does, and its summary says which. `relay apply` applies only that attempt's patches, and only when the report in OneDrive is the file this Mac kept. The skill says when to use attempts.
+- **Also:** the skill now tells Cowork to look in the user's Teams chats, email and SharePoint for the discussion behind a change, and to say what it found.
 
 ### Your own skills go to Cowork, adapted (2026-11-05)
 

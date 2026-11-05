@@ -20,6 +20,12 @@
 #   safe_worktree REPO COMMIT    Make a temporary worktree with git hooks off, and set $WORKTREE.
 #                                Records whether it matches the commit, whether the run changed
 #                                its tracked files, and whether REPO's checkout stayed the same.
+#   attempt NAME REPO COMMIT FUNC [ARG...]  Try one way of doing it: run FUNC in a fresh worktree
+#                                with hooks off, as $WORKTREE. Its results are its own, so a
+#                                failure doesn't fail the run. Returns 0 if it passed, so
+#                                attempts chain with ||. The run passes if one attempt did.
+#   apply_attempt_patches        In an attempt: apply the deliverable's own patches, then
+#                                attempts/NAME/*.patch, in name order. relay apply uses the same list.
 #   snapshot_tree DIR OUT [GLOB...]  Hash a tree into OUT, skipping .git and GLOBs.
 #   allow_diff PATH REASON       The next compare_trees may differ here, for this reason. PATH is
 #                                relative to the trees compared.
@@ -34,7 +40,7 @@
 # A run passes only if it reaches report_end with at least one check and no failures.
 # $RUN_TMP is a scratch folder, removed at exit.
 
-RUNLIB_VERSION=4
+RUNLIB_VERSION=5
 RUNLIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNLIB_EXIT_COUNT=0
 RUNLIB_STEP=0
@@ -42,6 +48,13 @@ RUNLIB_ENDED=""
 RUNLIB_EXPECT=""
 RUNLIB_NO_INSTALL=""
 RUNLIB_NAME=""
+RUNLIB_ATTEMPTS=0
+RUNLIB_GUARDED=""
+# Where results go. Inside an attempt, that's the attempt's own file.
+RUNLIB_RESULTS=""
+ATTEMPT=""
+# shellcheck disable=SC2034  # For the run.sh that calls attempt.
+ATTEMPT_DIR=""
 
 _runlib_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -184,6 +197,7 @@ report_start() {
   mkdir -p "$RUN_TMP"
   : >"$RUNLIB_TMP/results"
   : >"$RUNLIB_TMP/allow"
+  : >"$RUNLIB_TMP/attempts"
 
   version="$(_runlib_manifest_version "$RUNLIB_DIR/manifest.txt")"
   RUNLIB_RUN_VERSION="${version:-unknown}"
@@ -333,6 +347,116 @@ safe_worktree() {
   echo "worktree: $WORKTREE, at $commit, with git hooks off"
 }
 
+# The user's checkout gets one before-and-after check per repository, however many attempts use it.
+_runlib_guard_checkout() {
+  case "
+$RUNLIB_GUARDED
+" in
+    *"
+$1
+"*) return 0 ;;
+  esac
+  RUNLIB_GUARDED="$RUNLIB_GUARDED
+$1"
+  on_exit _runlib_checkout_same "$1" "$(_runlib_checkout_print "$1")"
+}
+
+_runlib_worktree_gone() {
+  [ ! -e "$2" ] || _runlib_worktree_remove "$1" "$2"
+}
+
+# _runlib_attempt_patches <deliverable> <attempt>: the patches an attempt applies, in order: the
+# deliverable's own, then the attempt's. relay apply takes the same list for the attempt that
+# passed, so what lands is what a run proved.
+_runlib_attempt_patches() {
+  (
+    cd "$1" || exit 1
+    find . -type f -name '*.patch' ! -path './attempts/*' | sed 's|^\./||' | LC_ALL=C sort
+    [ -z "$2" ] || [ ! -d "attempts/$2" ] || find "attempts/$2" -type f -name '*.patch' | LC_ALL=C sort
+  )
+}
+
+apply_attempt_patches() {
+  local p n=0
+  if [ -z "$ATTEMPT" ]; then
+    echo "apply_attempt_patches: only inside an attempt"
+    result "apply the attempt's patches" 1
+    return 1
+  fi
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    n=$((n + 1))
+    git -C "$WORKTREE" apply "$RUNLIB_DIR/$p"
+    result "apply $p" $?
+  done <<EOF
+$(_runlib_attempt_patches "$RUNLIB_DIR" "$ATTEMPT")
+EOF
+  [ "$n" -gt 0 ] && return 0
+  echo "apply_attempt_patches: no patches in the deliverable or in attempts/$ATTEMPT"
+  result "the attempt has patches" 1
+}
+
+# One way of doing it, tried where it can't touch the user's checkout or the next attempt.
+attempt() {
+  local name="${1:-}" repo="${2:-}" commit="${3:-}" hooks dirty n passed failed first word=FAIL tab
+  tab="$(printf '\t')"
+  [ -n "$name" ] && [ -n "$repo" ] && [ -n "$commit" ] && [ $# -ge 4 ] || abort "attempt needs a name, a repository, a commit and a function"
+  case "$name" in
+    .* | *[!A-Za-z0-9._-]*) abort "attempt: a name is letters, digits, dots, dashes and underscores, and this isn't: $name" ;;
+  esac
+  ! grep -q "^PASS$tab" "$RUNLIB_TMP/attempts" || abort "attempt: one has already passed, and a deliverable has one set of attempts"
+  ! grep -q "^[A-Z]*$tab$name$tab" "$RUNLIB_TMP/attempts" || abort "attempt: $name was already tried"
+  git -C "$repo" rev-parse --verify -q "$commit^{commit}" >/dev/null || abort "attempt: $repo has no commit $commit"
+  shift 3
+  RUNLIB_ATTEMPTS=$((RUNLIB_ATTEMPTS + 1))
+  n=$RUNLIB_ATTEMPTS
+  printf '\n== ATTEMPT %s: %s ==\n' "$n" "$name"
+  _runlib_guard_checkout "$repo"
+  hooks="$RUNLIB_TMP/no-hooks"
+  mkdir -p "$hooks"
+  RUNLIB_WORKTREES=$((${RUNLIB_WORKTREES:-0} + 1))
+  WORKTREE="$RUNLIB_TMP/worktree-$RUNLIB_WORKTREES"
+  ATTEMPT="$name"
+  ATTEMPT_DIR="$RUNLIB_DIR/attempts/$name"
+  RUNLIB_RESULTS="$RUNLIB_TMP/attempt-$n.results"
+  : >"$RUNLIB_RESULTS"
+  if ! git -C "$repo" -c core.hooksPath="$hooks" worktree add -q --detach "$WORKTREE" "$commit"; then
+    result "a worktree of $commit" 1
+  else
+    on_exit _runlib_worktree_gone "$repo" "$WORKTREE"
+    dirty="$(git -C "$WORKTREE" -c core.hooksPath="$hooks" status --porcelain --untracked-files=all)"
+    if [ -n "$dirty" ]; then
+      printf 'the new worktree differs:\n%s\n' "$dirty"
+      result "worktree identical to $commit" 1
+    else
+      echo "worktree: $WORKTREE, at $commit, with git hooks off"
+      # A subshell, so an abort or an exit in the attempt ends the attempt and not the run.
+      ("$@")
+    fi
+    _runlib_worktree_gone "$repo" "$WORKTREE"
+  fi
+  passed="$(grep -c '^PASS ' "$RUNLIB_RESULTS")"
+  failed="$(grep -c '^FAIL ' "$RUNLIB_RESULTS")"
+  first="$(sed -n 's/^FAIL //p' "$RUNLIB_RESULTS" | head -n 1)"
+  RUNLIB_RESULTS=""
+  WORKTREE=""
+  ATTEMPT=""
+  # shellcheck disable=SC2034
+  ATTEMPT_DIR=""
+  if [ "$failed" -eq 0 ] && [ "$passed" -gt 0 ]; then
+    word=PASS
+  elif [ "$((passed + failed))" -eq 0 ]; then
+    first="it ran no checks"
+  fi
+  printf '%s\t%s\t%s\n' "$word" "$name" "$first" >>"$RUNLIB_TMP/attempts"
+  if [ "$word" = PASS ]; then
+    echo "ATTEMPT $name: PASS, $passed checks passed"
+    return 0
+  fi
+  echo "ATTEMPT $name: FAIL, $passed passed, $failed failed, first failure: $first"
+  return 1
+}
+
 snapshot_tree() {
   local dir="${1:-}" out="${2:-}" g n
   [ -d "$dir" ] || { echo "snapshot_tree: no folder: $dir"; return 1; }
@@ -413,7 +537,7 @@ result() {
   [ "$rc" = 0 ] && word=PASS
   printf 'RESULT %s: %s\n' "$name" "$word"
   # In a file, so a result recorded in a subshell or a pipeline still counts.
-  printf '%s %s\n' "$word" "$name" >>"$RUNLIB_TMP/results"
+  printf '%s %s\n' "$word" "$name" >>"${RUNLIB_RESULTS:-$RUNLIB_TMP/results}"
 }
 
 check() {
@@ -454,7 +578,7 @@ report_end() {
 }
 
 _runlib_on_exit() {
-  local rc=$? i cmd passed failed first word=FAIL upper code=1
+  local rc=$? i cmd passed failed first word=FAIL upper code=1 won="" a_word a_name a_first
   trap - EXIT INT TERM
   i=$RUNLIB_EXIT_COUNT
   while [ "$i" -gt 0 ]; do
@@ -464,12 +588,34 @@ _runlib_on_exit() {
       result "cleanup: $cmd" 1
     fi
   done
+  RUNLIB_RESULTS=""
+  # A set of attempts counts once: one of them passed, or none did.
+  if [ -s "$RUNLIB_TMP/attempts" ]; then
+    won="$(awk -F '\t' '$1 == "PASS" { print $2; exit }' "$RUNLIB_TMP/attempts")"
+    if [ -n "$won" ]; then
+      printf 'PASS an attempt passed: %s\n' "$won" >>"$RUNLIB_TMP/results"
+    else
+      printf 'FAIL no attempt passed\n' >>"$RUNLIB_TMP/results"
+    fi
+  fi
   passed="$(grep -c '^PASS ' "$RUNLIB_TMP/results")"
   failed="$(grep -c '^FAIL ' "$RUNLIB_TMP/results")"
   first="$(sed -n 's/^FAIL //p' "$RUNLIB_TMP/results" | head -n 1)"
   printf '\n== SUMMARY ==\n'
   # Here too, so the end of a report is enough on its own.
   echo "version: $RUNLIB_RUN_VERSION"
+  if [ -s "$RUNLIB_TMP/attempts" ]; then
+    echo "attempts: $(wc -l <"$RUNLIB_TMP/attempts" | tr -d ' ') tried"
+    while IFS="$(printf '\t')" read -r a_word a_name a_first; do
+      if [ "$a_word" = PASS ]; then
+        echo "  $a_name: PASS"
+      else
+        echo "  $a_name: FAIL, first failure: $a_first"
+      fi
+    done <"$RUNLIB_TMP/attempts"
+    # relay apply reads this line to know which attempt's patches were proven.
+    [ -z "$won" ] || echo "attempt passed: $won"
+  fi
   echo "checks: $passed passed, $failed failed"
   [ -z "$first" ] || echo "first failure: $first"
   if [ -z "$RUNLIB_ENDED" ]; then

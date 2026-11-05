@@ -50,6 +50,7 @@ Then wait 10 minutes and start a new Cowork session.
 4. Ask for a change whose first run it expects to fail, then let it fix it.
 5. On one of those commands press `n`. Expect "Nothing ran, and no report was sent."
 6. After a PASS, ask for the `relay apply` command, run it, press `y`, and run `git status`. Expect the patch in your working tree and nothing committed.
+7. Ask for a change with two alternative fixes in one deliverable, as its skill's section on several attempts describes. Run it. Expect `attempts: 2 tried` and an `attempt passed:` line at the end of the report. Then run the `relay apply` command it gives you, and expect it to name that attempt before it asks.
 
 ## C. Another branch and the wiki copy, 5 minutes
 
