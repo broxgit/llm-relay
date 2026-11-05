@@ -1,6 +1,6 @@
 # Proposed design
 
-**Status: Design 1 was built on 2026-11-05, on the `keypress-gate` branch. Design 2 is proposed, not adopted.** Written against commit 6541e46.
+**Status: Design 1 is built and merged, on 2026-11-05 as [pull request 1](https://github.com/broxgit/llm-relay/pull/1). Design 2 is proposed, not adopted.** Written against commit 6541e46, before Design 1 was built.
 
 This proposes two changes to the relay: make the keypress gate hold against pipes and variables, and wake Cowork after a run without typing "done". [roadmap.md](roadmap.md) has the order and the decisions they need.
 
@@ -74,9 +74,9 @@ What has only run against fakes: the standalone `relay` command and its `relay s
 
 ## Design 1: make the keypress gate hold
 
-Today a pipe and one environment variable can answer the prompt, so the rule holds for flags but not for the code. The fix is to take the answer from the terminal itself.
+Before this was built, a pipe and one environment variable could answer the prompt, so the rule held for flags but not for the code. The fix was to take the answer from the terminal itself. The rest of this section is the design as proposed, with what changed while building noted in place.
 
-What the code does at 6541e46:
+What the code did at 6541e46:
 
 - `needs_terminal` passes when standard input is a terminal, or when `RELAY_TEST_TTY` is set.
 - `ask_to_run` reads one key from standard input.

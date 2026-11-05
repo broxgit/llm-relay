@@ -2,7 +2,7 @@
 
 **Status: proposed on 2026-11-05, not run.** This is phase 2 of the [proposed roadmap](roadmap.md).
 
-One sitting of about an hour, in Apple's Terminal, after phase 1 has merged. Cowork is only on the work Mac, so this is the only way anything here gets tried with real Cowork and real OneDrive. Each part says what to run and what you should see. Anything else you see is a finding, so copy it.
+One sitting of about an hour, in Apple's Terminal. Phase 1 merged on 2026-11-05, so `main` is ready for it. Cowork is only on the work Mac, so this is the only way anything here gets tried with real Cowork and real OneDrive. Each part says what to run and what you should see. Anything else you see is a finding, so copy it.
 
 ## A. Install, 5 minutes
 
