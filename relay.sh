@@ -1709,7 +1709,15 @@ sync_skills() {
         continue
         ;;
       foreign)
-        echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone." >&2
+        if [ "$mode" = setup ]; then
+          echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone." >&2
+          echo "  To have the relay keep it in step with yours:" >&2
+          echo "  1. See how it differs from yours: diff -r \"$SKILLS_FROM/$name\" \"$SKILLS_DIR/$name\"" >&2
+          echo "  2. Put anything in it that's only for Cowork in $SKILLS_FROM/$name/COWORK.md. The relay adds that file's text to its copy." >&2
+          echo "  3. Move that folder out of Cowork's skills folder, and run relay setup again." >&2
+        else
+          echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. relay setup says what to do." >&2
+        fi
         rc=1
         continue
         ;;
@@ -1807,7 +1815,7 @@ cmd_skills() {
       stale) echo "$name: your skill has changed since Cowork's copy was made. relay setup, scan or mr updates it." ;;
       absent) echo "$name: not in Cowork's folder yet. relay setup copies it." ;;
       edited) echo "$name: Cowork's copy was changed in OneDrive. relay setup shows the difference." ;;
-      foreign) echo "$name: Cowork's folder has a skill of that name, which the relay didn't make." ;;
+      foreign) echo "$name: Cowork's folder has a skill of that name, which the relay didn't make. relay setup says what to do." ;;
       nosource) echo "$name: there's no $SKILLS_FROM/$name/SKILL.md." ;;
     esac
     rc=1

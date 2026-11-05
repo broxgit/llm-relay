@@ -1350,6 +1350,12 @@ echo '# The same name, on the Mac' >"$KS/handmade/SKILL.md"
 out="$(ks --skills review:plain:handmade)"; rc=$?
 case "$rc:$out" in 0:*) bad "a skill of that name the relay didn't make is left alone" "$out" ;; *"skill handmade: Cowork's folder already has a skill of that name, which the relay didn't make"*) ok "a skill of that name the relay didn't make is left alone" ;; *) bad "a skill of that name the relay didn't make is left alone" "exit $rc: $out" ;; esac
 check "really left alone" grep -q 'By hand, in OneDrive' "$KC/handmade/SKILL.md"
+expect "setup says how to compare it with yours" "diff -r \"$KS/handmade\" \"$KC/handmade\"" ks --skills review:plain:handmade
+expect "and where Cowork-only text goes" "COWORK.md" ks --skills review:plain:handmade
+out="$(kscan)"
+case "$out" in *"skill handmade: Cowork's folder already has a skill of that name"*"relay setup says what to do"*) ok "a scan warns in one line and points at setup" ;; *) bad "a scan warns in one line and points at setup" "$out" ;; esac
+case "$out" in *"diff -r"*) bad "a scan doesn't give the steps" "$out" ;; *) ok "a scan doesn't give the steps" ;; esac
+expect "relay skills points at setup for it" "relay setup says what to do" kk
 out="$(ks --skills review)"
 case "$out" in *"skill plain: no longer named, so Cowork's copy was removed"*) ok "a copy that's no longer named is removed" ;; *) bad "a copy that's no longer named is removed" "$out" ;; esac
 check "it's gone" test ! -e "$KC/plain"
