@@ -62,7 +62,7 @@ Cowork finds skills at `Documents/Cowork/skills/<name>/SKILL.md`, the same shape
 
 - **Open:** which skills he names, and the company's rules on putting them in OneDrive.
 - **Open:** whether Cowork follows the note. Nothing here has run with real Cowork.
-- **Test:** [work-mac-session.md](work-mac-session.md) parts A and D copy one skill by hand, with no note, as the baseline. Part H swaps in the relay's adapted copy and checks that Cowork reads its note.
+- **Test:** in [work-mac-session.md](work-mac-session.md), part A hands his review skill over to the relay, part D reviews with the adapted copy, and part H checks that Cowork's copy keeps up with his. The baseline is the review of 2026-11-04, which used a hand-made copy with no note.
 
 ### 3. Use what only Cowork sees
 
