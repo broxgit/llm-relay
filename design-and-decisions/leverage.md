@@ -62,6 +62,7 @@ Cowork finds skills at `Documents/Cowork/skills/<name>/SKILL.md`, the same shape
 
 - **Open:** which skills, and what in them assumes Claude's tools. A review skill that says "run `glab`" has to defer to the relay's section on merge requests, which `remote-pair-run` already tells Cowork to do.
 - **Open:** the company's rules on putting those skills in OneDrive.
+- **Test:** [work-mac-session.md](work-mac-session.md) parts A and D copy one skill and check that Cowork lists and follows it.
 
 ### 3. Use what only Cowork sees
 
@@ -74,7 +75,7 @@ A Linux Go toolchain has built, vetted and tested offline in Cowork's sandbox, w
 - **Unknown:** whether a module with real dependencies builds there. Never tried.
 - **Unknown:** size. Scans have reached Cowork at 50 MB, and a toolchain alone is 67 MB.
 - **Limit:** no network and no services, so tests that need a database won't run there.
-- **First:** a short test on the work Mac, before any design.
+- **First:** a short test on the work Mac, before any design. It is part F of [work-mac-session.md](work-mac-session.md).
 
 ### 5. Deliverables with branches
 
@@ -85,6 +86,7 @@ One deliverable can carry a plan with branches: try fix A, and if its checks fai
 Most work starts from a Jira ticket, and Cowork can't reach Jira, Confluence or GitLab. The Mac can. A pack like `relay mr`'s: the ticket, the pages it links, and the related merge requests, sent to OneDrive.
 
 - **Open:** which command-line tools the work Mac has for Jira and Confluence, and whether the tenant gives Cowork its own way to read them.
+- **Test:** [work-mac-session.md](work-mac-session.md) part G finds out both.
 
 ### 7. `relay ask`
 

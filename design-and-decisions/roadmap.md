@@ -6,7 +6,7 @@ Three phases in this order, with one condition: the wake-up is built only if the
 
 ```mermaid
 flowchart LR
-    P1["1. The gate holds<br/>Done 2026-11-05"] --> P2["2. A real run<br/>Work Mac, about an hour"]
+    P1["1. The gate holds<br/>Done 2026-11-05"] --> P2["2. A real run<br/>Work Mac, about an hour and a half"]
     P2 --> G{"Teams allows the webhook,<br/>and a Cowork trigger fires on it?"}
     G -- yes --> P3["3. Wake-up<br/>Built here, tried at work"]
     G -- no --> S["Typing done stays"]
@@ -15,7 +15,7 @@ flowchart LR
 | Phase | Where it happens | Needs from Brock | Done when |
 |---|---|---|---|
 | 1. The gate holds (done) | The personal Mac, no Cowork | A yes to Design 1, and a call on `--checks`. Both given | No pipe or variable answers the prompt. Tests answer through a pseudo-terminal. CI is green on Linux and macOS. `AGENTS.md`, `README.md` and `docs/using.md` say what the gate does and doesn't stop |
-| 2. A real run | Work Mac, about an hour | [The session](work-mac-session.md), and what it asks to bring back | Every item on `ROADMAP.md`'s Untested list is crossed off or has a recorded failure. The wake-up questions have answers |
+| 2. A real run | Work Mac, about an hour and a half | [The session](work-mac-session.md), and what it asks to bring back | Every item on `ROADMAP.md`'s Untested list is crossed off or has a recorded failure. The wake-up questions have answers |
 | 3. Wake-up | Built on the personal Mac, then about 30 minutes on the work Mac | The answers from phase 2, then one more short session | A round finishes on the work Mac without typing "done", and a failed post falls back to today's message |
 
 Phase 1 goes first so the real run exercises the final prompt. If phase 2 turns up a failure in something already built, fixing it comes before phase 3.
