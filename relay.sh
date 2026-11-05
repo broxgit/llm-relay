@@ -64,10 +64,26 @@ setting() {
 }
 REVIEWS_DIR="$(setting reviews "$HOME/mr-reviews")"
 CLONES_DIRS="$(setting clones "$HOME/dev")"
+# The user's own skills that Cowork gets a copy of, by name, and where they live.
+SKILLS="$(setting skills "")"
+SKILLS_FROM="$(setting skills_from "$HOME/.claude/skills")"
+SKILLS_DIR=""
+SKILLS_CHECKED=""
+SKILL_TMP=""
+SKILL_STATE=""
+SKILL_SHA=""
+COPY_STATE=""
+# The version of the note the relay puts on a copied skill. A new number makes every copy again.
+SKILL_TEMPLATE=1
+SKILL_START='<!-- relay:start -->'
+SKILL_END='<!-- relay:end -->'
+# Tools a skill written for Claude may name, and Cowork's sandbox doesn't have.
+COWORK_LACKS="glab gh curl wget ssh scp docker kubectl jira acli aws mongosh psql"
 
 usage() {
   cat <<EOF
-Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
+Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
+       relay [--dir ONEDRIVE_FOLDER] skills
        relay completion zsh|bash
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
        relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki]
@@ -76,7 +92,9 @@ Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
   setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
-         Run it again to update the skill. setup --help has more.
+         Run it again to update the skill. --skills copies your own Claude skills there too,
+         each with a note on what to do differently in Cowork. setup --help has more.
+  skills Says where Cowork's copy of each of your skills stands, and changes nothing.
   run    Waits until a deliverable from Copilot Cowork matches its manifest, copies it to a
          local folder, shows you what's there, and runs the copy when you press y. If it gives up, it says what this Mac sees. The report
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
@@ -564,6 +582,11 @@ cmd_scan() {
   done
   root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "not a git repository: $dir"
   name="$(basename "$root" | tr -c 'A-Za-z0-9._\n-' '-')"
+  # Cowork is about to be asked for something, so its copies of the user's skills should be current.
+  if [ -z "$SKILLS_CHECKED" ]; then
+    SKILLS_CHECKED=1
+    sync_skills quiet
+  fi
   [ -n "$name" ] || die "can't name a scan after $root"
   if [ -n "$want" ]; then
     find_branch "$root" "$want"
@@ -1198,6 +1221,8 @@ cmd_mr() {
   [ -n "$urls" ] || die "relay mr needs a merge request's URL"
   command -v glab >/dev/null 2>&1 || die "relay mr needs glab"
   command -v python3 >/dev/null 2>&1 || die "relay mr needs python3"
+  SKILLS_CHECKED=1
+  sync_skills quiet
   while IFS= read -r url; do
     [ -n "$url" ] || continue
     parse_mr "$url"
@@ -1333,6 +1358,7 @@ cmd_review() {
     fi
     warn_if_moved "$f"
     show_coverage "$copy/reviews/$f" "${f##*/}"
+    check_skill_stamps "$copy/reviews/$f"
   done <<EOF
 $files
 EOF
@@ -1444,6 +1470,355 @@ EOF
   git -C "$root" status --short
 }
 
+# ---- skills ------------------------------------------------------------------
+
+# The user's own Claude skills, copied to Cowork with a note on top. The copy is made here every
+# time, so the user's skill is the only source, and a stamp in the copy says what it was made
+# from. design-and-decisions/skill-sync.md has the reasons.
+
+# skill_files <folder>: its files, as sorted relative paths. Dotfiles stay out.
+skill_files() {
+  (cd "$1" 2>/dev/null && find . -type f ! -name '.*' ! -path '*/.*' | sed 's|^\./||' | LC_ALL=C sort)
+}
+
+# folder_hash <folder>: one hash for every file in it. A SKILL.md's stamp line doesn't count, so
+# a copy's hash can sit in its own stamp.
+folder_hash() {
+  local dir="$1" f list="$SKILL_TMP/hash.list" one="$SKILL_TMP/hash.one"
+  : >"$list"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if [ "$f" = SKILL.md ]; then
+      grep -v '^<!-- relay:stamp ' "$dir/$f" >"$one"
+      echo "$(sha256_of "$one")  $f" >>"$list"
+    else
+      echo "$(sha256_of "$dir/$f")  $f" >>"$list"
+    fi
+  done <<EOF
+$(skill_files "$dir")
+EOF
+  sha256_of "$list"
+}
+
+# stamp_field <SKILL.md> <field>: one value from a copy's stamp line.
+stamp_field() {
+  sed -n 's/^<!-- relay:stamp \(.*\) -->$/\1/p' "$1" 2>/dev/null | head -n 1 | tr '|' '\n' | sed -n "s/^ *$2 \([^ ]*\) *\$/\1/p" | head -n 1
+}
+
+# header_end <SKILL.md>: the line its header ends on, or 0 if it has none.
+header_end() {
+  awk '{ l = $0; sub(/\r$/, "", l) }
+       NR == 1 && l != "---" { print 0; found = 1; exit }
+       NR > 1 && l == "---" { print NR; found = 1; exit }
+       END { if (!found) print 0 }' "$1"
+}
+
+# skill_note <name> <source folder> <source hash> <stamp line>: the note that goes on top of a copy.
+skill_note() {
+  local name="$1" src="$2" sha="$3" stamp="$4" t lacks=""
+  for t in $COWORK_LACKS; do
+    ! grep -qw -- "$t" "$src/SKILL.md" 2>/dev/null || lacks="$lacks, \`$t\`"
+  done
+  ! grep -q 'mcp__' "$src/SKILL.md" 2>/dev/null || lacks="$lacks, MCP tools"
+  lacks="${lacks#, }"
+  echo "$SKILL_START"
+  echo "**Adapted for Copilot Cowork by relay. The skill's own text, after this note, is unchanged.** It was written for Claude on the user's Mac, so read it with these changes:"
+  echo
+  echo "- Where it says to run \`glab\` or \`git\`, or to read a clone or a local file, use what the relay sent to \`Documents/Cowork/relay\` in the user's OneDrive, as your remote-pair-run skill describes. If you need more, ask the user for a \`relay scan\` or a \`relay mr\`."
+  echo "- Skip any step that posts, comments, pushes or sends. Put what you would have sent in your reply, or in the file that step writes, and say you skipped it."
+  echo "- Where it relies on memory, settings or files on the user's Mac that you can't see, say what's missing and ask."
+  [ -z "$lacks" ] || echo "- It names tools you don't have here: $lacks. Say so where a step needs one. When something has to run, use the remote-pair-run loop."
+  echo "- When you list the skills you used, as in a review's Coverage section, write this one as \`$name ${sha:0:8}\`."
+  if [ -s "$src/COWORK.md" ]; then
+    echo
+    echo "From the user, for Cowork:"
+    echo
+    cat "$src/COWORK.md"
+  fi
+  echo
+  echo "$stamp"
+  echo "$SKILL_END"
+}
+
+# put_note <source SKILL.md> <note file> <output>: the note goes after the header, which Cowork
+# reads first. head and tail keep every other byte as it was.
+put_note() {
+  local src="$1" note="$2" out="$3" n
+  n="$(header_end "$src")"
+  {
+    [ "$n" -eq 0 ] || head -n "$n" "$src"
+    cat "$note"
+    tail -n "+$((n + 1))" "$src"
+  } >"$out"
+}
+
+# copy_body <copy's SKILL.md> <output>: the copy with the relay's note taken out again.
+copy_body() {
+  local f="$1" out="$2" s e
+  s="$(grep -n -x -F -- "$SKILL_START" "$f" 2>/dev/null | head -n 1 | cut -d: -f1)"
+  e="$(grep -n -x -F -- "$SKILL_END" "$f" 2>/dev/null | head -n 1 | cut -d: -f1)"
+  [ -n "$s" ] && [ -n "$e" ] && [ "$e" -gt "$s" ] || return 1
+  {
+    [ "$s" -le 1 ] || head -n "$((s - 1))" "$f"
+    tail -n "+$((e + 1))" "$f"
+  } >"$out"
+}
+
+# adapt_skill <name>: makes Cowork's copy of a skill in $SKILL_TMP/copy, within Cowork's limits.
+# Prints why it can't.
+adapt_skill() {
+  local name="$1" src="$SKILLS_FROM/$1" out="$SKILL_TMP/copy" f sha copy_sha n=0 size total=0
+  rm -rf "$out"
+  mkdir -p "$out" || { echo "there's nowhere to make the copy"; return 1; }
+  if grep -q '^<!-- relay:' "$src/SKILL.md" "$src/COWORK.md" 2>/dev/null; then
+    echo "it already holds a note from the relay, so it looks like a copy and not your skill"
+    return 1
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in SKILL.md | COWORK.md) continue ;; esac
+    mkdir -p "$out/$(dirname "$f")" && cp "$src/$f" "$out/$f" || { echo "$f couldn't be copied"; return 1; }
+    n=$((n + 1))
+    size="$(wc -c <"$src/$f" | tr -d ' ')"
+    [ "$size" -le 5242880 ] || { echo "$f is over 5 MB, Cowork's limit for one file"; return 1; }
+    total=$((total + size))
+  done <<EOF
+$(skill_files "$src")
+EOF
+  [ "$n" -le 20 ] || { echo "it has $n files beside SKILL.md, and Cowork takes 20"; return 1; }
+  sha="$(folder_hash "$src")"
+  # Twice: the copy's hash goes in the stamp, and the stamp line is the one thing it leaves out.
+  skill_note "$name" "$src" "$sha" "<!-- relay:stamp pending -->" >"$SKILL_TMP/note"
+  put_note "$src/SKILL.md" "$SKILL_TMP/note" "$out/SKILL.md"
+  copy_sha="$(folder_hash "$out")"
+  skill_note "$name" "$src" "$sha" "<!-- relay:stamp template $SKILL_TEMPLATE | source $sha | copy $copy_sha | made $(now) -->" >"$SKILL_TMP/note"
+  put_note "$src/SKILL.md" "$SKILL_TMP/note" "$out/SKILL.md"
+  size="$(wc -c <"$out/SKILL.md" | tr -d ' ')"
+  [ "$size" -le 1048576 ] || { echo "its SKILL.md comes to over 1 MB, Cowork's limit"; return 1; }
+  [ $((total + size)) -le 10485760 ] || { echo "it comes to over 10 MB, Cowork's limit for one skill"; return 1; }
+}
+
+# copy_state <folder in Cowork's skills>: foreign, edited or intact, in COPY_STATE. Foreign means
+# the relay didn't make it, and edited that it changed in OneDrive after the relay did.
+copy_state() {
+  local dst="$1" want
+  COPY_STATE=intact
+  want="$(stamp_field "$dst/SKILL.md" copy)"
+  if [ -z "$want" ]; then
+    COPY_STATE=foreign
+  elif [ "$(folder_hash "$dst")" != "$want" ]; then
+    COPY_STATE=edited
+  fi
+}
+
+# skill_state <name>: where Cowork's copy of a skill stands, in SKILL_STATE, with the hash of the
+# user's skill in SKILL_SHA. nosource: the user's skill isn't there. absent: there's no copy.
+# foreign and edited: as copy_state says. stale: the user's skill, or the relay's note, has changed
+# since the copy was made. same: in step.
+skill_state() {
+  local src="$SKILLS_FROM/$1" dst="$SKILLS_DIR/$1"
+  SKILL_STATE=same
+  SKILL_SHA=""
+  if [ ! -f "$src/SKILL.md" ]; then
+    SKILL_STATE=nosource
+    return 0
+  fi
+  SKILL_SHA="$(folder_hash "$src")"
+  if [ ! -e "$dst" ]; then
+    SKILL_STATE=absent
+    return 0
+  fi
+  copy_state "$dst"
+  case "$COPY_STATE" in
+    foreign | edited) SKILL_STATE="$COPY_STATE" ;;
+    *)
+      if [ "$(stamp_field "$dst/SKILL.md" source)" != "$SKILL_SHA" ] || [ "$(stamp_field "$dst/SKILL.md" template)" != "$SKILL_TEMPLATE" ]; then
+        SKILL_STATE=stale
+      fi
+      ;;
+  esac
+}
+
+# skill_matches <name>: the copy, with the relay's note taken out, is the user's skill byte for byte.
+skill_matches() {
+  local src="$SKILLS_FROM/$1" dst="$SKILLS_DIR/$1" f
+  copy_body "$dst/SKILL.md" "$SKILL_TMP/body" && cmp -s "$SKILL_TMP/body" "$src/SKILL.md" || return 1
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in SKILL.md | COWORK.md) continue ;; esac
+    cmp -s "$src/$f" "$dst/$f" || return 1
+  done <<EOF
+$(skill_files "$src")
+EOF
+}
+
+# What changed in OneDrive came from the cloud, so control characters don't reach the terminal.
+show_skill_change() {
+  local name="$1"
+  echo "skill $name: Cowork's copy was changed in OneDrive after the relay made it. Lines starting with - are only in OneDrive's copy:"
+  diff -r -u "$SKILLS_DIR/$name" "$SKILL_TMP/copy" 2>&1 | grep -v '^[-+]<!-- relay:stamp ' | grep -v '^diff -r' | head -n 60 | LC_ALL=C tr -d '\000-\010\013-\037\177' | sed 's/^/  /'
+}
+
+# remove_dropped_skills <the list before>: Cowork's copies of skills the user has just taken off
+# the list go, if the relay made them. One changed in OneDrive stays. Only names that were on
+# this Mac's list are looked at, so another Mac's copies in the same OneDrive are safe.
+remove_dropped_skills() {
+  local name d
+  [ -n "$SKILLS_DIR" ] || return 0
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    case "$name" in remote-pair-run | .* | *[!A-Za-z0-9._-]*) continue ;; esac
+    case ":$SKILLS:" in *":$name:"*) continue ;; esac
+    d="$SKILLS_DIR/$name"
+    [ -d "$d" ] || continue
+    copy_state "$d"
+    case "$COPY_STATE" in
+      intact) rm -rf "$d" && echo "skill $name: no longer named, so Cowork's copy was removed" ;;
+      edited) echo "skill $name: no longer named, but its copy was changed in OneDrive, so it stays. Delete it in Finder if you don't want it." ;;
+    esac
+  done <<EOF
+$(printf '%s\n' "$1" | tr ':' '\n')
+EOF
+}
+
+# sync_skills <setup|quiet> [the list before]: brings Cowork's copies of the named skills into
+# step. Only setup asks, removes, or says that nothing changed. Returns 1 if a skill couldn't be
+# brought into step.
+sync_skills() {
+  local mode="$1" before="${2:-}" name why rc=0
+  [ -n "$SKILLS" ] || [ "$mode" = setup ] || return 0
+  SKILL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    case "$name" in
+      remote-pair-run | .* | *[!A-Za-z0-9._-]*)
+        echo "skill $name: not a name the relay can copy" >&2
+        rc=1
+        continue
+        ;;
+    esac
+    skill_state "$name"
+    case "$SKILL_STATE" in
+      nosource)
+        echo "skill $name: there's no $SKILLS_FROM/$name/SKILL.md, so nothing was copied" >&2
+        rc=1
+        continue
+        ;;
+      same)
+        [ "$mode" != setup ] || echo "skill $name: Cowork's copy is in step (${SKILL_SHA:0:8})"
+        continue
+        ;;
+      foreign)
+        echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone." >&2
+        rc=1
+        continue
+        ;;
+      edited)
+        if [ "$mode" != setup ]; then
+          echo "skill $name: Cowork's copy was changed in OneDrive, so it wasn't updated. relay setup shows the difference." >&2
+          rc=1
+          continue
+        fi
+        ;;
+    esac
+    if ! why="$(adapt_skill "$name")"; then
+      echo "skill $name: not copied, because $why" >&2
+      rc=1
+      continue
+    fi
+    if [ "$SKILL_STATE" = edited ]; then
+      show_skill_change "$name"
+      if [ "$AT_TERMINAL" != yes ]; then
+        echo "skill $name: left as it is. Run relay setup at a terminal to choose." >&2
+        rc=1
+        continue
+      fi
+      ask_key "Replace Cowork's copy with a fresh one? [y]es, [n]o: " || KEY=n
+      case "$KEY" in
+        y | Y) ;;
+        *)
+          echo "skill $name: left as it is in OneDrive"
+          rc=1
+          continue
+          ;;
+      esac
+    fi
+    if ! { rm -rf "${SKILLS_DIR:?}/$name" && mkdir -p "$SKILLS_DIR" && cp -R "$SKILL_TMP/copy" "$SKILLS_DIR/$name"; }; then
+      echo "skill $name: couldn't write Cowork's copy to $SKILLS_DIR" >&2
+      rc=1
+      continue
+    fi
+    case "$SKILL_STATE" in
+      absent) echo "skill $name: copied to Cowork (${SKILL_SHA:0:8})" ;;
+      stale) echo "skill $name: Cowork's copy was out of date, so it was made again (${SKILL_SHA:0:8})" ;;
+      edited) echo "skill $name: Cowork's copy replaced with a fresh one (${SKILL_SHA:0:8})" ;;
+    esac
+  done <<EOF
+$(printf '%s\n' "$SKILLS" | tr ':' '\n')
+EOF
+  [ "$mode" != setup ] || remove_dropped_skills "$before"
+  rm -rf "$SKILL_TMP"
+  SKILL_TMP=""
+  return "$rc"
+}
+
+# A review cites each adapted skill with its stamp. An old one means Cowork's session had an
+# older copy than the user's skill is now.
+check_skill_stamps() {
+  local file="$1" name cited sha
+  [ -n "$SKILLS" ] || return 0
+  SKILL_TMP="$WORK"
+  while IFS= read -r name; do
+    [ -n "$name" ] && [ -f "$SKILLS_FROM/$name/SKILL.md" ] || continue
+    cited="$(awk '/^##+ Coverage/ { on = 1; next } on && /^#/ { exit } on' "$file" | grep -o -- "$name [0-9a-f]\{8\}" | head -n 1)"
+    [ -n "$cited" ] || continue
+    sha="$(folder_hash "$SKILLS_FROM/$name")"
+    [ "${cited##* }" = "${sha:0:8}" ] || echo "Warning: this review used an older copy of your $name skill (${cited##* }, and yours is now ${sha:0:8}). A new Cowork session picks up the current one."
+  done <<EOF
+$(printf '%s\n' "$SKILLS" | tr ':' '\n')
+EOF
+  SKILL_TMP=""
+}
+
+# relay skills: where each named skill stands. Changes nothing.
+cmd_skills() {
+  local name rc=0
+  case "${1:-}" in
+    -h | --help) usage; return 0 ;;
+    "") ;;
+    *) die "relay skills takes no arguments. Name the skills to copy with: relay setup --skills NAME:NAME" ;;
+  esac
+  if [ -z "$SKILLS" ]; then
+    echo "No skills are named. Name some with: relay setup --skills NAME:NAME"
+    return 0
+  fi
+  SKILL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    skill_state "$name"
+    case "$SKILL_STATE" in
+      same)
+        if skill_matches "$name"; then
+          echo "$name: in step. Cowork's copy is your skill plus the relay's note (${SKILL_SHA:0:8})"
+          continue
+        fi
+        echo "$name: the copy's stamp is right, but its text isn't your skill's. relay setup makes it again."
+        ;;
+      stale) echo "$name: your skill has changed since Cowork's copy was made. relay setup, scan or mr updates it." ;;
+      absent) echo "$name: not in Cowork's folder yet. relay setup copies it." ;;
+      edited) echo "$name: Cowork's copy was changed in OneDrive. relay setup shows the difference." ;;
+      foreign) echo "$name: Cowork's folder has a skill of that name, which the relay didn't make." ;;
+      nosource) echo "$name: there's no $SKILLS_FROM/$name/SKILL.md." ;;
+    esac
+    rc=1
+  done <<EOF
+$(printf '%s\n' "$SKILLS" | tr ':' '\n')
+EOF
+  rm -rf "$SKILL_TMP"
+  SKILL_TMP=""
+  return "$rc"
+}
+
 # ---- setup -------------------------------------------------------------------
 
 # Prints the work OneDrive folder, or stops if there's none or several.
@@ -1463,6 +1838,12 @@ onedrive_folder() {
   printf '%s' "$dir"
 }
 
+# save_setting <key> <value>: one line of the settings file, replacing the key's last value.
+save_setting() {
+  mkdir -p "$(dirname "$SETTINGS")" || die "can't create $(dirname "$SETTINGS")"
+  { grep -v "^$1=" "$SETTINGS" 2>/dev/null; echo "$1=$2"; } >"$SETTINGS.new" && mv "$SETTINGS.new" "$SETTINGS"
+}
+
 # One relay setting: its value now, the one you passed, or an answer at a terminal.
 relay_setting() {
   local key="$1" passed="$2" default="$3" question="$4" old answer
@@ -1476,13 +1857,12 @@ relay_setting() {
   [ -n "$answer" ] || return 0
   # shellcheck disable=SC2088
   case "$answer" in "~/"*) answer="$HOME/${answer#"~/"}" ;; esac
-  mkdir -p "$(dirname "$SETTINGS")" || die "can't create $(dirname "$SETTINGS")"
-  { grep -v "^$key=" "$SETTINGS" 2>/dev/null; echo "$key=$answer"; } >"$SETTINGS.new" && mv "$SETTINGS.new" "$SETTINGS"
+  save_setting "$key" "$answer"
 }
 
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" target reviews="" clones="" key value
+  local dir="$1" target reviews="" clones="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1501,9 +1881,21 @@ cmd_setup() {
         clones="$2"
         shift 2
         ;;
+      --skills)
+        [ -n "${2:-}" ] || die "--skills needs the names of your skills, separated by colons, or none"
+        skills="$(printf '%s' "$2" | tr ',' ':')"
+        named=1
+        shift 2
+        ;;
+      --skills-from)
+        [ -n "${2:-}" ] || die "--skills-from needs the folder your skills are in"
+        skills_from="$2"
+        shift 2
+        ;;
       -h | --help)
         cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
+                   [--skills NAMES] [--skills-from FOLDER]
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
 Microsoft Copilot Cowork. It finds OneDrive under ~/Library/CloudStorage. --dir names the
@@ -1512,6 +1904,12 @@ folder if there are several, or it syncs elsewhere. Run it again to update the s
 --reviews is where relay review saves merge request reviews. --clones is where relay mr
 looks for your clones, with several folders separated by colons. At a terminal, it asks
 for each the first time.
+
+--skills names your own Claude skills to copy to Cowork too, separated by colons, such as
+mr-review:simple-english. Each copy is your skill with a note on top saying what to do
+differently in Cowork, and is made again whenever your skill changes. --skills none stops
+copying them, and removes the copies. --skills-from is where your skills live, if it isn't
+~/.claude/skills. relay skills shows where each one stands.
 EOF
         return 0
         ;;
@@ -1530,7 +1928,23 @@ EOF
     value="$(setting "$key" "")"
     [ -z "$value" ] || echo "relay setting: $key=$value"
   done
+  if [ -n "$skills_from" ]; then
+    # shellcheck disable=SC2088
+    case "$skills_from" in "~/"*) skills_from="$HOME/${skills_from#"~/"}" ;; esac
+    [ -d "$skills_from" ] || die "--skills-from: no such folder: $skills_from"
+    SKILLS_FROM="$(cd "$skills_from" && pwd)"
+    save_setting skills_from "$SKILLS_FROM"
+  fi
+  if [ -n "$named" ]; then
+    [ "$skills" != none ] || skills=""
+    SKILLS="$skills"
+    save_setting skills "$SKILLS"
+  fi
+  SKILLS_DIR="$dir/Documents/Cowork/skills"
+  sync_skills setup "$before" || rc=1
+  [ -z "$SKILLS" ] || echo "relay setting: skills=$SKILLS, from $SKILLS_FROM"
   echo "Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps."
+  return "$rc"
 }
 
 # ---- completion --------------------------------------------------------------
@@ -1541,18 +1955,18 @@ cmd_complete() {
   shift
   [ "$i" -le 1 ] || prev="$(eval "printf '%s' \"\${$((i - 1)):-}\"")"
   case "$prev" in
-    --repo | --dir | --also | --clones | --reviews) echo __dirs__; return 0 ;;
+    --repo | --dir | --also | --clones | --reviews | --skills-from) echo __dirs__; return 0 ;;
   esac
   # --dir FOLDER can come first.
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'setup\nrun\nscan\nmr\nreview\napply\ncompletion\n'
+    printf 'setup\nrun\nscan\nmr\nreview\napply\nskills\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
   case "$sub" in
-    setup) printf -- '--dir\n--reviews\n--clones\n' ;;
+    setup) printf -- '--dir\n--reviews\n--clones\n--skills\n--skills-from\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--no-wiki\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--no-wiki\n' ;;
@@ -1611,11 +2025,12 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  run | scan | mr | review | apply)
+  run | scan | mr | review | apply | skills)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
     COWORK="$ONEDRIVE/Documents/Cowork"
+    SKILLS_DIR="$COWORK/skills"
     ;;
 esac
 case "${1:-}" in
@@ -1624,6 +2039,7 @@ case "${1:-}" in
   mr) shift; cmd_mr "$@"; exit $? ;;
   review) shift; cmd_review "$@"; exit $? ;;
   apply) shift; cmd_apply "$@"; exit $? ;;
+  skills) shift; cmd_skills "$@"; exit $? ;;
   "" | -h | --help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

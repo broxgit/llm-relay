@@ -16,6 +16,27 @@ The first time, it asks where your clones and reviews live. `--clones` and `--re
 
 After you update the skill, a new Cowork session can still load the old copy for several minutes, so give it 10.
 
+## Your own skills in Cowork
+
+Cowork reads skills in the same shape Claude does, so it can use yours. Name the ones you want it to have:
+
+```bash
+relay setup --skills mr-review:simple-english
+```
+
+- **What it gets is a copy, adapted.** Each copy is your skill with a note on top. The note tells Cowork what to do where your skill expects Claude's tools: use what the relay sent in place of `glab` and your clones, skip anything that posts, and ask for what it can't see. It also lists the tools your skill names that Cowork doesn't have. The rest is your skill's text, unchanged.
+- **Your skill stays the only thing you edit.** The copy is made again by `relay setup`, `relay scan` or `relay mr` whenever your skill has changed, and they say so when they do. For notes that only apply in Cowork, put a `COWORK.md` beside the skill's `SKILL.md`, and its text goes into the note.
+- **It goes one way.** If Cowork changes its copy in OneDrive, nothing comes back to your Mac, and nothing overwrites the change unasked. `relay setup` shows you the difference and asks before it replaces the copy.
+- **Only what you name.** `--skills none` stops copying them and removes the copies. `--skills-from` says where your skills live, if it isn't `~/.claude/skills`. A skill of the same name that you put in Cowork's folder yourself is never touched.
+
+To see where things stand, without changing anything:
+
+```bash
+relay skills
+```
+
+A skill can hold rules you wouldn't want in the company's cloud, so check what your company allows first. Give Cowork 10 minutes and a new session to pick up a changed copy. A review says which copy it used, and `relay review` warns if it was an older one.
+
 ## Share your code
 
 Run this in the repository, then tell Cowork what it prints:

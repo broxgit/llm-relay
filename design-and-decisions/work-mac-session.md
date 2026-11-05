@@ -2,7 +2,7 @@
 
 **Status: proposed on 2026-11-05, not run.** This is phase 2 of the [proposed roadmap](roadmap.md).
 
-One sitting of about an hour and a half, in Apple's Terminal. Parts F and G can be skipped if time is short, since A to E prove what is already built. Phase 1 merged on 2026-11-05, so `main` is ready for it. Cowork is only on the work Mac, so this is the only way anything here gets tried with real Cowork and real OneDrive. Each part says what to run and what you should see. Anything else you see is a finding, so copy it.
+One sitting of about an hour and a half, in Apple's Terminal. Parts F, G and H can be skipped if time is short, since A to E prove the core of what is built. Phase 1 merged on 2026-11-05, so `main` is ready for it. Cowork is only on the work Mac, so this is the only way anything here gets tried with real Cowork and real OneDrive. Each part says what to run and what you should see. Anything else you see is a finding, so copy it.
 
 ## A. Install, 5 minutes
 
@@ -130,12 +130,39 @@ This tests [leverage step 6](leverage.md#6-relay-ticket).
    ```
 3. Note Cowork's answer and the command's output.
 
+## H. The relay's adapted copy of your skill, 5 minutes and a wait
+
+This tests [skill-sync.md](skill-sync.md). Do it after part D, and only if you copied a skill by hand in part A. It swaps that copy for the one the relay makes.
+
+1. Delete the hand copy, so the relay isn't refused by a skill it didn't make. Use the OneDrive folder and skill name from part A.
+
+   ```bash
+   rm -rf "<that folder>/Documents/Cowork/skills/<skill-name>"
+   ```
+2. Have the relay copy it, adapted.
+
+   ```bash
+   relay setup --skills <skill-name>
+   ```
+
+   Expect `skill <skill-name>: copied to Cowork`, with eight characters in brackets. That is the stamp.
+3. Check that the relay thinks the two are in step.
+
+   ```bash
+   relay skills
+   ```
+
+   Expect `<skill-name>: in step`.
+4. Wait 10 minutes and start a new Cowork session. Ask: "What does the note at the top of your <skill-name> skill tell you to do differently here, and how does it ask you to cite the skill?"
+5. Note whether Cowork saw the note at all, whether it repeats the stamp from step 2, and which tools the note said it lacks.
+
 ## Bring back
 
-- The terminal output of parts A to G, as text.
+- The terminal output of parts A to H, as text.
 - Cowork's own labelled report. Ask it: "Write a report of this session, marking each claim validated or not validated, with times."
 - For part E: what happened at each of the four steps, with the timings.
 - For the skill copy (parts A and D): whether Cowork listed the copied skill, and which of its steps Cowork followed, skipped, and why.
 - For part F: whether each file arrived and how long after the copy, whether it built, and which tests failed and whether for lack of network or a service. Also both file sizes.
 - For part G: Cowork's answer, naming the tool it used or what stopped it, and the output of `command -v jira acli glab`.
+- For part H: the output of the two `relay` commands, and Cowork's answer about the note and the stamp.
 - Not the webhook address. Delete the workflow afterwards if you don't want it kept.
