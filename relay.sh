@@ -1,32 +1,43 @@
 #!/usr/bin/env bash
-# wiki relay: the Mac's side of the remote pair-run loop with Microsoft Copilot Cowork.
+# relay: the Mac's side of the remote pair-run loop with Microsoft Copilot Cowork.
 #
+#   relay setup   Put the remote-pair-run skill in OneDrive, and record where things are.
 #   relay run     Wait for a deliverable, copy it out of OneDrive, and run the copy on a keypress.
 #   relay scan    Put a repository in OneDrive for Cowork to read, in place of an attached scan.
 #   relay mr      Put a merge request and what it takes to review it in OneDrive.
 #   relay review  Save the review Cowork wrote where you keep your reviews.
 #   relay apply   Leave a proven patch in your working tree, uncommitted.
 #
-# Run through wiki.sh, which finds the OneDrive folder and sets LLM_WIKI_ONEDRIVE.
+# Works with the bash that ships on macOS (3.2) and on Linux.
 # shellcheck disable=SC2034  # RUNLIB_DIR and RUNLIB_EXPECT are read by runlib.sh.
 set -u
-# Feed a loop with a heredoc holding $(...), as wiki.sh's header explains. Empty output gives one blank line.
+# Feed a loop with a heredoc holding $(...), not process substitution, which can interrupt a
+# blocked printf on bash 3.2. Empty output gives one blank line, so a loop needs its own guard.
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNLIB="$REPO/cowork/remote-pair-run/runlib.sh"
-WIKI_CMD="${WIKI_CMD:-wiki}"
+# Follow symlinks, such as ~/.local/bin/relay, to the real script: the skill sits beside it.
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+REPO="$(cd "$(dirname "$src")" && pwd)"
+SKILL_DIR="$REPO/cowork/remote-pair-run"
+RUNLIB="$SKILL_DIR/runlib.sh"
 # shellcheck source=/dev/null
 . "$RUNLIB"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-COWORK="${LLM_WIKI_ONEDRIVE:-}/Documents/Cowork"
-WAIT="${LLM_WIKI_RELAY_WAIT:-600}"
-POLL="${LLM_WIKI_RELAY_POLL:-5}"
-READ_LIMIT="${LLM_WIKI_RELAY_READ_LIMIT:-120}"
-CHECK_LIMIT="${LLM_WIKI_RELAY_CHECK_LIMIT:-600}"
+COWORK=""
+WAIT="${RELAY_WAIT:-600}"
+POLL="${RELAY_POLL:-5}"
+READ_LIMIT="${RELAY_READ_LIMIT:-120}"
+CHECK_LIMIT="${RELAY_CHECK_LIMIT:-600}"
 REPORTS="${RUNLIB_REPORT_DIR:-$HOME/pair-run-reports}"
-SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-wiki/relay"
+SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-relay/settings"
+# Where the settings lived when the relay was part of llm-wiki. Read, never written.
+OLD_SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-wiki/relay"
 WORK=""
 RUN_STARTED=""
 
@@ -35,10 +46,12 @@ cleanup() {
   [ -z "$RUN_STARTED" ] || echo "Relay run ended at $(now)."
 }
 
-# setting <key> <default>: a line of the settings file `wiki setup copilot-cowork` writes.
+# setting <key> <default>: a line of the settings file `relay setup` writes, or of the old one
+# for a key the new file doesn't have yet.
 setting() {
   local v
   v="$(sed -n "s/^$1=//p" "$SETTINGS" 2>/dev/null | tail -n 1)"
+  [ -n "$v" ] || v="$(sed -n "s/^$1=//p" "$OLD_SETTINGS" 2>/dev/null | tail -n 1)"
   printf '%s' "${v:-$2}"
 }
 REVIEWS_DIR="$(setting reviews "$HOME/mr-reviews")"
@@ -46,20 +59,25 @@ CLONES_DIRS="$(setting clones "$HOME/dev")"
 
 usage() {
   cat <<EOF
-Usage: $WIKI_CMD relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
-       $WIKI_CMD relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki]
-       $WIKI_CMD relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--no-wiki]
-       $WIKI_CMD relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
-       $WIKI_CMD relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
+Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
+       relay completion zsh|bash
+       relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
+       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki]
+       relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--no-wiki]
+       relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
+       relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
+  setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
+         Run it again to update the skill. setup --help has more.
   run    Waits until a deliverable from Copilot Cowork matches its manifest, copies it to a
          local folder, shows you what's there, and runs the copy when you press y. If it gives up, it says what this Mac sees. The report
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
          happened. Then tell Cowork "done". With no deliverable named, it uses the newest.
   scan   Puts the repository's current branch and uncommitted changes in OneDrive, at
          Documents/Cowork/relay/scans, with a note of the commit and tool versions. Untracked
-         files stay out. Defaults to the repository you're in. The compiled pages of the wiki
-         that covers it go too, unless you add --no-wiki. Its raw notes and other wikis stay out.
+         files stay out. Defaults to the repository you're in. If you use llm-wiki, the compiled
+         pages of the wiki that covers it go too, unless you add --no-wiki. Its raw notes and
+         other wikis stay out.
          --branch NAME scans that branch instead, as origin has it after a fetch, or your
          local copy if origin doesn't have it. Your checkout isn't touched, and uncommitted
          changes stay out.
@@ -92,7 +110,7 @@ deliverable_path() {
 }
 
 needs_terminal() {
-  [ -t 0 ] || [ -n "${LLM_WIKI_TEST_TTY:-}" ] || die "relay $1 asks before it does anything, so it needs a terminal. Agents: tell the user to run it."
+  [ -t 0 ] || [ -n "${RELAY_TEST_TTY:-}" ] || die "relay $1 asks before it does anything, so it needs a terminal. Agents: tell the user to run it."
 }
 
 newest_deliverable() {
@@ -348,7 +366,7 @@ cmd_run() {
         ;;
       --no-install) no_install=1; shift ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay run: unknown option $1. Try $WIKI_CMD relay --help" ;;
+      -*) die "relay run: unknown option $1. Try relay --help" ;;
       *)
         [ -z "$where" ] || die "relay run takes one deliverable"
         where="$1"
@@ -361,7 +379,7 @@ cmd_run() {
   fi
   needs_terminal run
 
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-wiki-relay.XXXXXX")" || die "can't make a scratch folder"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
@@ -442,7 +460,8 @@ find_branch() {
 
 # collect_wiki <folder> <repository name, or empty for the folder's own> <no-wiki flag>: copies the wiki that covers a repository into the
 # scratch folder, and sets WIKI_LINE, WIKI_NAME, WIKI_PAGES and WIKI_PART for the caller.
-# Only that wiki. The shared wiki can hold personal rules, so it stays out.
+# Only that wiki. The shared wiki can hold personal rules, so it stays out. The wiki command is
+# llm-wiki's, and optional: with none installed, the relay works and sends no wiki.
 collect_wiki() {
   local wiki=""
   WIKI_LINE="none covers this repository"
@@ -453,8 +472,13 @@ collect_wiki() {
     WIKI_LINE="left out with --no-wiki"
     return 0
   fi
-  # From the repository's folder, so wiki.sh picks the collection that holds its wiki.
-  wiki="$(cd "$1" && "$REPO/wiki.sh" which ${2:+"$2"} 2>/dev/null)" || wiki=""
+  if ! command -v wiki >/dev/null 2>&1; then
+    WIKI_LINE="left out, because this machine has no wiki command"
+    echo "No wiki command here, so no wiki copy goes with this."
+    return 0
+  fi
+  # From the repository's folder, so wiki picks the collection that holds its wiki.
+  wiki="$(cd "$1" && wiki which ${2:+"$2"} 2>/dev/null)" || wiki=""
   # wiki which shortens the path to a literal ~/.
   # shellcheck disable=SC2088
   case "$wiki" in "~/"*) wiki="$HOME/${wiki#"~/"}" ;; esac
@@ -519,7 +543,7 @@ cmd_scan() {
         want="$2"
         shift 2
         ;;
-      -*) die "relay scan: unknown option $1. Try $WIKI_CMD relay --help" ;;
+      -*) die "relay scan: unknown option $1. Try relay --help" ;;
       *) dir="$1"; shift ;;
     esac
   done
@@ -535,7 +559,7 @@ cmd_scan() {
     branch="$(git -C "$root" symbolic-ref -q --short HEAD)" || branch=""
   fi
 
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-wiki-relay.XXXXXX")" || die "can't make a scratch folder"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   if [ -n "$want" ]; then
     # A scratch repository, so the clone gets the branch under its own name, without moving
@@ -557,7 +581,7 @@ cmd_scan() {
 
   collect_wiki "$root" "" "$no_wiki"
   {
-    echo "LLM-WIKI RELAY SCAN"
+    echo "LLM-RELAY SCAN"
     echo "repository: $name"
     echo "path: $root"
     echo "branch: ${branch:-detached}"
@@ -640,12 +664,12 @@ send_also() {
   sub="${sub%/}"
   name="$(basename "$root")-$sub"
   name="$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '-')"
-  t="$(mktemp -d "${TMPDIR:-/tmp}/llm-wiki-relay.XXXXXX")" || die "can't make a scratch folder"
+  t="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   git -C "$root" archive --format=tar.gz -o "$t/$name.tar.gz" "$commit" -- "$sub" || { rm -rf "$t"; die "--also: couldn't pack $sub"; }
   hash="$(sha256_of "$t/$name.tar.gz")"
   size="$(wc -c <"$t/$name.tar.gz" | tr -d ' ')"
   {
-    echo "LLM-WIKI RELAY FOLDER"
+    echo "LLM-RELAY FOLDER"
     echo "repository: $(basename "$root")"
     echo "folder: $sub"
     echo "branch: $branch"
@@ -850,7 +874,7 @@ want_checks() {
       return 1
       ;;
   esac
-  if ! [ -t 3 ] && [ -z "${LLM_WIKI_TEST_TTY:-}" ]; then
+  if ! [ -t 3 ] && [ -z "${RELAY_TEST_TTY:-}" ]; then
     CHECKS_LINE="not run, because there was no terminal to ask at"
     return 1
   fi
@@ -993,10 +1017,10 @@ pack_mr() {
   if [ -n "$repo_arg" ]; then
     clone="$(git -C "$repo_arg" rev-parse --show-toplevel 2>/dev/null)" || die "--repo: not a git repository: $repo_arg"
   else
-    clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Clone it, name it with --repo PATH, or change where to look with $WIKI_CMD setup copilot-cowork --clones DIR"
+    clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Clone it, name it with --repo PATH, or change where to look with relay setup --clones DIR"
   fi
 
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-wiki-relay.XXXXXX")" || die "can't make a scratch folder"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   mkdir -p "$WORK/mr"
   glab_call mr view "$MR_IID" -R "$MR_PROJECT" -F json >"$WORK/mr/view.json" 2>"$WORK/glab.err" ||
@@ -1075,7 +1099,7 @@ EOF
   hash="$(sha256_of "$WORK/$name.tar.gz")"
   size="$(wc -c <"$WORK/$name.tar.gz" | tr -d ' ')"
   {
-    echo "LLM-WIKI RELAY MERGE REQUEST"
+    echo "LLM-RELAY MERGE REQUEST"
     echo "url: $url"
     echo "project: $MR_PROJECT"
     echo "iid: $MR_IID"
@@ -1148,7 +1172,7 @@ cmd_mr() {
       --no-checks) checks=no; shift ;;
       --no-wiki) no_wiki=1; shift ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay mr: unknown option $1. Try $WIKI_CMD relay --help" ;;
+      -*) die "relay mr: unknown option $1. Try relay --help" ;;
       *)
         urls="$urls$1
 "
@@ -1261,7 +1285,7 @@ cmd_review() {
         shift 2
         ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay review: unknown option $1. Try $WIKI_CMD relay --help" ;;
+      -*) die "relay review: unknown option $1. Try relay --help" ;;
       *)
         [ -z "$where" ] || die "relay review takes one deliverable"
         where="$1"
@@ -1272,7 +1296,7 @@ cmd_review() {
   [ -n "$where" ] || die "relay review needs a deliverable, as TASK-FOLDER/DELIVERABLE"
   named="$(deliverable_path "$where")" || exit 1
   needs_terminal review
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-wiki-relay.XXXXXX")" || die "can't make a scratch folder"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
@@ -1334,7 +1358,7 @@ cmd_apply() {
         shift 2
         ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay apply: unknown option $1. Try $WIKI_CMD relay --help" ;;
+      -*) die "relay apply: unknown option $1. Try relay --help" ;;
       *)
         [ -z "$where" ] || die "relay apply takes one deliverable"
         where="$1"
@@ -1347,7 +1371,7 @@ cmd_apply() {
   root="$(git -C "$repo_arg" rev-parse --show-toplevel 2>/dev/null)" || die "--repo: not a git repository: $repo_arg"
   named="$(deliverable_path "$where")" || exit 1
   needs_terminal apply
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-wiki-relay.XXXXXX")" || die "can't make a scratch folder"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
@@ -1406,6 +1430,180 @@ EOF
   git -C "$root" status --short
 }
 
+# ---- setup -------------------------------------------------------------------
+
+# Prints the work OneDrive folder, or stops if there's none or several.
+onedrive_folder() {
+  local a found="" dir="" n=0
+  for a in "$HOME"/Library/CloudStorage/OneDrive-*; do
+    [ -d "$a" ] || continue
+    # Cowork needs a work or school account.
+    [ "$(basename "$a")" != OneDrive-Personal ] || continue
+    found="$found
+  $a"
+    dir="$a"
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] || die "no work OneDrive folder in ~/Library/CloudStorage. Sign in to OneDrive, or name the folder with --dir"
+  [ "$n" -eq 1 ] || die "several OneDrive folders. Name one with --dir:$found"
+  printf '%s' "$dir"
+}
+
+# One relay setting: its value now, the one you passed, or an answer at a terminal.
+relay_setting() {
+  local key="$1" passed="$2" default="$3" question="$4" old answer
+  old="$(setting "$key" "")"
+  answer="$passed"
+  if [ -z "$answer" ] && [ -z "$old" ] && { [ -t 0 ] || [ -n "${RELAY_TEST_TTY:-}" ]; }; then
+    printf '%s [%s]: ' "$question" "$default" >&2
+    IFS= read -r answer || answer=""
+    answer="${answer:-$default}"
+  fi
+  [ -n "$answer" ] || return 0
+  # shellcheck disable=SC2088
+  case "$answer" in "~/"*) answer="$HOME/${answer#"~/"}" ;; esac
+  mkdir -p "$(dirname "$SETTINGS")" || die "can't create $(dirname "$SETTINGS")"
+  { grep -v "^$key=" "$SETTINGS" 2>/dev/null; echo "$key=$answer"; } >"$SETTINGS.new" && mv "$SETTINGS.new" "$SETTINGS"
+}
+
+# Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
+cmd_setup() {
+  local dir="$1" target reviews="" clones="" key value
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir)
+        [ -n "${2:-}" ] || die "--dir needs your OneDrive folder"
+        dir="$2"
+        shift 2
+        ;;
+      --reviews)
+        [ -n "${2:-}" ] || die "--reviews needs a folder"
+        reviews="$2"
+        shift 2
+        ;;
+      --clones)
+        [ -n "${2:-}" ] || die "--clones needs a folder"
+        clones="$2"
+        shift 2
+        ;;
+      -h | --help)
+        cat <<EOF
+Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
+
+Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
+Microsoft Copilot Cowork. It finds OneDrive under ~/Library/CloudStorage. --dir names the
+folder if there are several, or it syncs elsewhere. Run it again to update the skill.
+
+--reviews is where relay review saves merge request reviews. --clones is where relay mr
+looks for your clones, with several folders separated by colons. At a terminal, it asks
+for each the first time.
+EOF
+        return 0
+        ;;
+      *) die "setup: unknown option $1. Try relay setup --help" ;;
+    esac
+  done
+  [ -n "$dir" ] || dir="$(onedrive_folder)" || exit 1
+  [ -d "$dir" ] || die "no such folder: $dir"
+  target="$dir/Documents/Cowork/skills/remote-pair-run"
+  mkdir -p "$target" || die "can't create $target"
+  cp "$SKILL_DIR/SKILL.md" "$SKILL_DIR/runlib.sh" "$target/" || die "can't copy the skill to $target"
+  echo "installed: $target"
+  relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
+  relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
+  for key in reviews clones; do
+    value="$(setting "$key" "")"
+    [ -z "$value" ] || echo "relay setting: $key=$value"
+  done
+  echo "Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps."
+}
+
+# ---- completion --------------------------------------------------------------
+
+# __complete <index> <word>...: candidates for the word at index (1 is the first after relay).
+cmd_complete() {
+  local i="$1" prev="" sub at=1
+  shift
+  [ "$i" -le 1 ] || prev="$(eval "printf '%s' \"\${$((i - 1)):-}\"")"
+  case "$prev" in
+    --repo | --dir | --also | --clones | --reviews) echo __dirs__; return 0 ;;
+  esac
+  # --dir FOLDER can come first.
+  sub="${1:-}"
+  if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
+  if [ "$i" -le "$at" ]; then
+    printf 'setup\nrun\nscan\nmr\nreview\napply\ncompletion\n'
+    [ "$at" -eq 3 ] || echo --dir
+    return 0
+  fi
+  case "$sub" in
+    setup) printf -- '--dir\n--reviews\n--clones\n' ;;
+    run) printf -- '--expect\n--no-install\n' ;;
+    scan) printf -- '--branch\n--no-wiki\n' ;;
+    mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--no-wiki\n' ;;
+    review) echo --expect ;;
+    apply) printf -- '--repo\n--expect\n' ;;
+    completion) printf 'zsh\nbash\n' ;;
+  esac
+  return 0
+}
+
+cmd_completion() {
+  case "${1:-}" in
+    zsh)
+      cat <<'EOF'
+# Tab completion for relay. Written by `relay completion zsh`.
+_llm_relay() {
+  local -a c
+  c=("${(@f)$(${words[1]} __complete $((CURRENT - 1)) ${words[2,-1]} 2>/dev/null)}")
+  if [[ "${c[1]}" == __dirs__ ]]; then _files -/; return; fi
+  compadd -a c
+}
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit -i; }
+compdef _llm_relay relay relay.sh
+EOF
+      ;;
+    bash)
+      cat <<'EOF'
+# Tab completion for relay. Written by `relay completion bash`.
+_llm_relay() {
+  local cur="${COMP_WORDS[COMP_CWORD]}" out
+  # Set IFS only after this: bash 3.2 joins "${COMP_WORDS[@]:1}" when IFS is a newline.
+  out="$("${COMP_WORDS[0]}" __complete "$COMP_CWORD" "${COMP_WORDS[@]:1}" 2>/dev/null)"
+  local IFS=$'\n'
+  if [ "${out%%$'\n'*}" = __dirs__ ]; then COMPREPLY=($(compgen -d -- "$cur")); return; fi
+  COMPREPLY=($(compgen -W "$out" -- "$cur"))
+}
+complete -F _llm_relay relay relay.sh ./relay.sh
+EOF
+      ;;
+    *) die "completion takes zsh or bash" ;;
+  esac
+}
+
+# ---- dispatch ----------------------------------------------------------------
+
+case "${1:-}" in
+  __complete) shift; cmd_complete "$@"; exit 0 ;;
+  completion) shift; cmd_completion "$@"; exit 0 ;;
+esac
+
+ONEDRIVE=""
+if [ "${1:-}" = --dir ]; then
+  [ -n "${2:-}" ] || die "--dir needs your OneDrive folder"
+  ONEDRIVE="$2"
+  shift 2
+fi
+case "${1:-}" in
+  setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
+  run | scan | mr | review | apply)
+    command -v git >/dev/null 2>&1 || die "relay needs git"
+    [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
+    [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
+    COWORK="$ONEDRIVE/Documents/Cowork"
+    ;;
+esac
 case "${1:-}" in
   run) shift; cmd_run "$@"; exit $? ;;
   scan) shift; cmd_scan "$@"; exit $? ;;
