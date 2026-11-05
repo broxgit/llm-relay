@@ -93,6 +93,28 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 
 It's built for GitLab and Go. Cowork still can't see production data, and it reads other services only if it asks or you add `--also`.
 
+## Have Cowork walk you through a test
+
+To check that everything works on your machine, or to help improve the relay, let Cowork run the test:
+
+```bash
+relay field-test
+```
+
+It puts a short note about your setup in OneDrive and a prompt on your clipboard. The note has the relay's version, your system and terminal app, and whether Cowork has the relay's skills. It holds no paths, names or repositories. Paste the prompt into a new Cowork session.
+
+Cowork then guides you with the `relay-field-test` skill, which `relay setup` installs. It gives you one command at a time, tells you which keys to press and what to paste back, and does its own side as it goes. It asks how long you have: the short version is about 45 minutes.
+
+At the end it writes a report: what passed and failed, how long things took, and what in the skills was unclear. It's told to leave your company's names, code and tickets out of it. The report comes back like a review:
+
+```bash
+relay review <task-folder>/<deliverable> --expect 1
+```
+
+Press `v` to read it, and `y` to save it under `field-test` where you keep reviews. Read it over before you send it to anyone.
+
+[The session walkthrough](../design-and-decisions/work-mac-session.md) has the same steps written out, if you'd sooner do it by hand.
+
 ## What's been tried
 
 - Four test sessions with Cowork, on a throwaway repository, led to this. On 2026-11-04, whole rounds ran from Apple's Terminal with nothing attached and no Always Keep: a fresh publish, a real failure, its fix, and pressing `n`. Scans worked at up to 50 MB.

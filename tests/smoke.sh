@@ -1576,6 +1576,82 @@ expect "and says when Cowork's copy isn't this relay's" "Cowork's copy of the re
 out="$(vscan)"
 case "$out" in *"Scanned skill-repo"*) ok "the scan still goes ahead" ;; *) bad "the scan still goes ahead" "$out" ;; esac
 
+section "A guided field test"
+FS="$REPO/cowork/relay-field-test"
+FH="$T/ft-home"
+FO="$T/ft-onedrive"
+FB="$T/ft-bin"
+mkdir -p "$FH" "$FO" "$FB"
+# A stand-in clipboard, so the suite leaves the real one alone.
+printf '#!/bin/sh\ncat >"%s/clipboard"\n' "$T" >"$FB/pbcopy"
+chmod +x "$FB/pbcopy"
+ft() { env HOME="$FH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$FO" "$@" 2>&1; }
+out="$(env HOME="$FH" "$W" setup --dir "$FO" --reviews "$T/ft-reviews" --clones "$T/ft-clones" </dev/null 2>&1)"
+case "$out" in *"installed: $FO/Documents/Cowork/skills/remote-pair-run"*"installed: $FO/Documents/Cowork/skills/relay-field-test"*) ok "setup installs the field-test skill too" ;; *) bad "setup installs the field-test skill too" "$out" ;; esac
+check "as it is" cmp "$FS/SKILL.md" "$FO/Documents/Cowork/skills/relay-field-test/SKILL.md"
+out="$(ft field-test)"; rc=$?
+FN="$FO/Documents/Cowork/relay/field-test/note.txt"
+case "$rc:$out" in 0:*"LLM-RELAY FIELD TEST"*"Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"*"Use relay-field-test to guide me through testing the relay"*) ok "relay field-test writes a note and prints the prompt" ;; *) bad "relay field-test writes a note and prints the prompt" "exit $rc: $out" ;; esac
+check "the prompt goes on the clipboard" grep -q 'read Documents/Cowork/relay/field-test/note.txt from my OneDrive first' "$T/clipboard"
+check "the note says which relay" grep -q "^relay: $("$W" --version | sed 's/^relay //')\$" "$FN"
+check "and which runlib" grep -q '^runlib: [0-9][0-9]*$' "$FN"
+check "and how it was installed" grep -q '^installed by: clone$' "$FN"
+check "and the terminal app" grep -q '^terminal app: Apple_Terminal$' "$FN"
+check "and that Cowork has the relay's own skills" grep -q "^the relay's own skills in Cowork's folder: this relay's\$" "$FN"
+check "and that no skills are named" grep -q "^the user's skills named for Cowork: none\$" "$FN"
+# The report built from this note leaves the user's company, so the note names no place on the Mac.
+refuse "the note holds no path from this Mac" grep -q -e "$T" -e "$FH" -e "$HOME" -e '/Users/' -e '/home/' "$FN"
+check "the settings are there without their values" grep -q '^setting reviews: set$' "$FN"
+echo '# changed' >>"$FO/Documents/Cowork/skills/relay-field-test/SKILL.md"
+out="$(ft field-test)"
+case "$out" in *"the relay's own skills in Cowork's folder: not this relay's"*"Cowork needs this relay's skills first. Run relay setup"*) ok "it says when Cowork doesn't have this relay's skills" ;; *) bad "it says when Cowork doesn't have this relay's skills" "$out" ;; esac
+expect "a scan notices an old field-test skill too" "Cowork's copy of the relay-field-test skill isn't this relay's" env HOME="$FH" "$W" --dir "$FO" scan "$T/skill-repo" --no-wiki
+refuse "relay field-test takes no arguments" ft field-test extra
+expect "the field-test skill's name can't be given to --skills" "skill relay-field-test: not a name the relay can copy" env HOME="$FH" "$W" setup --dir "$FO" --skills relay-field-test
+env HOME="$FH" "$W" setup --dir "$FO" --skills none </dev/null >/dev/null 2>&1
+# The report comes back the way a review does: through relay review, on a keypress.
+FR="$FO/Documents/Cowork/Tasks/ft/output/report"
+mkdir -p "$FR/reviews/field-test"
+printf '# Relay field test\n\n## Summary\n\nIt ran.\n\n## Coverage\n\n- Parts A and B, all validated.\n' >"$FR/reviews/field-test/relay-field-test.md"
+bash "$LIB" manifest "$FR" >/dev/null
+out="$(env HOME="$FH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" y "$W" --dir "$FO" review ft/report --expect 1 2>&1)"
+case "$out" in *"What relay-field-test.md says it covered:"*"Parts A and B"*"Saved: $T/ft-reviews/field-test/relay-field-test.md"*) ok "relay review saves the report where the skill says to put it" ;; *) bad "relay review saves the report where the skill says to put it" "$out" ;; esac
+check "the skill names that place" grep -q 'reviews/field-test/relay-field-test.md' "$FS/SKILL.md"
+# What the skill tells Cowork to expect has to be what the relay prints.
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  if grep -qF -- "$line" "$FS/SKILL.md" && grep -qF -- "$line" "$W" "$LIB"; then ok "the skill expects what the relay prints: $line"; else bad "the skill expects what the relay prints: $line"; fi
+done <<'EOF'
+Now tell Cowork: read Documents/Cowork/relay/scans/
+Relay run started at
+Nothing ran, and no report was sent.
+Applied, and nothing is committed.
+uncommitted changes left out
+Run go build, vet, test and mod tidy on a temporary copy
+says it covered:
+your skill has changed since Cowork's copy was made
+Cowork's copy was out of date, so it was made again
+worktree identical to
+tracked files unchanged in the worktree
+your checkout unchanged
+attempt passed:
+No skills are named
+EOF
+# A command is `relay word` followed by a space or the closing mark, which leaves out "relay setting:".
+unknown=""
+while IFS= read -r cmd; do
+  [ -n "$cmd" ] || continue
+  case "$cmd" in
+    setup | scan | run | mr | review | apply | skills | field-test | --version) ;;
+    *) unknown="$unknown $cmd" ;;
+  esac
+done <<EOF
+$(grep -o '`relay [a-z-]*[` ]' "$FS/SKILL.md" | sed 's/^`relay //; s/[` ]$//' | LC_ALL=C sort -u)
+EOF
+[ -z "$unknown" ] && ok "every relay command the field-test skill names exists" || bad "every relay command the field-test skill names exists" "$unknown"
+check "the skill keeps the user's work out of the report" grep -q 'Leave their work out of the report' "$FS/SKILL.md"
+check "and never asks for the webhook address" grep -q 'Never ask for the address' "$FS/SKILL.md"
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"
@@ -1660,6 +1736,7 @@ expect "setup completes its flags" "--clones" "$W" __complete 2 setup ""
 expect "with the ones for skills" "--skills-from" "$W" __complete 2 setup ""
 expect "--skills-from completes a folder" "__dirs__" "$W" __complete 3 setup --skills-from ""
 expect "completion knows skills" "skills" "$W" __complete 1 ""
+expect "and field-test" "field-test" "$W" __complete 1 ""
 expect "--also completes a folder" "__dirs__" "$W" __complete 3 mr --also ""
 expect "completion prints a zsh script" "compdef _llm_relay relay" "$W" completion zsh
 expect "and a bash one" "complete -F _llm_relay relay" "$W" completion bash
