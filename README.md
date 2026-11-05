@@ -24,10 +24,10 @@ relay setup
 
 `relay setup` copies a skill called `remote-pair-run` to `Documents/Cowork/skills` in your OneDrive, and asks where your clones and reviews live. Cowork finds the skill when a new session starts.
 
-To update, upgrade and run setup again. The relay tells you when Cowork's copy of the skill isn't its own. Give Cowork 10 minutes before a new session, because its copy can lag.
+To update, upgrade and run setup again. The relay tells you when Cowork's copy of the skill isn't its own. Give Cowork 10 minutes before a new session, because its copy can lag. Homebrew doesn't check a tap for a new version on every command, so without `brew update` it can say the old version is already installed.
 
 ```bash
-brew upgrade llm-relay && relay setup
+brew update && brew upgrade llm-relay && relay setup
 ```
 
 Tab completion comes with it. `relay --version` says which release you have.

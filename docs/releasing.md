@@ -43,3 +43,5 @@ Before 1.0, nothing here has been proven with Copilot Cowork end to end, and any
 ## What an upgrade doesn't do
 
 It doesn't touch OneDrive. The skill Cowork reads is copied there by `relay setup`. So after an upgrade the relay says, on the next `relay scan` or `relay mr`, that Cowork's copy isn't its own, until `relay setup` runs again.
+
+A user who runs `brew upgrade` without `brew update` first may be told the old version is already installed. So every place that tells users how to update gives both.
