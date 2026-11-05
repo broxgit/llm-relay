@@ -18,7 +18,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 - The guided field test. The skill is text, and `relay field-test` has only run in smoke tests. Not known: whether Cowork keeps to one step at a time, whether it keeps the user's work out of the report, and whether the report is good enough to act on.
 
-- Installing with Homebrew on the work Mac. It has been installed from the tap on one personal Mac only.
+- Installing with Homebrew ran on the work Mac on 2026-11-05, at 0.1.0, and `relay setup` ran from that install. Upgrading there to 0.2.0 has not been done yet: `brew upgrade` alone didn't find it, because the tap hadn't been refreshed.
 
 - Attempts, with real Cowork. They have only run in smoke tests. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several sets of builds take in one run on real code.
 - The skill's instruction to look in Teams, email and SharePoint. It is text only, and nobody has seen what Cowork does with it.
