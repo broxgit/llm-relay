@@ -8,6 +8,8 @@ set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 W="$REPO/relay.sh"
+# Types answers at a pseudo-terminal: relay takes none from a pipe.
+TTY="$REPO/tests/type-keys.py"
 T="$(mktemp -d)"
 T="$(cd "$T" && pwd -P)"
 trap 'rm -rf "$T"' EXIT
@@ -504,7 +506,7 @@ out="$(cd "$EX" && bash "$EX/d/install.sh" "$EX/d" 2>&1)" && bad "its install re
 CW="$T/cowork-home"
 mkdir -p "$CW"
 # shellcheck disable=SC2120  # check and refuse pass it arguments.
-cw() { env HOME="$CW" "$W" setup "$@"; }
+cw() { env HOME="$CW" "$W" setup "$@" </dev/null; }
 out="$(cw 2>&1)" && bad "no OneDrive says so" "$out" || case "$out" in *"no work OneDrive folder"*) ok "no OneDrive says so" ;; *) bad "no OneDrive says so" "$out" ;; esac
 mkdir -p "$CW/Library/CloudStorage/OneDrive-Personal"
 out="$(cw 2>&1)" && bad "a personal OneDrive doesn't count" "$out" || case "$out" in *"no work OneDrive folder"*) ok "a personal OneDrive doesn't count" ;; *) bad "a personal OneDrive doesn't count" "$out" ;; esac
@@ -543,11 +545,11 @@ rl_new() {
   bash "$LIB" manifest "$d" >/dev/null
   RL_D="$d"
 }
-# rl <answer> <args...>: relay run, answering its question through a pipe.
+# rl <keys> <args...>: relay run, with its questions answered at a pseudo-terminal.
 rl() {
   local answer="$1"
   shift
-  RL_OUT="$(printf '%s' "$answer" | env HOME="$RH" PAGER=cat RELAY_TEST_TTY=1 RELAY_WAIT="${RL_WAIT:-0}" RELAY_POLL=1 "$W" run "$@" 2>&1)"
+  RL_OUT="$(env HOME="$RH" PAGER=cat RELAY_WAIT="${RL_WAIT:-0}" RELAY_POLL=1 python3 "$TTY" "$answer" "$W" run "$@" 2>&1)"
   RL_RC=$?
 }
 rl_expect() { case "$RL_RC:$RL_OUT" in "$2:"*"$3"*) ok "$1" ;; *) bad "$1" "exit $RL_RC, wanted $2 and: $3
@@ -578,12 +580,24 @@ rl n t1/d1
 rl_expect "n runs nothing" 1 "Nothing ran, and no report was sent"
 rl_lacks "n really runs nothing" "HERE="
 [ "$(rl_sent t1)" = 1 ] && ok "n sends no report" || bad "n sends no report" "$(rl_sent t1)"
-rl '' t1/d1
-rl_expect "no answer runs nothing" 1 "Nothing ran"
+rl xn t1/d1
+rl_expect "another key asks again" 1 "Run it? [y]es, [v]iew the files, [n]o: x"
+rl_expect "and n then runs nothing" 1 "Nothing ran"
 rl vy t1/d1
 rl_expect "v shows the files" 0 "===== run.sh ====="
 rl_expect "y after v runs it" 0 "DEMO RUN: PASS"
 out="$(env HOME="$RH" "$W" run t1/d1 </dev/null 2>&1)" && bad "relay run needs a terminal" "$out" || case "$out" in *"Agents: tell the user to run it"*) ok "relay run needs a terminal" ;; *) bad "relay run needs a terminal" "$out" ;; esac
+# The answer comes from the terminal alone: not from a pipe, a variable, or a terminal that
+# standard input isn't attached to.
+out="$(printf y | env HOME="$RH" RELAY_TEST_TTY=1 "$W" run t1/d1 2>&1)"
+case "$?:$out" in 0:* | *"HERE="*) bad "a piped y and the old test variable run nothing" "$out" ;; *"Agents: tell the user to run it"*) ok "a piped y and the old test variable run nothing" ;; *) bad "a piped y and the old test variable run nothing" "$out" ;; esac
+lacks "relay.sh has no switch that answers for the user" "RELAY_TEST_TTY" cat "$W"
+out="$(env HOME="$RH" python3 "$TTY" --pipe-stdin y '' "$W" run t1/d1 2>&1)"
+case "$?:$out" in 0:* | *"HERE="*) bad "a pipe on standard input is refused even with a terminal there" "$out" ;; *"Agents: tell the user to run it"*) ok "a pipe on standard input is refused even with a terminal there" ;; *) bad "a pipe on standard input is refused even with a terminal there" "$out" ;; esac
+out="$(env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" n sh -c '"$1" run t1/d1 >"$2" 2>&1' sh "$W" "$T/redirected.txt" 2>&1)"
+case "$out" in *"Run it? [y]es, [v]iew the files, [n]o: "*) ok "the question shows at the terminal when the output goes to a file" ;; *) bad "the question shows at the terminal when the output goes to a file" "$out" ;; esac
+check "the rest of the output went to the file" grep -q 'Deliverable: t1/d1' "$T/redirected.txt"
+lacks "and the question didn't" "Run it?" cat "$T/redirected.txt"
 sleep 1
 
 rl_new t2 d2 'result "bad" 1
@@ -1052,7 +1066,7 @@ out="$(FAKE_GO_NODIFF=1 mr "$MRU" --checks 2>&1)"
 case "$out" in *"go mod tidy -diff: skipped"*"Checks: 6 run, 0 failed"*) ok "an old Go without tidy -diff isn't a failure" ;; *) bad "an old Go without tidy -diff isn't a failure" "$out" ;; esac
 out="$(FAKE_GO_HANG="test" RELAY_CHECK_LIMIT=1 mr "$MRU" --checks 2>&1)"
 case "$out" in *"go test: stopped after 1s"*"Packed team/svc"*) ok "a check that hangs is stopped" ;; *) bad "a check that hangs is stopped" "$out" ;; esac
-mr_key() { printf '%s' "$1" | { shift; env RELAY_TEST_TTY=1 HOME="$RH" PATH="$FG:$PATH" "$W" mr "$@" 2>&1; }; }
+mr_key() { local keys="$1"; shift; env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" "$keys" "$W" mr "$@" 2>&1; }
 rm -f "$T/go.log"
 out="$(mr_key n "$MRU")"
 case "$out" in *"Run go build, vet, test and mod tidy"*"at $MR_HEAD, by Some One"*"runs that branch's code"*) ok "at a terminal it asks, naming the author" ;; *) bad "at a terminal it asks, naming the author" "$out" ;; esac
@@ -1116,7 +1130,7 @@ mr https://gitlab.com/team/nogo/-/merge_requests/7 --repo "$MNG" --checks >/dev/
 check "a repository with no go.mod says so" grep -q '^checks: not run, because this repository has no go.mod$' "$MD/nogo-7.txt"
 
 # relay review: Cowork's file comes back to where the user keeps reviews.
-rv() { printf '%s' "$1" | { shift; env HOME="$RH" PATH="$FG:$PATH" PAGER=cat RELAY_TEST_TTY=1 RELAY_WAIT=0 RELAY_POLL=1 "$W" review "$@" 2>&1; }; }
+rv() { local keys="$1"; shift; env HOME="$RH" PATH="$FG:$PATH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" "$keys" "$W" review "$@" 2>&1; }
 RD="$OD/Documents/Cowork/Tasks/t20/output/rev"
 mkdir -p "$RD/reviews/ABC-12"
 echo '# first review' >"$RD/reviews/ABC-12/svc-7.md"
@@ -1171,7 +1185,7 @@ case "$out" in *"nothing under reviews/"*) ok "an empty review is refused" ;; *)
 out="$(env HOME="$RH" "$W" review t20/rev </dev/null 2>&1)" && bad "review needs a terminal" "$out" || case "$out" in *"Agents: tell the user to run it"*) ok "review needs a terminal" ;; *) bad "review needs a terminal" "$out" ;; esac
 
 # relay apply: a proven patch stays in the working tree, uncommitted.
-ap() { printf '%s' "$1" | { shift; env HOME="$RH" PAGER=cat RELAY_TEST_TTY=1 RELAY_WAIT=0 RELAY_POLL=1 "$W" apply "$@" 2>&1; }; }
+ap() { local keys="$1"; shift; env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" "$keys" "$W" apply "$@" 2>&1; }
 AR="$T/apply-me"
 mkdir -p "$AR"
 git -C "$AR" init -q
@@ -1214,12 +1228,15 @@ case "$out" in *"has no patches"*) ok "apply needs patches" ;; *) bad "apply nee
 check "setup records where reviews go" env HOME="$RH" "$W" setup --dir "$OD" --reviews "$T/elsewhere" --clones "$T/c1:$T/c2"
 check "and it's in the settings" grep -q "^reviews=$T/elsewhere$" "$RH/.config/llm-relay/settings"
 check "with the clones" grep -q "^clones=$T/c1:$T/c2$" "$RH/.config/llm-relay/settings"
-out="$(printf '\n' | env HOME="$T/fresh-relay-home" RELAY_TEST_TTY=1 "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
+out="$(env HOME="$T/fresh-relay-home" python3 "$TTY" $'\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
 case "$out" in *"Where should merge request reviews go?"*"relay setting: reviews=$T/fresh-relay-home/mr-reviews"*) ok "setup asks once at a terminal" ;; *) bad "setup asks once at a terminal" "$out" ;; esac
 printf 'reviews=%s\nclones=%s\n' "$RV" "$T/clones" >"$RH/.config/llm-relay/settings"
 check "the skill reads MR archives" grep -q 'Documents/Cowork/relay/mrs/<repo>-<iid>.txt' "$SK/SKILL.md"
 check "the skill keeps checkouts untouched" grep -q 'must never change the user.s checkout' "$SK/SKILL.md"
 check "the skill hands reviews back" grep -q 'relay review <task-folder>/<deliverable>' "$SK/SKILL.md"
+# --checks runs a branch's code with no question, so only the user adds it.
+check "the skill tells Cowork never to hand over --checks" grep -q 'Never hand the user a `relay mr` command with `--checks`' "$SK/SKILL.md"
+refuse "and none of its own commands has it" grep -nE '^relay mr .*--checks' "$SK/SKILL.md"
 check "the skill keeps a passing fix" grep -q 'relay apply <task-folder>/<deliverable> --repo <path>' "$SK/SKILL.md"
 
 mkdir -p "$T/not-a-repo"
@@ -1284,7 +1301,7 @@ expect "the old settings file is read when there's no new one" "$T/old-reviews" 
 expect "for clones too" "$T/old-clones" env HOME="$SH" "$W" --help
 out="$(env HOME="$SH" "$W" setup --dir "$OD" </dev/null 2>&1)"
 case "$out" in *"relay setting: reviews=$T/old-reviews"*"relay setting: clones=$T/old-clones"*) ok "setup shows the old values" ;; *) bad "setup shows the old values" "$out" ;; esac
-out="$(printf '\n\n' | env HOME="$SH" RELAY_TEST_TTY=1 "$W" setup --dir "$OD" 2>&1)"
+out="$(env HOME="$SH" python3 "$TTY" $'\n\n' "$W" setup --dir "$OD" 2>&1)"
 case "$out" in *"Where"*) bad "setup doesn't ask again for what the old file has" "$out" ;; *) ok "setup doesn't ask again for what the old file has" ;; esac
 check "and writes no new file for them" test ! -e "$NEWS"
 check "setup with a new value succeeds" env HOME="$SH" "$W" setup --dir "$OD" --reviews "$T/new-reviews"

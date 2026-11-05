@@ -16,12 +16,20 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off.
 
+- The prompt that reads `/dev/tty`. It has answered through a pseudo-terminal in the smoke tests, on macOS and Linux. Nobody has typed at it by hand in Apple's Terminal, and `v` hasn't opened a real pager through it.
+
 - The standalone `relay` command, its `relay setup`, and the reinstalled skill with real Cowork and real OneDrive. They've only run in smoke tests since the split from llm-wiki, because Cowork is only on the user's work Mac. Reading `~/.config/llm-wiki/relay` on that Mac is the first thing to check.
 - `relay mr` and `review` with Copilot Cowork ran once on a real merge request on 2026-11-04, and every finding was reading only. The checks, the Coverage section and the fuller skill instructions came after that, so whether Cowork follows them is untested, and its findings have never been compared with a Claude review. A second pass in that session sent real runs to the Mac, which is how a hook spoiling the tree came to light, and the fix, `safe_worktree`, has only run in smoke tests. `apply` has only run in smoke tests.
 - Copilot Cowork reading a repository's wiki from `relay scan`. It has only run in smoke tests, against a fake OneDrive folder.
 - The `remote-pair-run` skill and the relay on real code. Whole rounds passed on a throwaway repository from Apple's Terminal on 2026-11-04, with nothing attached and no Always Keep. The relay's refusal message has only run against an imitation, because iTerm wasn't refused in that test, and later read a file it had been refused an hour before. Why is unknown.
 
 ## Done
+
+### The keypress gate holds against pipes and variables (2026-11-05)
+
+- **Why:** `printf y | RELAY_TEST_TTY=1 relay run ...` ran a deliverable with no terminal. The cloud couldn't use that, but an agent or script on the Mac could.
+- **What changed:** `run`, `review` and `apply`, and the questions in `setup` and before the `mr` checks, need a terminal on standard input and read the answer from `/dev/tty`. `RELAY_TEST_TTY` is gone. The tests type at a pseudo-terminal with `tests/type-keys.py`. The question shows at the terminal even when the output goes to a file. The skill tells Cowork never to hand over `relay mr --checks`.
+- **What it doesn't stop:** a program that drives a terminal of its own.
 
 ### Split out of llm-wiki (2026-11-05)
 

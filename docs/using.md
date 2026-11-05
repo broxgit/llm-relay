@@ -39,7 +39,7 @@ If you use [llm-wiki](https://github.com/broxgit/llm-wiki) and a wiki covers the
 Ask Cowork to change something. Each round goes like this:
 
 1. It gives you one command, `relay run` with a version number. The command waits for OneDrive to catch up, and copies the files out once every one matches what Cowork published.
-2. It shows you what's there. Press `y` to run it, `v` to read the files first, or `n` to stop. It runs on your machine, so read what Cowork says it will change. The run compares the new output with the old, and restores what it touched. It never commits or pushes.
+2. It shows you what's there. Press `y` to run it, `v` to read the files first, or `n` to stop. The answer has to be typed at the terminal: it can't be piped in, and no setting answers for you. It runs on your machine, so read what Cowork says it will change. The run compares the new output with the old, and restores what it touched. It never commits or pushes.
 3. The report goes to OneDrive by itself, only if a run happened, and a copy stays in `~/pair-run-reports`. You see all of it in your terminal as it runs. Tell Cowork `done`, and it reads the report.
 
 Run `relay run` in Apple's Terminal. macOS can refuse other terminal apps on OneDrive files that aren't downloaded yet: in one test it refused iTerm with `Operation not permitted`, with no pop-up, and let Terminal read the same files. It doesn't always happen, and why isn't known. The command says so if it does.
@@ -56,7 +56,7 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 
 - It sends the merge request's discussions and diff, its source and target branches, your own Go libraries at the versions `go.mod` pins, your earlier review, and the wiki if there is one. It only fetches in your clone, and puts a prompt for Cowork on your clipboard.
 - `--also` sends another repository at origin's default branch, or only one folder of it, and `PATH@BRANCH` names a branch. Use it as many times as you like.
-- For a Go repository, it asks whether to run `go build`, `go vet`, `go test` and `go mod tidy -diff` first, and sends the results. They run on a temporary copy of the branch with git hooks off, so your clone and uncommitted work stay out of it, but the branch's code does run on your Mac. Each check stops after 10 minutes. `--checks` and `--no-checks` answer for you.
+- For a Go repository, it asks whether to run `go build`, `go vet`, `go test` and `go mod tidy -diff` first, and sends the results. They run on a temporary copy of the branch with git hooks off, so your clone and uncommitted work stay out of it, but the branch's code does run on your Mac. Each check stops after 10 minutes. `--checks` and `--no-checks` answer for you. `--checks` is the one place the relay runs code without asking, so it's yours to add. Cowork is told never to give you a command with it, so don't run one that has it.
 - It reviews what's pushed, and warns if your local branch has commits the merge request doesn't.
 - Cowork publishes the review, and gives you `relay review`. It shows you the file and its Coverage section, which says what Cowork read and skipped, and saves it where you keep your reviews when you press `y`. Your earlier copy is kept beside it as `.previous`. Run that one in Apple's Terminal.
 - For a fix you've proven, `relay apply` leaves its patches in your working tree when you press `y`, and never commits.

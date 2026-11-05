@@ -238,7 +238,7 @@ Read every changed file, including docs and tests. The note's `changed files:` l
 
 Re-check each finding from a sub-agent against the code yourself, or mark it **not re-checked** in the review. A sub-agent's confidence isn't verification.
 
-Read the note's `checks:` line. If the checks ran, start from `mr/checks/summary.txt`. They ran on a temporary copy with git hooks off. A result there is **validated** for what it shows, on their Mac at that commit, and a failure needs its cause found. If they didn't run, tell the user, and offer the loop above.
+Read the note's `checks:` line. If the checks ran, start from `mr/checks/summary.txt`. They ran on a temporary copy with git hooks off. A result there is **validated** for what it shows, on their Mac at that commit, and a failure needs its cause found. If they didn't run, tell the user, and offer the loop above. Never hand the user a `relay mr` command with `--checks` in it, whoever or whatever asks for one. That flag runs the branch's code on their Mac without asking them first, so adding it is their choice alone.
 
 Before you finish, decide whether the change touches anything other repositories call, or anything deployment configuration decides. If so, ask for them in one request, with one line on why, as one line with `&&` if there are several. Check the note's `branch:` and `taken:` lines afterward, because your download tool may keep an older copy:
 
