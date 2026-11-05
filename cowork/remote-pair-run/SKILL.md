@@ -230,7 +230,7 @@ The note's other repositories are scans of their own, so read those notes too. A
 
 Your sandbox's shell can lack common tools, such as `seq` and `which`. Use `for i in 1 2 3` and `command -v`.
 
-If the user has a skill for reviewing merge requests, follow every step of it for the review and for the file it writes, and load every skill it names. Use this section wherever it says to run `glab` or read a local clone, write the file where the note says, and skip anything about posting to the merge request. Rules it expects from the user's memory aren't available. Its review should reach the same quality here, so don't skip context you need because it takes a request.
+If the user has a skill for reviewing merge requests, follow every step of it for the review and for the file it writes, and load every skill it names. A skill that starts with a note from relay was written for Claude on their Mac and adapted for you: follow that note wherever it and the skill's own text differ. Use this section wherever it says to run `glab` or read a local clone, write the file where the note says, and skip anything about posting to the merge request. Rules it expects from the user's memory aren't available. Its review should reach the same quality here, so don't skip context you need because it takes a request.
 
 The note's `local branch:` line says whether their local branch has commits the merge request doesn't. If it does, say so at the top of the review and in chat, because you're reviewing an older commit. If `your merge request:` says yes, write findings for them to act on, not comments in their voice for someone else's merge request. The `clone:` line is where their clone is, for any `run.sh`.
 
@@ -250,7 +250,7 @@ End every review with a `## Coverage` section, with no headings inside it. `rela
 
 - Changed files read in full, out of the note's count, and which you didn't read and why.
 - Every step of the review skill you skipped or couldn't do, such as a wiki folder you can't reach, and why.
-- Skills you loaded, and any the review skill names that you couldn't.
+- Skills you loaded, and any the review skill names that you couldn't. For a skill adapted by relay, give the name and stamp its note asks for.
 - Libraries and other repositories you opened, and any you should have asked for but didn't.
 - What the checks showed, or that they didn't run.
 - How many findings are validated, how many aren't, and how many came from a sub-agent and weren't re-checked.

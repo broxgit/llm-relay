@@ -1251,6 +1251,140 @@ check "the skill points at the relay" grep -q 'relay run <task-folder>/<delivera
 check "the skill reads reports from the relay's folder" grep -q 'Documents/Cowork/relay/<task-folder>/reports/' "$SK/SKILL.md"
 check "the skill reads scans from the relay's folder" grep -q 'Documents/Cowork/relay/scans/<repository>.txt' "$SK/SKILL.md"
 
+section "Your own skills in Cowork"
+KH="$T/skill-home"
+KO="$T/skill-onedrive"
+KS="$T/my-skills"
+KC="$KO/Documents/Cowork/skills"
+mkdir -p "$KH" "$KO" "$KS/review/scripts" "$KS/plain"
+printf -- '---\nname: review\ndescription: Reviews a merge request.\n---\n\n# Review\n\nRun `glab mr view`, then post with curl.\n' >"$KS/review/SKILL.md"
+printf 'echo helper\n' >"$KS/review/scripts/helper.sh"
+# No header, and no newline at the end: the copy still has to give back every byte.
+printf '# Plain\n\nNo header here.' >"$KS/plain/SKILL.md"
+ks() { env HOME="$KH" "$W" setup --dir "$KO" "$@" </dev/null 2>&1; }
+kk() { env HOME="$KH" "$W" --dir "$KO" skills 2>&1; }
+# kbody <copy's SKILL.md>: the copy with the relay's note taken out, not by the relay's own code.
+kbody() {
+  python3 - "$1" <<'PY'
+import sys
+b = open(sys.argv[1], "rb").read()
+s, e = b.index(b"<!-- relay:start -->\n"), b.index(b"<!-- relay:end -->\n") + len(b"<!-- relay:end -->\n")
+sys.stdout.buffer.write(b[:s] + b[e:])
+PY
+}
+out="$(ks --skills review:plain --skills-from "$KS" --reviews "$T/skill-reviews" --clones "$T/skill-clones")"
+case "$out" in *"skill review: copied to Cowork"*"skill plain: copied to Cowork"*) ok "setup --skills copies the named skills" ;; *) bad "setup --skills copies the named skills" "$out" ;; esac
+check "the list is kept in the settings" grep -q '^skills=review:plain$' "$KH/.config/llm-relay/settings"
+check "with where they live" grep -q "^skills_from=$KS\$" "$KH/.config/llm-relay/settings"
+[ "$(head -n 4 "$KC/review/SKILL.md")" = "$(head -n 4 "$KS/review/SKILL.md")" ] && ok "the header comes first, as it was" || bad "the header comes first, as it was" "$(head -n 4 "$KC/review/SKILL.md")"
+[ "$(sed -n 5p "$KC/review/SKILL.md")" = '<!-- relay:start -->' ] && ok "the note comes right after it" || bad "the note comes right after it" "$(head -n 6 "$KC/review/SKILL.md")"
+kbody "$KC/review/SKILL.md" | cmp -s - "$KS/review/SKILL.md" && ok "with the note taken out, the copy is the skill byte for byte" || bad "with the note taken out, the copy is the skill byte for byte"
+[ "$(head -n 1 "$KC/plain/SKILL.md")" = '<!-- relay:start -->' ] && ok "a skill with no header gets the note at the top" || bad "a skill with no header gets the note at the top" "$(head -n 2 "$KC/plain/SKILL.md")"
+kbody "$KC/plain/SKILL.md" | cmp -s - "$KS/plain/SKILL.md" && ok "and gives back every byte, with no newline added" || bad "and gives back every byte, with no newline added"
+check "its other files are copied as they are" cmp "$KS/review/scripts/helper.sh" "$KC/review/scripts/helper.sh"
+check "the note names the tools Cowork lacks" grep -q 'tools you don.t have here: `glab`, `curl`\.' "$KC/review/SKILL.md"
+refuse "and says nothing of tools when a skill names none" grep -q 'tools you don.t have here' "$KC/plain/SKILL.md"
+check "the copy carries a stamp" grep -q '^<!-- relay:stamp template 1 | source [0-9a-f]\{64\} | copy [0-9a-f]\{64\} | made 20.*Z -->$' "$KC/review/SKILL.md"
+check "the note says how to cite the skill" grep -q 'write this one as `review [0-9a-f]\{8\}`' "$KC/review/SKILL.md"
+out="$(kk)"; rc=$?
+case "$rc:$out" in 0:*"review: in step"*"plain: in step"*) ok "relay skills says they're in step" ;; *) bad "relay skills says they're in step" "exit $rc: $out" ;; esac
+cp "$KC/review/SKILL.md" "$T/skill-before"
+out="$(ks)"
+case "$out" in *"skill review: Cowork's copy is in step"*) ok "setup again says so" ;; *) bad "setup again says so" "$out" ;; esac
+check "and doesn't make the copy again" cmp "$T/skill-before" "$KC/review/SKILL.md"
+# Another Mac can share this OneDrive. Its setup, with no skills named, leaves these copies alone.
+env HOME="$T/skill-home-2" "$W" setup --dir "$KO" --reviews "$T/skill-reviews" --clones "$T/skill-clones" </dev/null >/dev/null 2>&1
+check "a setup that never named a skill removes none" test -f "$KC/plain/SKILL.md"
+
+# The user's skill changes: the copy is made again, by whatever talks to Cowork next.
+echo 'A new step.' >>"$KS/review/SKILL.md"
+out="$(kk)"; rc=$?
+case "$rc:$out" in 1:*"review: your skill has changed since Cowork's copy was made"*) ok "relay skills sees a skill that changed" ;; *) bad "relay skills sees a skill that changed" "exit $rc: $out" ;; esac
+git init -q "$T/skill-repo" && git -C "$T/skill-repo" commit -q --allow-empty -m first
+kscan() { env HOME="$KH" "$W" --dir "$KO" scan "$T/skill-repo" --no-wiki 2>&1; }
+out="$(kscan)"
+case "$out" in *"skill review: Cowork's copy was out of date, so it was made again"*"Scanned skill-repo"*) ok "relay scan makes the copy again first" ;; *) bad "relay scan makes the copy again first" "$out" ;; esac
+kbody "$KC/review/SKILL.md" | cmp -s - "$KS/review/SKILL.md" && ok "and it matches the skill again" || bad "and it matches the skill again"
+lacks "a scan says nothing when the copies are in step" "skill " kscan
+echo 'Ask me before a second pass.' >"$KS/review/COWORK.md"
+out="$(ks)"
+check "COWORK.md goes into the note" grep -q '^Ask me before a second pass\.$' "$KC/review/SKILL.md"
+check "under its own heading" grep -q '^From the user, for Cowork:$' "$KC/review/SKILL.md"
+check "and isn't copied as a file" test ! -e "$KC/review/COWORK.md"
+kbody "$KC/review/SKILL.md" | cmp -s - "$KS/review/SKILL.md" && ok "the skill's own text is still untouched" || bad "the skill's own text is still untouched"
+
+# The copy changes in OneDrive: that's text from the cloud, so it's never thrown away unasked.
+printf -- '- Cowork added this\n\033[31mred\n' >>"$KC/review/SKILL.md"
+out="$(kscan)"
+case "$out" in *"skill review: Cowork's copy was changed in OneDrive, so it wasn't updated"*) ok "a scan leaves a copy changed in OneDrive, and warns" ;; *) bad "a scan leaves a copy changed in OneDrive, and warns" "$out" ;; esac
+check "really leaves it" grep -q 'Cowork added this' "$KC/review/SKILL.md"
+out="$(kk)"
+case "$out" in *"review: Cowork's copy was changed in OneDrive"*) ok "relay skills says it was changed there" ;; *) bad "relay skills says it was changed there" "$out" ;; esac
+out="$(ks)"; rc=$?
+case "$rc:$out" in 0:*) bad "setup with no terminal leaves it too" "$out" ;; *"-- Cowork added this"*"left as it is. Run relay setup at a terminal"*) ok "setup with no terminal leaves it too" ;; *) bad "setup with no terminal leaves it too" "exit $rc: $out" ;; esac
+case "$out" in *"$(printf '\033')"*) bad "control characters from OneDrive don't reach the terminal" "$out" ;; *) ok "control characters from OneDrive don't reach the terminal" ;; esac
+out="$(env HOME="$KH" python3 "$TTY" n "$W" setup --dir "$KO" 2>&1)"
+case "$out" in *"Replace Cowork's copy with a fresh one?"*"left as it is in OneDrive"*) ok "at a terminal it shows the difference and asks" ;; *) bad "at a terminal it shows the difference and asks" "$out" ;; esac
+check "n keeps OneDrive's copy" grep -q 'Cowork added this' "$KC/review/SKILL.md"
+out="$(env HOME="$KH" python3 "$TTY" y "$W" setup --dir "$KO" 2>&1)"
+case "$out" in *"skill review: Cowork's copy replaced with a fresh one"*) ok "y replaces it" ;; *) bad "y replaces it" "$out" ;; esac
+refuse "and the change is gone" grep -q 'Cowork added this' "$KC/review/SKILL.md"
+
+# A review cites the copy it used.
+KSHA="$(kk | sed -n 's/^review: in step.*(\([0-9a-f]*\))$/\1/p')"
+KR="$KO/Documents/Cowork/Tasks/kt/output/rev"
+mkdir -p "$KR/reviews/ABC-1"
+printf '# Review\n\n## Coverage\n\n- Skills loaded: `review 00000000`\n' >"$KR/reviews/ABC-1/svc-1.md"
+bash "$LIB" manifest "$KR" >/dev/null
+krev() { env HOME="$KH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$KO" review kt/rev 2>&1; }
+out="$(krev)"
+case "$out" in *"Warning: this review used an older copy of your review skill (00000000, and yours is now $KSHA)"*) ok "relay review warns when a review cites an older copy" ;; *) bad "relay review warns when a review cites an older copy" "$out" ;; esac
+printf '# Review\n\n## Coverage\n\n- Skills loaded: `review %s`\n' "$KSHA" >"$KR/reviews/ABC-1/svc-1.md"
+bash "$LIB" manifest "$KR" >/dev/null
+lacks "and not when it cites the current one" "older copy" krev
+
+# What the relay didn't make, it doesn't touch.
+mkdir -p "$KC/handmade" "$KS/handmade"
+echo '# By hand, in OneDrive' >"$KC/handmade/SKILL.md"
+echo '# The same name, on the Mac' >"$KS/handmade/SKILL.md"
+out="$(ks --skills review:plain:handmade)"; rc=$?
+case "$rc:$out" in 0:*) bad "a skill of that name the relay didn't make is left alone" "$out" ;; *"skill handmade: Cowork's folder already has a skill of that name, which the relay didn't make"*) ok "a skill of that name the relay didn't make is left alone" ;; *) bad "a skill of that name the relay didn't make is left alone" "exit $rc: $out" ;; esac
+check "really left alone" grep -q 'By hand, in OneDrive' "$KC/handmade/SKILL.md"
+out="$(ks --skills review)"
+case "$out" in *"skill plain: no longer named, so Cowork's copy was removed"*) ok "a copy that's no longer named is removed" ;; *) bad "a copy that's no longer named is removed" "$out" ;; esac
+check "it's gone" test ! -e "$KC/plain"
+check "the handmade one stays" test -f "$KC/handmade/SKILL.md"
+check "and so does the relay's own skill" test -f "$KC/remote-pair-run/SKILL.md"
+echo 'changed in OneDrive' >>"$KC/review/SKILL.md"
+out="$(ks --skills none)"
+case "$out" in *"skill review: no longer named, but its copy was changed in OneDrive, so it stays"*) ok "a changed copy that's no longer named stays" ;; *) bad "a changed copy that's no longer named stays" "$out" ;; esac
+check "it's still there" test -f "$KC/review/SKILL.md"
+check "--skills none empties the list" grep -q '^skills=$' "$KH/.config/llm-relay/settings"
+expect "relay skills says none are named" "No skills are named" kk
+rm -rf "$KC/review"
+
+# Cowork's limits, and names.
+mkdir -p "$KS/big" "$KS/many" "$KS/copied"
+echo '# Big' >"$KS/big/SKILL.md"
+dd if=/dev/zero of="$KS/big/blob.bin" bs=1048576 count=6 2>/dev/null
+echo '# Many' >"$KS/many/SKILL.md"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21; do echo "$i" >"$KS/many/f$i.txt"; done
+printf '<!-- relay:start -->\nnote\n<!-- relay:end -->\n# Copied\n' >"$KS/copied/SKILL.md"
+expect "a file over 5 MB is refused" "skill big: not copied, because blob.bin is over 5 MB" ks --skills big
+check "and nothing of it is copied" test ! -e "$KC/big"
+expect "more than 20 other files is refused" "skill many: not copied, because it has 21 files beside SKILL.md" ks --skills many
+expect "a copy isn't copied again" "skill copied: not copied, because it already holds a note from the relay" ks --skills copied
+expect "a skill that isn't there says so" "skill nope: there's no $KS/nope/SKILL.md" ks --skills nope
+expect "a name with a path in it is refused" "skill ../review: not a name the relay can copy" ks --skills ../review
+expect "the relay's own skill can't be named" "skill remote-pair-run: not a name the relay can copy" ks --skills remote-pair-run
+refuse "setup fails when a named skill can't be copied" ks --skills nope
+expect "commas work too" "skills=review:plain" ks --skills review,plain
+refuse "--skills needs names" ks --skills
+refuse "--skills-from needs a folder that's there" ks --skills-from "$T/no-such-folder"
+refuse "relay skills takes no arguments" env HOME="$KH" "$W" --dir "$KO" skills extra
+check "the skill asks Cowork for the stamp in Coverage" grep -q 'give the name and stamp its note asks for' "$SK/SKILL.md"
+check "and tells it to follow a note from the relay" grep -q 'starts with a note from relay' "$SK/SKILL.md"
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"
@@ -1332,6 +1466,9 @@ expect "apply completes its flags" "--repo" "$W" __complete 2 apply ""
 expect "run completes its flags" "--no-install" "$W" __complete 2 run ""
 expect "review completes its flags" "--expect" "$W" __complete 2 review ""
 expect "setup completes its flags" "--clones" "$W" __complete 2 setup ""
+expect "with the ones for skills" "--skills-from" "$W" __complete 2 setup ""
+expect "--skills-from completes a folder" "__dirs__" "$W" __complete 3 setup --skills-from ""
+expect "completion knows skills" "skills" "$W" __complete 1 ""
 expect "--also completes a folder" "__dirs__" "$W" __complete 3 mr --also ""
 expect "completion prints a zsh script" "compdef _llm_relay relay" "$W" completion zsh
 expect "and a bash one" "complete -F _llm_relay relay" "$W" completion bash

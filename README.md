@@ -46,7 +46,8 @@ It waits for OneDrive, shows you what's there, and runs it when you press `y`. T
 
 | Command | What it does |
 |---|---|
-| `relay setup` | Installs or updates the skill, and records where your clones and reviews are. |
+| `relay setup` | Installs or updates the skill, and records where your clones and reviews are. With `--skills`, copies your own Claude skills to Cowork too, adapted. |
+| `relay skills` | Says whether Cowork's copy of each of your skills is still in step with yours. |
 | `relay run` | Runs a deliverable from Cowork, from a checked local copy, when you press `y`. |
 | `relay scan` | Puts a branch and your uncommitted changes in OneDrive. |
 | `relay mr <url>` | Puts a GitLab merge request and what it takes to review it in OneDrive. |

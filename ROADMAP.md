@@ -16,6 +16,8 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off.
 
+- Skill sync, with real Cowork and real OneDrive. It has only run in smoke tests. Not known: whether Cowork follows the note on a copied skill, whether the marker lines reach it, whether it cites the stamp in a review, and how the relay reads a copy that OneDrive has made cloud-only. `design-and-decisions/work-mac-session.md` part H is the test.
+
 - The prompt that reads `/dev/tty`. It has answered through a pseudo-terminal in the smoke tests, on macOS and Linux. Nobody has typed at it by hand in Apple's Terminal, and `v` hasn't opened a real pager through it.
 
 - The standalone `relay` command, its `relay setup`, and the reinstalled skill with real Cowork and real OneDrive. They've only run in smoke tests since the split from llm-wiki, because Cowork is only on the user's work Mac. Reading `~/.config/llm-wiki/relay` on that Mac is the first thing to check.
@@ -24,6 +26,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The `remote-pair-run` skill and the relay on real code. Whole rounds passed on a throwaway repository from Apple's Terminal on 2026-11-04, with nothing attached and no Always Keep. The relay's refusal message has only run against an imitation, because iTerm wasn't refused in that test, and later read a file it had been refused an hour before. Why is unknown.
 
 ## Done
+
+### Your own skills go to Cowork, adapted (2026-11-05)
+
+- **Why:** Cowork reads the same `SKILL.md` shape as Claude, and the first real review showed it skipping steps of a skill it couldn't do. Reviews are the largest use, and they follow a skill.
+- **What changed:** `relay setup --skills NAMES` copies the skills you name to Cowork's folder. Each copy is your skill with a note on top saying what to do differently there, and a stamp of what it was made from. `setup`, `scan` and `mr` make a copy again when your skill changes. A copy changed in OneDrive is never replaced unasked. `relay skills` reports where each stands, and `relay review` warns when a review cites an older copy.
 
 ### The keypress gate holds against pipes and variables (2026-11-05)
 

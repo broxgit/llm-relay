@@ -1,6 +1,6 @@
 # Leaning on Cowork
 
-**Status: direction adopted on 2026-11-05. The order below is agreed, and none of the nine steps has a design yet.**
+**Status: direction adopted on 2026-11-05. The order below is agreed. Step 2 is designed and built, and the other eight have no design yet.**
 
 The three phases in [roadmap.md](roadmap.md) make the relay safe and proven. This is what it's for after that: moving as much of Brock's daily work as possible to Copilot Cowork, where the tokens are, without weakening the keypress rule or going round what the work tenant allows.
 
@@ -39,7 +39,7 @@ Ordered by how much of that work each step moves, and by what depends on what.
 | # | Step | Serves uses | Notes |
 |---|---|---|---|
 | 1 | Prove reviews on the work Mac | 1, 2 | Phase 2 of [roadmap.md](roadmap.md) |
-| 2 | Sync his Claude skills to Cowork | 1, 5, 12 | Part of `relay setup`. Cowork reads the same `SKILL.md` shape |
+| 2 | Sync his Claude skills to Cowork | 1, 5, 12 | Built on 2026-11-05, as `relay setup --skills`. Not yet tried with Cowork |
 | 3 | Use what only Cowork sees | 12, 14, and context for 1 and 3 | Skill text telling it to pull the ticket's Teams threads, email and SharePoint documents. No new command |
 | 4 | Toolchain and dependencies in the sandbox | 5 to 8 | The biggest unknown. Needs a short test on the work Mac first |
 | 5 | Deliverables with branches | 7, 8 | Try fix A, then B if it fails, and report both. One keypress buys several iterations |
@@ -58,11 +58,11 @@ Reviews are the largest use, and the commands exist. They have run once on a rea
 
 ### 2. Sync his Claude skills to Cowork
 
-Cowork finds skills at `Documents/Cowork/skills/<name>/SKILL.md`, the same shape Claude uses, with up to 50 skills of 1 MB each. `relay setup` already copies one. It could copy the ones he names, such as his review, test-instruction, plain-English and alerting skills.
+Cowork finds skills at `Documents/Cowork/skills/<name>/SKILL.md`, the same shape Claude uses, with up to 50 skills of 1 MB each. `relay setup --skills` copies the ones he names, such as his review, test-instruction, plain-English and alerting skills. Each copy carries a note saying what to do differently in Cowork, and is kept in step with his skill. [skill-sync.md](skill-sync.md) has the design, built on 2026-11-05.
 
-- **Open:** which skills, and what in them assumes Claude's tools. A review skill that says "run `glab`" has to defer to the relay's section on merge requests, which `remote-pair-run` already tells Cowork to do.
-- **Open:** the company's rules on putting those skills in OneDrive.
-- **Test:** [work-mac-session.md](work-mac-session.md) parts A and D copy one skill and check that Cowork lists and follows it.
+- **Open:** which skills he names, and the company's rules on putting them in OneDrive.
+- **Open:** whether Cowork follows the note. Nothing here has run with real Cowork.
+- **Test:** [work-mac-session.md](work-mac-session.md) parts A and D copy one skill by hand, with no note, as the baseline. Part H swaps in the relay's adapted copy and checks that Cowork reads its note.
 
 ### 3. Use what only Cowork sees
 
