@@ -1384,7 +1384,7 @@ EOF
 # ---- apply -------------------------------------------------------------------
 
 cmd_apply() {
-  local named="" where="" expect="" repo_arg="" root copy version a task p patches="" done_list="" report key
+  local named="" where="" expect="" repo_arg="" root copy version a task p patches="" done_list="" report key winner=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --expect)
@@ -1420,24 +1420,35 @@ cmd_apply() {
   version="$(_runlib_manifest_version "$copy/manifest.txt")"
   a="${SRC%/*}"
   task="$(basename "${a%/*}")"
-  while IFS= read -r p; do
-    case "$p" in *.patch) patches="$patches$p
-" ;; esac
-  done <<EOF
-$(manifest_paths "$copy")
-EOF
-  [ -n "$patches" ] || die "that deliverable has no patches"
-  echo
-  echo "Deliverable: $task/$(basename "$SRC")"
-  echo "Version:     $version"
-  echo "Repository:  $root, on $(git -C "$root" symbolic-ref -q --short HEAD || echo 'a detached HEAD')"
-  echo "Patches:"
-  printf '%s' "$patches" | sed 's/^/  /'
-  # A patch that never passed a run can still be what someone wants, but they should know.
   report=""
   for key in "$COWORK/relay/$task/reports"/*-v"$version"-*.txt; do
     [ -f "$key" ] && report="$key"
   done
+  # A deliverable with attempts carries several ways of doing it, and only the one a run proved
+  # is applied. The report says which. Its folder is in the cloud, so it has to be the same
+  # file this Mac kept when it wrote it.
+  if manifest_paths "$copy" | grep -q '^attempts/.*\.patch$'; then
+    [ -n "$report" ] || die "that deliverable has attempts, and no run of version $version says which passed. Run it first: relay run $where --expect $version"
+    cmp -s "$report" "$REPORTS/$(basename "$report")" || die "the report for version $version in OneDrive isn't the one this Mac wrote, so it can't say which attempt passed. Run it again: relay run $where --expect $version"
+    tail -n 1 "$report" | grep -q ' RUN: PASS$' || die "the last run of version $version didn't pass, so no attempt is proven and nothing is applied"
+    winner="$(sed -n 's/^attempt passed: //p' "$report" | tail -n 1)"
+    case "$winner" in
+      '') die "no attempt passed in the last run of version $version, so there's nothing proven to apply" ;;
+      .* | *[!A-Za-z0-9._-]*) die "the report names an attempt the relay can't use" ;;
+    esac
+  fi
+  patches="$(_runlib_attempt_patches "$copy" "$winner")"
+  [ -n "$patches" ] || die "that deliverable has no patches"
+  patches="$patches
+"
+  echo
+  echo "Deliverable: $task/$(basename "$SRC")"
+  echo "Version:     $version"
+  echo "Repository:  $root, on $(git -C "$root" symbolic-ref -q --short HEAD || echo 'a detached HEAD')"
+  [ -z "$winner" ] || echo "Attempt:     $winner, the one that passed"
+  echo "Patches:"
+  printf '%s' "$patches" | sed 's/^/  /'
+  # A patch that never passed a run can still be what someone wants, but they should know.
   if [ -z "$report" ]; then
     echo "Warning: there's no report from a run of version $version."
   elif ! tail -n 1 "$report" | grep -q ' RUN: PASS$'; then

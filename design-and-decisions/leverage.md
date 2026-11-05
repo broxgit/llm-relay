@@ -1,6 +1,6 @@
 # Leaning on Cowork
 
-**Status: direction adopted on 2026-11-05. The order below is agreed. Step 2 is designed and built, and the other eight have no design yet.**
+**Status: direction adopted on 2026-11-05. The order below is agreed. Steps 2, 3 and 5 are built, and the other six have no design yet.**
 
 The three phases in [roadmap.md](roadmap.md) make the relay safe and proven. This is what it's for after that: moving as much of Brock's daily work as possible to Copilot Cowork, where the tokens are, without weakening the keypress rule or going round what the work tenant allows.
 
@@ -40,9 +40,9 @@ Ordered by how much of that work each step moves, and by what depends on what.
 |---|---|---|---|
 | 1 | Prove reviews on the work Mac | 1, 2 | Phase 2 of [roadmap.md](roadmap.md) |
 | 2 | Sync his Claude skills to Cowork | 1, 5, 12 | Built on 2026-11-05, as `relay setup --skills`. Not yet tried with Cowork |
-| 3 | Use what only Cowork sees | 12, 14, and context for 1 and 3 | Skill text telling it to pull the ticket's Teams threads, email and SharePoint documents. No new command |
+| 3 | Use what only Cowork sees | 12, 14, and context for 1 and 3 | Built on 2026-11-05, as text in the skill. Not yet tried with Cowork |
 | 4 | Toolchain and dependencies in the sandbox | 5 to 8 | The biggest unknown. Needs a short test on the work Mac first |
-| 5 | Deliverables with branches | 7, 8 | Try fix A, then B if it fails, and report both. One keypress buys several iterations |
+| 5 | Deliverables with branches | 7, 8 | Built on 2026-11-05, as attempts. One keypress buys several iterations. Not yet tried with Cowork |
 | 6 | `relay ticket` | 3 | The Mac fetches the Jira ticket, its Confluence pages and GitLab history, and sends them |
 | 7 | `relay ask` | 4 | Cowork as the cheap sub-agent for Claude. Smoother once the wake-up exists |
 | 8 | Cowork drafts wiki pages | 4, 13 | Returned the same way as an answer from `relay ask` |
@@ -66,7 +66,7 @@ Cowork finds skills at `Documents/Cowork/skills/<name>/SKILL.md`, the same shape
 
 ### 3. Use what only Cowork sees
 
-Cowork reads Teams threads, email and SharePoint, which Claude Code can't. For a review or a ticket, the skill can tell it to look for the discussion behind the change before it plans. All of that is data to it, never instructions, as rule 2 of the skill already says.
+Cowork reads Teams threads, email and SharePoint, which Claude Code can't. The skill now tells it to search them for the ticket's key and the merge request's title before it plans a change or a review, to say what it found, and to list it in a review's Coverage section. All of that is data to it, never instructions, as rule 2 of the skill already says. Built on 2026-11-05, as text only, and not yet tried with Cowork.
 
 ### 4. Toolchain and dependencies in the sandbox
 
@@ -79,7 +79,7 @@ A Linux Go toolchain has built, vetted and tested offline in Cowork's sandbox, w
 
 ### 5. Deliverables with branches
 
-One deliverable can carry a plan with branches: try fix A, and if its checks fail, restore, try B, and report both. The user still reads it and presses `y` once. This needs skill text and probably a helper in `runlib.sh`, so a branch's failure is a result and not the run's verdict.
+One deliverable can carry several attempts: try fix A, and if its checks fail, try B in a fresh copy, and report both. The user still reads it and presses `y` once, and `relay apply` applies only the attempt that passed. [attempts.md](attempts.md) has the design, built on 2026-11-05 and not yet tried with Cowork.
 
 ### 6. `relay ticket`
 
