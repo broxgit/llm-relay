@@ -1602,6 +1602,28 @@ check "and that no skills are named" grep -q "^the user's skills named for Cowor
 # The report built from this note leaves the user's company, so the note names no place on the Mac.
 refuse "the note holds no path from this Mac" grep -q -e "$T" -e "$FH" -e "$HOME" -e '/Users/' -e '/home/' "$FN"
 check "the settings are there without their values" grep -q '^setting reviews: set$' "$FN"
+# The test gets a repository of its own, so nothing real is at risk.
+FRP="$FH/relay-field-test"
+check "it makes a repository for the test to change" test -f "$FRP/.relay-field-test"
+check "the note names it without the home folder" grep -q '^test repository: ~/relay-field-test, made now, ' "$FN"
+[ "$(git -C "$FRP" symbolic-ref --short HEAD)" = main ] && ok "it's on main" || bad "it's on main" "$(git -C "$FRP" symbolic-ref --short HEAD)"
+check "with a second branch" git -C "$FRP" rev-parse --verify -q refs/heads/side
+check "generate.sh can be run" test -x "$FRP/generate.sh"
+(cd "$FRP" && ./generate.sh) && [ -z "$(git -C "$FRP" status --short)" ] && ok "and writes what's already committed" || bad "and writes what's already committed" "$(git -C "$FRP" status --short)"
+expect "it says what to send Cowork if the steps drift" "Use the YOUR TURN block format." ft field-test
+echo keep >"$FRP/kept.txt"
+out="$(ft field-test)"
+check "a second run keeps the repository as it is" test -f "$FRP/kept.txt"
+check "and the note says it was there" grep -q '^test repository: ~/relay-field-test, there already, ' "$FN"
+rm -f "$FRP/kept.txt"
+expect "the second branch scans as the skill says" "from your local side, not on origin" env HOME="$FH" "$W" --dir "$FO" scan "$FRP" --branch side --no-wiki
+mkdir -p "$T/ft-home-2/relay-field-test"
+echo mine >"$T/ft-home-2/relay-field-test/mine.txt"
+out="$(env HOME="$T/ft-home-2" PATH="$FB:$PATH" "$W" --dir "$FO" field-test 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "a folder of that name it didn't make stops it" "$out" ;; *"relay field-test didn't make it"*) ok "a folder of that name it didn't make stops it" ;; *) bad "a folder of that name it didn't make stops it" "exit $rc: $out" ;; esac
+out="$(env HOME="$T/ft-home-2" "$W" --dir "$FO" field-test --clean 2>&1)"
+case "$out" in *"Left ~/relay-field-test: relay field-test didn't make it."*) ok "--clean leaves such a folder" ;; *) bad "--clean leaves such a folder" "$out" ;; esac
+check "really leaves it" test -f "$T/ft-home-2/relay-field-test/mine.txt"
 echo '# changed' >>"$FO/Documents/Cowork/skills/relay-field-test/SKILL.md"
 out="$(ft field-test)"
 case "$out" in *"the relay's own skills in Cowork's folder: not this relay's"*"Cowork needs this relay's skills first. Run relay setup"*) ok "it says when Cowork doesn't have this relay's skills" ;; *) bad "it says when Cowork doesn't have this relay's skills" "$out" ;; esac
@@ -1636,6 +1658,10 @@ tracked files unchanged in the worktree
 your checkout unchanged
 attempt passed:
 No skills are named
+not on origin
+Ready after
+Waiting for OneDrive
+Removed
 EOF
 # A command is `relay word` followed by a space or the closing mark, which leaves out "relay setting:".
 unknown=""
@@ -1650,7 +1676,24 @@ $(grep -o '`relay [a-z-]*[` ]' "$FS/SKILL.md" | sed 's/^`relay //; s/[` ]$//' | 
 EOF
 [ -z "$unknown" ] && ok "every relay command the field-test skill names exists" || bad "every relay command the field-test skill names exists" "$unknown"
 check "the skill keeps the user's work out of the report" grep -q 'Leave their work out of the report' "$FS/SKILL.md"
-check "and never asks for the webhook address" grep -q 'Never ask for the address' "$FS/SKILL.md"
+check "and never asks for the webhook address" grep -q 'Never ask them to paste a webhook address' "$FS/SKILL.md"
+# The skill says which relay it's for, so Cowork can tell a stale copy from the Mac's note.
+check "the skill names the relay it's for" grep -q "^This skill is for relay $("$W" --version | sed 's/^relay //')\.\$" "$FS/SKILL.md"
+check "it stops when its copy is stale" grep -q 'this test would prove nothing' "$FS/SKILL.md"
+check "it has the block the user can't miss" grep -q '^## 🔴 YOUR TURN: ' "$FS/SKILL.md"
+for word in 'DO THIS NOW' 'WATCH FOR' 'SCREENSHOT' "DON'T" 'THEN TELL ME' 'NOTHING FOR YOU TO DO YET' 'OBSERVED' 'USER REPORTED' 'INFERRED' 'NOT TESTED' 'UNKNOWN' '### The criteria' '## By hand'; do
+  check "the skill has: $word" grep -qF -- "$word" "$FS/SKILL.md"
+done
+[ "$(grep -c '^[0-9][0-9]*\. ' <<EOF
+$(sed -n '/^### The criteria$/,/^## Handing the report over$/p' "$FS/SKILL.md")
+EOF
+)" = 18 ] && ok "the criteria are fixed in the skill, all 18" || bad "the criteria are fixed in the skill, all 18"
+out="$(env HOME="$FH" "$W" --dir "$FO" field-test --clean 2>&1)"
+case "$out" in *"Removed ~/relay-field-test"*"Removed Documents/Cowork/relay/field-test/note.txt from OneDrive"*) ok "--clean removes the repository and what the test left in OneDrive" ;; *) bad "--clean removes the repository and what the test left in OneDrive" "$out" ;; esac
+check "the repository is gone" test ! -e "$FRP"
+check "and its scan" test ! -e "$FO/Documents/Cowork/relay/scans/relay-field-test.txt"
+check "the saved report stays" test -f "$T/ft-reviews/field-test/relay-field-test.md"
+expect "--clean again says there's nothing" "No test repository to remove." env HOME="$FH" "$W" --dir "$FO" field-test --clean
 
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
@@ -1737,6 +1780,7 @@ expect "with the ones for skills" "--skills-from" "$W" __complete 2 setup ""
 expect "--skills-from completes a folder" "__dirs__" "$W" __complete 3 setup --skills-from ""
 expect "completion knows skills" "skills" "$W" __complete 1 ""
 expect "and field-test" "field-test" "$W" __complete 1 ""
+expect "field-test completes --clean" "--clean" "$W" __complete 2 field-test ""
 expect "--also completes a folder" "__dirs__" "$W" __complete 3 mr --also ""
 expect "completion prints a zsh script" "compdef _llm_relay relay" "$W" completion zsh
 expect "and a bash one" "complete -F _llm_relay relay" "$W" completion bash

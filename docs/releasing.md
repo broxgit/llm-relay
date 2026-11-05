@@ -6,7 +6,7 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
 ## Make a release
 
-1. On a branch, change `RELAY_VERSION` in `relay.sh` to the new version. Move what changed into `ROADMAP.md`'s Done section if it isn't there. Merge it when CI is green.
+1. On a branch, change `RELAY_VERSION` in `relay.sh` to the new version, and the "This skill is for relay" line in `cowork/relay-field-test/SKILL.md` to match. A smoke test fails if they differ. Move what changed into `ROADMAP.md`'s Done section if it isn't there. Merge it when CI is green.
 
 2. On `main`, with that merged, tag it and make the release. Use the same number, with a `v` in front.
 
@@ -38,7 +38,9 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
 ## What a version number means
 
-Before 1.0, nothing here has been proven with Copilot Cowork end to end, and any release may change a command. Raise the middle number for a new command or a change someone has to act on, such as running `relay setup` again. Raise the last for a fix.
+Before 1.0, nothing here has been proven with Copilot Cowork end to end, and any release may change a command.
+
+Raise the last number for a release, whatever is in it. Raise the middle number only when Brock says a release is a step change. 1.0.0 is his decision, made when the relay has been proven with Cowork end to end. The numbers don't get there by counting.
 
 ## What an upgrade doesn't do
 
