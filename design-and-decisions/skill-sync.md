@@ -88,4 +88,4 @@ That reports each named skill's state and changes nothing. It exits non-zero if 
 - Whether Cowork follows the note, and whether the marker lines, which are HTML comments, reach it at all.
 - How the relay reads a copy that OneDrive has made cloud-only. If macOS refuses the read, the copy looks changed, and the relay leaves it and warns.
 - Whether Cowork cites the stamp when asked. If it doesn't, layer 3 never fires, and layers 1 and 2 still hold.
-- Whether a note at the top helps more than `remote-pair-run`'s general paragraph. Parts A and D of [work-mac-session.md](work-mac-session.md) copy one skill with no note, as the baseline, and part H swaps in the adapted copy.
+- Whether a note at the top helps more than `remote-pair-run`'s general paragraph. In [work-mac-session.md](work-mac-session.md), part A hands a skill over to the relay, part D reviews with the adapted copy, and part H checks that the copy keeps up. The baseline is the review of 2026-11-04, which used a hand-made copy with no note.

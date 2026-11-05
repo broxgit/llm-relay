@@ -19,7 +19,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - Attempts, with real Cowork. They have only run in smoke tests. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several sets of builds take in one run on real code.
 - The skill's instruction to look in Teams, email and SharePoint. It is text only, and nobody has seen what Cowork does with it.
 
-- Skill sync, with real Cowork and real OneDrive. It has only run in smoke tests. Not known: whether Cowork follows the note on a copied skill, whether the marker lines reach it, whether it cites the stamp in a review, and how the relay reads a copy that OneDrive has made cloud-only. `design-and-decisions/work-mac-session.md` part H is the test.
+- Skill sync, with real Cowork and real OneDrive. It has only run in smoke tests. Not known: whether Cowork follows the note on a copied skill, whether the marker lines reach it, whether it cites the stamp in a review, and how the relay reads a copy that OneDrive has made cloud-only. Parts A, D and H of `design-and-decisions/work-mac-session.md` are the test.
 
 - The prompt that reads `/dev/tty`. It has answered through a pseudo-terminal in the smoke tests, on macOS and Linux. Nobody has typed at it by hand in Apple's Terminal, and `v` hasn't opened a real pager through it.
 
