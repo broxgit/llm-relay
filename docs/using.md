@@ -27,7 +27,7 @@ relay setup --skills mr-review:simple-english
 - **What it gets is a copy, adapted.** Each copy is your skill with a note on top. The note tells Cowork what to do where your skill expects Claude's tools: use what the relay sent in place of `glab` and your clones, skip anything that posts, and ask for what it can't see. It also lists the tools your skill names that Cowork doesn't have. The rest is your skill's text, unchanged.
 - **Your skill stays the only thing you edit.** The copy is made again by `relay setup`, `relay scan` or `relay mr` whenever your skill has changed, and they say so when they do. For notes that only apply in Cowork, put a `COWORK.md` beside the skill's `SKILL.md`, and its text goes into the note.
 - **It goes one way.** If Cowork changes its copy in OneDrive, nothing comes back to your Mac, and nothing overwrites the change unasked. `relay setup` shows you the difference and asks before it replaces the copy.
-- **Only what you name.** `--skills none` stops copying them and removes the copies. `--skills-from` says where your skills live, if it isn't `~/.claude/skills`. A skill of the same name that you put in Cowork's folder yourself is never touched.
+- **Only what you name.** `--skills none` stops copying them and removes the copies. `--skills-from` says where your skills live, if it isn't `~/.claude/skills`. A skill of the same name that you put in Cowork's folder yourself is never touched. To hand such a skill over to the relay, move anything that's only for Cowork into a `COWORK.md` beside your skill, move the folder out of Cowork's skills folder, and run `relay setup` again.
 
 To see where things stand, without changing anything:
 
