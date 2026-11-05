@@ -4,7 +4,7 @@ Cowork can't reach your files or run your build, but it can still change your co
 
 ## Setup
 
-With OneDrive syncing, in a terminal:
+The [README](../README.md#install) has how to install it. With OneDrive syncing, in a terminal:
 
 ```bash
 relay setup

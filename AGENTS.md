@@ -10,7 +10,8 @@ Rules:
 
 - Keep it working on Apple's bash 3.2. Never feed a loop with process substitution: use a heredoc. A smoke test checks.
 - Run `tests/smoke.sh` and `shellcheck -S warning relay.sh cowork/remote-pair-run/runlib.sh tests/smoke.sh` before any commit, and add a test for what you changed.
-- Work on a branch, and merge when CI is green.
+- Work on a branch, and merge when CI is green. Merging doesn't release: a tag does, and `docs/releasing.md` has the steps. People who installed with Homebrew see a change only then.
+- CI doesn't run for a change that touches only `design-and-decisions/`, `docs/`, `README.md`, `ROADMAP.md`, `AGENTS.md`, `CLAUDE.md` or `LICENSE`, so for those a pull request shows no checks. If CI is ever made a required check on `main`, change the workflow first, or docs-only pull requests will wait forever.
 - Nothing from the cloud runs or lands until the user presses a key here. `relay run`, `review` and `apply` need a terminal on standard input, and read the answer from `/dev/tty`. No flag, variable or pipe answers for the user. Don't add one, for tests either: they type at a pseudo-terminal. A program that drives a terminal of its own can still answer, and a shell script can't stop that.
 - `relay mr --checks` is the one exception. It runs a merge request branch's code with no question, so only the user adds it. The skill tells Cowork never to hand it over, and a smoke test checks.
 - Dependencies point one way. The relay may call `wiki which [repository]`, and has to work with no `wiki` command. llm-wiki doesn't know about the relay.

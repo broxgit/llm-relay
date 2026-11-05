@@ -16,6 +16,8 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off.
 
+- Installing with Homebrew on the work Mac. It has been installed from the tap on one personal Mac only.
+
 - Attempts, with real Cowork. They have only run in smoke tests. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several sets of builds take in one run on real code.
 - The skill's instruction to look in Teams, email and SharePoint. It is text only, and nobody has seen what Cowork does with it.
 
@@ -29,6 +31,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The `remote-pair-run` skill and the relay on real code. Whole rounds passed on a throwaway repository from Apple's Terminal on 2026-11-04, with nothing attached and no Always Keep. The relay's refusal message has only run against an imitation, because iTerm wasn't refused in that test, and later read a file it had been refused an hour before. Why is unknown.
 
 ## Done
+
+### Install with Homebrew, and releases (2026-11-05)
+
+- **Why:** installing meant cloning the repository and linking a script by hand, and updating meant `git pull`. There were no versions.
+- **What changed:** `brew install broxgit/tap/llm-relay` installs it. A release is a tag, and `relay --version` says which one you have. `relay scan` and `relay mr` say when Cowork's copy of the skill isn't this relay's, because an upgrade doesn't touch OneDrive. `docs/releasing.md` has the steps.
 
 ### Several attempts in one run (2026-11-05)
 

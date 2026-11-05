@@ -12,6 +12,40 @@ Check that your company allows your code in OneDrive and through its tenant befo
 
 You need git and bash, which macOS has, and OneDrive syncing a work or school account. `relay mr` also needs `glab` and `python3`.
 
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install broxgit/tap/llm-relay
+```
+
+```bash
+relay setup
+```
+
+`relay setup` copies a skill called `remote-pair-run` to `Documents/Cowork/skills` in your OneDrive, and asks where your clones and reviews live. Cowork finds the skill when a new session starts.
+
+To update, upgrade and run setup again. The relay tells you when Cowork's copy of the skill isn't its own. Give Cowork 10 minutes before a new session, because its copy can lag.
+
+```bash
+brew upgrade llm-relay && relay setup
+```
+
+Tab completion comes with it. `relay --version` says which release you have.
+
+### Without Homebrew
+
+Download the source of the [latest release](https://github.com/broxgit/llm-relay/releases/latest), unpack it anywhere, and link `relay.sh` onto your PATH as `relay`. Keep `cowork/` beside it: the skill it installs is in there.
+
+```bash
+mkdir -p ~/.local/bin && ln -s <where you unpacked it>/relay.sh ~/.local/bin/relay
+```
+
+For tab completion, add `eval "$(relay completion zsh)"` to `~/.zshrc`, or the `bash` version to `~/.bashrc`.
+
+### From a clone
+
+To work on the relay, or to run what's on `main` before it's released:
+
 ```bash
 git clone https://github.com/broxgit/llm-relay.git ~/dev/llm-relay
 ```
@@ -20,13 +54,7 @@ git clone https://github.com/broxgit/llm-relay.git ~/dev/llm-relay
 mkdir -p ~/.local/bin && ln -s ~/dev/llm-relay/relay.sh ~/.local/bin/relay
 ```
 
-```bash
-relay setup
-```
-
-`relay setup` copies a skill called `remote-pair-run` to `Documents/Cowork/skills` in your OneDrive, and asks where your clones and reviews live. Cowork finds the skill when a new session starts. To update, run `git pull` in the clone and `relay setup` again, then give Cowork 10 minutes before a new session, because its copy can lag.
-
-For tab completion, add `eval "$(relay completion zsh)"` to `~/.zshrc`, or the `bash` version to `~/.bashrc`.
+To update a clone, run `git pull` in it and `relay setup` again.
 
 ## Use it
 
@@ -64,6 +92,6 @@ The relay used to be `wiki relay`, inside llm-wiki. If you used it there, `relay
 
 ## Working on it
 
-`tests/smoke.sh` runs everything in a temp folder, against a fake OneDrive, `glab` and `wiki`. It needs `python3`, to type answers at a pseudo-terminal. CI runs it on Linux and on macOS with Apple's bash 3.2, plus shellcheck. [AGENTS.md](AGENTS.md) has the rules, and [ROADMAP.md](ROADMAP.md) what's planned and untested.
+`tests/smoke.sh` runs everything in a temp folder, against a fake OneDrive, `glab` and `wiki`. It needs `python3`, to type answers at a pseudo-terminal. CI runs it on Linux and on macOS with Apple's bash 3.2, plus shellcheck. CI skips a change that touches only documentation, and anything under `cowork/` counts as code. [AGENTS.md](AGENTS.md) has the rules, and [ROADMAP.md](ROADMAP.md) what's planned and untested.
 
 MIT licensed. The history before the split is in llm-wiki, and this repository carries the commits that touched these files.
