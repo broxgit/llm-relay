@@ -34,6 +34,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### The guided test asks in a way that can't be missed (2026-11-05)
+
+- **Why:** the first guided tests worked because of rules written from what the user had missed: things buried in a message, a screenshot asked for after the moment, a pop-up answer left out. The first version of the skill kept the evidence rules and dropped those.
+- **What changed:** the skill's YOUR TURN block now has DO THIS NOW, WATCH FOR, SCREENSHOT, DON'T and THEN TELL ME, with standing watch items on every `relay` command. Cowork stops at the start if its copy of a skill is stale. Claims are labelled OBSERVED, USER REPORTED, INFERRED, NOT TESTED or UNKNOWN, and the report is judged against 18 criteria fixed in the skill. `relay field-test` makes its own repository at `~/relay-field-test`, and `--clean` removes it. This is 0.2.1.
+
 ### Cowork guides the test, and reports on it (2026-11-05)
 
 - **Why:** the first field tests went well when Cowork led them and wrote a labelled report. That was set up by hand each time, and the steps had since been written only for a person to follow.

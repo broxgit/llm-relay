@@ -101,17 +101,37 @@ To check that everything works on your machine, or to help improve the relay, le
 relay field-test
 ```
 
-It puts a short note about your setup in OneDrive and a prompt on your clipboard. The note has the relay's version, your system and terminal app, and whether Cowork has the relay's skills. It holds no paths, names or repositories. Paste the prompt into a new Cowork session.
+It does three things:
 
-Cowork then guides you with the `relay-field-test` skill, which `relay setup` installs. It gives you one command at a time, tells you which keys to press and what to paste back, and does its own side as it goes. It asks how long you have: the short version is about 45 minutes.
+- **Makes a small repository at `~/relay-field-test`** for the test to change, so nothing of yours is at risk.
+- **Puts a short note about your setup in OneDrive.** It has the relay's version, your system and terminal app, and whether Cowork has the relay's skills. It holds no paths, names or repositories of yours.
+- **Puts a prompt on your clipboard.** Paste it into a new Cowork session.
 
-At the end it writes a report: what passed and failed, how long things took, and what in the skills was unclear. It's told to leave your company's names, code and tickets out of it. The report comes back like a review:
+Cowork then guides you with the `relay-field-test` skill, which `relay setup` installs. First it checks that its own copy of the skills is this relay's, and stops if it isn't. Then it gives you one step at a time, in a block you can't miss:
+
+- **DO THIS NOW:** one command, and which keys to press.
+- **WATCH FOR:** what should happen, and any macOS pop-up.
+- **SCREENSHOT:** what to capture, said before the moment.
+- **DON'T:** the easy mistake at that step.
+- **THEN TELL ME:** exactly what to send back.
+
+When it needs nothing from you, its message starts with "NOTHING FOR YOU TO DO YET". If its steps get hard to follow, send it: `Use the YOUR TURN block format.`
+
+It asks how long you have. The short version is about 30 minutes. Use Apple's Terminal, and keep to one tab.
+
+At the end it writes a report against criteria that are fixed in the skill: what passed and failed, how long things took, how much you had to do by hand, and what in the skills was unclear. It's told to leave your company's names, code and tickets out of it. The report comes back like a review:
 
 ```bash
 relay review <task-folder>/<deliverable> --expect 1
 ```
 
 Press `v` to read it, and `y` to save it under `field-test` where you keep reviews. Read it over before you send it to anyone.
+
+Afterwards, this removes the test repository and what the test left in OneDrive:
+
+```bash
+relay field-test --clean
+```
 
 [The session walkthrough](../design-and-decisions/work-mac-session.md) has the same steps written out, if you'd sooner do it by hand.
 

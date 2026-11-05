@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.0"
+RELAY_VERSION="0.2.1"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -92,7 +92,7 @@ usage() {
   cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
        relay [--dir ONEDRIVE_FOLDER] skills
-       relay [--dir ONEDRIVE_FOLDER] field-test
+       relay [--dir ONEDRIVE_FOLDER] field-test [--clean]
        relay completion zsh|bash
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
@@ -106,9 +106,11 @@ Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
          each with a note on what to do differently in Cowork. setup --help has more.
   skills Says where Cowork's copy of each of your skills stands, and changes nothing.
   field-test
-         Starts a guided test. It puts a note about this Mac's setup in OneDrive, with no
-         paths or names in it, and a prompt for Cowork on the clipboard. Cowork then walks
+         Starts a guided test. It makes a small repository at ~/relay-field-test for the
+         test to change, puts a note about this Mac's setup in OneDrive, with no paths or
+         names of yours in it, and a prompt for Cowork on the clipboard. Cowork then walks
          you through each step and writes a report, which relay review saves.
+         --clean removes that repository and what the test left in OneDrive.
   run    Waits until a deliverable from Copilot Cowork matches its manifest, copies it to a
          local folder, shows you what's there, and runs the copy when you press y. If it gives up, it says what this Mac sees. The report
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
@@ -1880,13 +1882,68 @@ EOF
 # relay field-test: starts a test that Cowork guides. The note is this Mac's own account of its
 # setup, for Cowork to read and to put in its report. That report leaves the user's company, so
 # the note holds no path, no account and no repository.
+# The repository a field test changes, so nothing real is at risk. A file in it says the relay
+# made it, and nothing here touches a folder without that file.
+FIELD_REPO="$HOME/relay-field-test"
+FIELD_REPO_LINE=""
+
+field_git() {
+  # No hooks, no signing and a fixed author: the user's git setup can't change where the test starts.
+  git -C "$FIELD_REPO" -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.name="relay field test" -c user.email="relay-field-test@example.invalid" "$@"
+}
+
+make_field_repo() {
+  if [ -e "$FIELD_REPO" ]; then
+    [ -f "$FIELD_REPO/.relay-field-test" ] || die "$FIELD_REPO is there, and relay field-test didn't make it. Move it away, and run this again."
+    FIELD_REPO_LINE="there already"
+    return 0
+  fi
+  mkdir -p "$FIELD_REPO/gen" || die "can't create $FIELD_REPO"
+  git init -q "$FIELD_REPO" || die "git couldn't make $FIELD_REPO"
+  field_git symbolic-ref HEAD refs/heads/main
+  echo "relay field-test made this repository. relay field-test --clean removes it." >"$FIELD_REPO/.relay-field-test"
+  printf '# relay field test\n\nA repository for testing relay. Nothing here matters.\n' >"$FIELD_REPO/README.md"
+  printf '#!/bin/sh\n# Writes the file a relay field test compares.\nmkdir -p gen\nprintf '"'"'hello\\n'"'"' >gen/hello.txt\n' >"$FIELD_REPO/generate.sh"
+  chmod 755 "$FIELD_REPO/generate.sh"
+  printf 'hello\n' >"$FIELD_REPO/gen/hello.txt"
+  field_git add -A && field_git commit -q -m "The start of a relay field test" || die "git couldn't commit in $FIELD_REPO"
+  # A second branch, for scanning one you aren't on.
+  field_git checkout -q -b side &&
+    printf 'side\n' >"$FIELD_REPO/side.txt" &&
+    field_git add -A && field_git commit -q -m "A second branch" &&
+    field_git checkout -q main || die "git couldn't make the second branch in $FIELD_REPO"
+  FIELD_REPO_LINE="made now"
+}
+
+clean_field_test() {
+  local f
+  if [ -f "$FIELD_REPO/.relay-field-test" ]; then
+    rm -rf "$FIELD_REPO" && echo "Removed ~/relay-field-test"
+  elif [ -e "$FIELD_REPO" ]; then
+    echo "Left ~/relay-field-test: relay field-test didn't make it."
+  else
+    echo "No test repository to remove."
+  fi
+  for f in relay/field-test/note.txt relay/scans/relay-field-test.txt relay/scans/relay-field-test.tar.gz; do
+    [ ! -f "$COWORK/$f" ] || { rm -f "$COWORK/$f" && echo "Removed Documents/Cowork/$f from OneDrive"; }
+  done
+  rmdir "$COWORK/relay/field-test" 2>/dev/null
+  echo "Cowork's task folders, and the reports under Documents/Cowork/relay, are left as they are."
+}
+
 cmd_field_test() {
   local dest note how name prompt key
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
+    --clean)
+      [ $# -eq 1 ] || die "relay field-test --clean takes nothing else"
+      clean_field_test
+      return 0
+      ;;
     "") ;;
-    *) die "relay field-test takes no arguments" ;;
+    *) die "relay field-test takes --clean, or nothing" ;;
   esac
+  make_field_repo
   case "$REPO" in
     */Cellar/* | */homebrew/* | */linuxbrew/*) how=homebrew ;;
     *) if [ -e "$REPO/.git" ]; then how=clone; else how=unpacked; fi ;;
@@ -1905,6 +1962,7 @@ cmd_field_test() {
     echo "bash: ${BASH_VERSION%%(*}"
     echo "terminal app: ${TERM_PROGRAM:-unknown}"
     echo "at a terminal: $AT_TERMINAL"
+    echo "test repository: ~/relay-field-test, $FIELD_REPO_LINE, with generate.sh and gen/hello.txt on main, and a second branch called side"
     echo "the relay's own skills in Cowork's folder: $OWN_SKILL_STATE"
     for key in reviews clones; do
       if [ -n "$(setting "$key" "")" ]; then echo "setting $key: set"; else echo "setting $key: default"; fi
@@ -1930,6 +1988,7 @@ EOF
   rm -rf "$SKILL_TMP"
   SKILL_TMP=""
   echo
+  echo "The test changes ~/relay-field-test, which this command made. relay field-test --clean removes it afterwards."
   echo "Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"
   [ "$OWN_SKILL_STATE" = "this relay's" ] || echo "Cowork needs this relay's skills first. Run relay setup, wait 10 minutes, and start a new Cowork session."
   prompt="Use relay-field-test to guide me through testing the relay, and write the report for its developer. With nothing attached, read Documents/Cowork/relay/field-test/note.txt from my OneDrive first."
@@ -1941,6 +2000,8 @@ EOF
   fi
   echo
   printf '%s\n' "$prompt"
+  echo
+  echo "Use Apple's Terminal, and keep to one tab. If Cowork's steps get hard to follow, send it: Use the YOUR TURN block format."
 }
 
 # ---- setup -------------------------------------------------------------------
@@ -2097,6 +2158,7 @@ cmd_complete() {
     scan) printf -- '--branch\n--no-wiki\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--no-wiki\n' ;;
     review) echo --expect ;;
+    field-test) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
     completion) printf 'zsh\nbash\n' ;;
   esac
