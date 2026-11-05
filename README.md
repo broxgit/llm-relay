@@ -63,6 +63,6 @@ The relay used to be `wiki relay`, inside llm-wiki. If you used it there, `relay
 
 ## Working on it
 
-`tests/smoke.sh` runs everything in a temp folder, against a fake OneDrive, `glab` and `wiki`. CI runs it on Linux and on macOS with Apple's bash 3.2, plus shellcheck. [AGENTS.md](AGENTS.md) has the rules, and [ROADMAP.md](ROADMAP.md) what's planned and untested.
+`tests/smoke.sh` runs everything in a temp folder, against a fake OneDrive, `glab` and `wiki`. It needs `python3`, to type answers at a pseudo-terminal. CI runs it on Linux and on macOS with Apple's bash 3.2, plus shellcheck. [AGENTS.md](AGENTS.md) has the rules, and [ROADMAP.md](ROADMAP.md) what's planned and untested.
 
 MIT licensed. The history before the split is in llm-wiki, and this repository carries the commits that touched these files.

@@ -40,6 +40,14 @@ SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-relay/settings"
 OLD_SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-wiki/relay"
 WORK=""
 RUN_STARTED=""
+KEY=""
+
+# Whether there's someone to ask. Standard input has to be a terminal, so an agent's shell is
+# refused even when it inherits one, and /dev/tty has to open, because the answers are read from
+# it. No variable or flag changes this. Worked out once, here: later, standard input can be a
+# loop's heredoc.
+AT_TERMINAL=no
+if [ -t 0 ] && (exec 3<>/dev/tty) 2>/dev/null; then AT_TERMINAL=yes; fi
 
 cleanup() {
   [ -z "$WORK" ] || rm -rf "$WORK"
@@ -110,7 +118,16 @@ deliverable_path() {
 }
 
 needs_terminal() {
-  [ -t 0 ] || [ -n "${RELAY_TEST_TTY:-}" ] || die "relay $1 asks before it does anything, so it needs a terminal. Agents: tell the user to run it."
+  [ "$AT_TERMINAL" = yes ] || die "relay $1 asks before it does anything, so it needs a terminal. Agents: tell the user to run it."
+}
+
+# ask_key <prompt>: one keypress, in KEY. Asked and answered at the terminal itself, so nothing
+# piped in can answer and the question shows even when the output goes elsewhere.
+ask_key() {
+  printf '%s' "$1" >/dev/tty
+  IFS= read -r -n 1 KEY </dev/tty || { echo >/dev/tty; return 1; }
+  # Enter has already moved to a new line.
+  [ -z "$KEY" ] || echo >/dev/tty
 }
 
 newest_deliverable() {
@@ -319,17 +336,15 @@ view_deliverable() {
     done <<EOF
 $(manifest_paths "$copy")
 EOF
-  } | ${PAGER:-less}
+  } | ${PAGER:-less} >/dev/tty
 }
 
 # Nothing from the cloud runs until someone says so here.
 ask_to_run() {
-  local copy="$1" question="${2:-Run it?}" key
+  local copy="$1" question="${2:-Run it?}"
   while :; do
-    printf '%s [y]es, [v]iew the files, [n]o: ' "$question"
-    IFS= read -r -n 1 key || { echo; return 1; }
-    echo
-    case "$key" in
+    ask_key "$question [y]es, [v]iew the files, [n]o: " || return 1
+    case "$KEY" in
       y | Y) return 0 ;;
       n | N) return 1 ;;
       v | V) view_deliverable "$copy" ;;
@@ -856,9 +871,9 @@ EOF
 }
 
 # want_checks <mode> <clone> <commit> <author>: whether to run this MR's checks. Sets CHECKS_LINE
-# when they won't run. Asks on fd 3, because the caller's stdin is the list of URLs.
+# when they won't run.
 want_checks() {
-  local mode="$1" clone="$2" commit="$3" author="$4" key
+  local mode="$1" clone="$2" commit="$3" author="$4"
   if ! git -C "$clone" ls-tree -r --name-only "$commit" | grep -qE '(^|/)go\.mod$'; then
     CHECKS_LINE="not run, because this repository has no go.mod"
     return 1
@@ -874,17 +889,17 @@ want_checks() {
       return 1
       ;;
   esac
-  if ! [ -t 3 ] && [ -z "${RELAY_TEST_TTY:-}" ]; then
+  if [ "$AT_TERMINAL" != yes ]; then
     CHECKS_LINE="not run, because there was no terminal to ask at"
     return 1
   fi
-  echo "Run go build, vet, test and mod tidy on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}?"
-  echo "This runs that branch's code on this Mac, and sends the output to OneDrive."
+  {
+    echo "Run go build, vet, test and mod tidy on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}?"
+    echo "This runs that branch's code on this Mac, and sends the output to OneDrive."
+  } >/dev/tty
   while :; do
-    printf '[y]es, [n]o: '
-    IFS= read -r -n 1 key <&3 || { echo; key=n; }
-    [ -z "$key" ] || echo
-    case "$key" in
+    ask_key '[y]es, [n]o: ' || KEY=n
+    case "$KEY" in
       y | Y) return 0 ;;
       n | N)
         CHECKS_LINE="not run, because the user chose not to"
@@ -1201,7 +1216,6 @@ $also
 EOF
   also_notes="${also_notes%
 }"
-  exec 3<&0
   while IFS= read -r url; do
     [ -n "$url" ] || continue
     (pack_mr "$url" "$repo_arg" "$no_wiki" "$prefixes" "$also_notes" "$checks") || exit 1
@@ -1454,9 +1468,9 @@ relay_setting() {
   local key="$1" passed="$2" default="$3" question="$4" old answer
   old="$(setting "$key" "")"
   answer="$passed"
-  if [ -z "$answer" ] && [ -z "$old" ] && { [ -t 0 ] || [ -n "${RELAY_TEST_TTY:-}" ]; }; then
-    printf '%s [%s]: ' "$question" "$default" >&2
-    IFS= read -r answer || answer=""
+  if [ -z "$answer" ] && [ -z "$old" ] && [ "$AT_TERMINAL" = yes ]; then
+    printf '%s [%s]: ' "$question" "$default" >/dev/tty
+    IFS= read -r answer </dev/tty || answer=""
     answer="${answer:-$default}"
   fi
   [ -n "$answer" ] || return 0
