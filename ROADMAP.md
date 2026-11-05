@@ -16,6 +16,8 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off.
 
+- The guided field test. The skill is text, and `relay field-test` has only run in smoke tests. Not known: whether Cowork keeps to one step at a time, whether it keeps the user's work out of the report, and whether the report is good enough to act on.
+
 - Installing with Homebrew on the work Mac. It has been installed from the tap on one personal Mac only.
 
 - Attempts, with real Cowork. They have only run in smoke tests. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several sets of builds take in one run on real code.
@@ -31,6 +33,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The `remote-pair-run` skill and the relay on real code. Whole rounds passed on a throwaway repository from Apple's Terminal on 2026-11-04, with nothing attached and no Always Keep. The relay's refusal message has only run against an imitation, because iTerm wasn't refused in that test, and later read a file it had been refused an hour before. Why is unknown.
 
 ## Done
+
+### Cowork guides the test, and reports on it (2026-11-05)
+
+- **Why:** the first field tests went well when Cowork led them and wrote a labelled report. That was set up by hand each time, and the steps had since been written only for a person to follow.
+- **What changed:** `relay setup` installs a second skill, `relay-field-test`. `relay field-test` puts a note about the Mac's setup in OneDrive, with no paths or names in it, and a prompt on the clipboard. Cowork then gives one step at a time and writes a report for the relay's developer, which comes back through `relay review`. This is version 0.2.0.
 
 ### Install with Homebrew, and releases (2026-11-05)
 

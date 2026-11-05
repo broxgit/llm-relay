@@ -7,6 +7,8 @@
 #   relay mr      Put a merge request and what it takes to review it in OneDrive.
 #   relay review  Save the review Cowork wrote where you keep your reviews.
 #   relay apply   Leave a proven patch in your working tree, uncommitted.
+#   relay skills  Say where Cowork's copies of your own skills stand.
+#   relay field-test  Have Cowork guide you through a test, and write a report on it.
 #
 # Works with the bash that ships on macOS (3.2) and on Linux.
 # shellcheck disable=SC2034  # RUNLIB_DIR and RUNLIB_EXPECT are read by runlib.sh.
@@ -24,13 +26,15 @@ done
 REPO="$(cd "$(dirname "$src")" && pwd)"
 SKILL_DIR="$REPO/cowork/remote-pair-run"
 RUNLIB="$SKILL_DIR/runlib.sh"
+# The skills that are the relay's own. relay setup copies them to Cowork as they are.
+OWN_SKILLS="remote-pair-run relay-field-test"
 # shellcheck source=/dev/null
 . "$RUNLIB"
 
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.1.0"
+RELAY_VERSION="0.2.0"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -75,6 +79,7 @@ SKILLS_CHECKED=""
 SKILL_TMP=""
 SKILL_STATE=""
 SKILL_SHA=""
+OWN_SKILL_STATE=""
 COPY_STATE=""
 # The version of the note the relay puts on a copied skill. A new number makes every copy again.
 SKILL_TEMPLATE=1
@@ -87,6 +92,7 @@ usage() {
   cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
        relay [--dir ONEDRIVE_FOLDER] skills
+       relay [--dir ONEDRIVE_FOLDER] field-test
        relay completion zsh|bash
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
@@ -99,6 +105,10 @@ Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
          Run it again to update the skill. --skills copies your own Claude skills there too,
          each with a note on what to do differently in Cowork. setup --help has more.
   skills Says where Cowork's copy of each of your skills stands, and changes nothing.
+  field-test
+         Starts a guided test. It puts a note about this Mac's setup in OneDrive, with no
+         paths or names in it, and a prompt for Cowork on the clipboard. Cowork then walks
+         you through each step and writes a report, which relay review saves.
   run    Waits until a deliverable from Copilot Cowork matches its manifest, copies it to a
          local folder, shows you what's there, and runs the copy when you press y. If it gives up, it says what this Mac sees. The report
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
@@ -1684,7 +1694,7 @@ remove_dropped_skills() {
   [ -n "$SKILLS_DIR" ] || return 0
   while IFS= read -r name; do
     [ -n "$name" ] || continue
-    case "$name" in remote-pair-run | .* | *[!A-Za-z0-9._-]*) continue ;; esac
+    case "$name" in remote-pair-run | relay-field-test | .* | *[!A-Za-z0-9._-]*) continue ;; esac
     case ":$SKILLS:" in *":$name:"*) continue ;; esac
     d="$SKILLS_DIR/$name"
     [ -d "$d" ] || continue
@@ -1701,16 +1711,21 @@ EOF
 # The relay's own skill in Cowork's folder should be this relay's. After an upgrade it isn't,
 # until relay setup runs again, and Cowork goes on using the old one.
 check_own_skill() {
-  local d="$SKILLS_DIR/remote-pair-run" f
-  if [ ! -f "$d/SKILL.md" ]; then
-    echo "Cowork doesn't have the remote-pair-run skill yet. Run: relay setup" >&2
-    return 0
-  fi
-  for f in SKILL.md runlib.sh; do
-    if ! cmp -s "$SKILL_DIR/$f" "$d/$f"; then
-      echo "Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay setup" >&2
+  local s f
+  OWN_SKILL_STATE="this relay's"
+  for s in $OWN_SKILLS; do
+    if [ ! -f "$SKILLS_DIR/$s/SKILL.md" ]; then
+      OWN_SKILL_STATE=missing
+      echo "Cowork doesn't have the $s skill yet. Run: relay setup" >&2
       return 0
     fi
+    for f in "$REPO/cowork/$s"/*; do
+      if ! cmp -s "$f" "$SKILLS_DIR/$s/$(basename "$f")"; then
+        OWN_SKILL_STATE="not this relay's"
+        echo "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: relay setup" >&2
+        return 0
+      fi
+    done
   done
 }
 
@@ -1724,7 +1739,7 @@ sync_skills() {
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     case "$name" in
-      remote-pair-run | .* | *[!A-Za-z0-9._-]*)
+      remote-pair-run | relay-field-test | .* | *[!A-Za-z0-9._-]*)
         echo "skill $name: not a name the relay can copy" >&2
         rc=1
         continue
@@ -1860,6 +1875,74 @@ EOF
   return "$rc"
 }
 
+# ---- field test --------------------------------------------------------------
+
+# relay field-test: starts a test that Cowork guides. The note is this Mac's own account of its
+# setup, for Cowork to read and to put in its report. That report leaves the user's company, so
+# the note holds no path, no account and no repository.
+cmd_field_test() {
+  local dest note how name prompt key
+  case "${1:-}" in
+    -h | --help) usage; return 0 ;;
+    "") ;;
+    *) die "relay field-test takes no arguments" ;;
+  esac
+  case "$REPO" in
+    */Cellar/* | */homebrew/* | */linuxbrew/*) how=homebrew ;;
+    *) if [ -e "$REPO/.git" ]; then how=clone; else how=unpacked; fi ;;
+  esac
+  SKILL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  check_own_skill 2>/dev/null
+  dest="$COWORK/relay/field-test"
+  note="$SKILL_TMP/note.txt"
+  {
+    echo "LLM-RELAY FIELD TEST"
+    echo "taken: $(now)"
+    echo "relay: $RELAY_VERSION"
+    echo "installed by: $how"
+    echo "runlib: $RUNLIB_VERSION"
+    echo "system: $(sw_vers -productName 2>/dev/null || uname -s) $(sw_vers -productVersion 2>/dev/null || uname -r), $(uname -m)"
+    echo "bash: ${BASH_VERSION%%(*}"
+    echo "terminal app: ${TERM_PROGRAM:-unknown}"
+    echo "at a terminal: $AT_TERMINAL"
+    echo "the relay's own skills in Cowork's folder: $OWN_SKILL_STATE"
+    for key in reviews clones; do
+      if [ -n "$(setting "$key" "")" ]; then echo "setting $key: set"; else echo "setting $key: default"; fi
+    done
+    if command -v wiki >/dev/null 2>&1; then echo "wiki command: yes"; else echo "wiki command: no"; fi
+    if [ -z "$SKILLS" ]; then
+      echo "the user's skills named for Cowork: none"
+    else
+      echo "the user's skills named for Cowork:"
+      while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        skill_state "$name"
+        echo "  $name: $SKILL_STATE${SKILL_SHA:+ (${SKILL_SHA:0:8})}"
+      done <<EOF
+$(printf '%s\n' "$SKILLS" | tr ':' '\n')
+EOF
+    fi
+    echo "tools:"
+    list_tools
+  } >"$note"
+  mkdir -p "$dest" && cp "$note" "$dest/note.txt" || { rm -rf "$SKILL_TMP"; die "couldn't write to $dest"; }
+  cat "$note"
+  rm -rf "$SKILL_TMP"
+  SKILL_TMP=""
+  echo
+  echo "Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"
+  [ "$OWN_SKILL_STATE" = "this relay's" ] || echo "Cowork needs this relay's skills first. Run relay setup, wait 10 minutes, and start a new Cowork session."
+  prompt="Use relay-field-test to guide me through testing the relay, and write the report for its developer. With nothing attached, read Documents/Cowork/relay/field-test/note.txt from my OneDrive first."
+  echo
+  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
+    echo "Paste this into a new Cowork session. It's on your clipboard:"
+  else
+    echo "Paste this into a new Cowork session:"
+  fi
+  echo
+  printf '%s\n' "$prompt"
+}
+
 # ---- setup -------------------------------------------------------------------
 
 # Prints the work OneDrive folder, or stops if there's none or several.
@@ -1959,10 +2042,12 @@ EOF
   done
   [ -n "$dir" ] || dir="$(onedrive_folder)" || exit 1
   [ -d "$dir" ] || die "no such folder: $dir"
-  target="$dir/Documents/Cowork/skills/remote-pair-run"
-  mkdir -p "$target" || die "can't create $target"
-  cp "$SKILL_DIR/SKILL.md" "$SKILL_DIR/runlib.sh" "$target/" || die "can't copy the skill to $target"
-  echo "installed: $target"
+  for key in $OWN_SKILLS; do
+    target="$dir/Documents/Cowork/skills/$key"
+    mkdir -p "$target" || die "can't create $target"
+    cp "$REPO/cowork/$key"/* "$target/" || die "can't copy the skill to $target"
+    echo "installed: $target"
+  done
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
   for key in reviews clones; do
@@ -2002,7 +2087,7 @@ cmd_complete() {
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'setup\nrun\nscan\nmr\nreview\napply\nskills\ncompletion\n'
+    printf 'setup\nrun\nscan\nmr\nreview\napply\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
@@ -2067,7 +2152,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  run | scan | mr | review | apply | skills)
+  run | scan | mr | review | apply | skills | field-test)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -2082,6 +2167,7 @@ case "${1:-}" in
   review) shift; cmd_review "$@"; exit $? ;;
   apply) shift; cmd_apply "$@"; exit $? ;;
   skills) shift; cmd_skills "$@"; exit $? ;;
+  field-test) shift; cmd_field_test "$@"; exit $? ;;
   "" | -h | --help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

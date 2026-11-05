@@ -4,6 +4,16 @@
 
 Cowork is only on the work Mac, so this is the only way anything gets tried with real Cowork and real OneDrive. It walks through each thing the relay does, says what you should see, and gives you prompts to paste into Cowork so it reports on how its side went.
 
+## Or let Cowork lead
+
+Since version 0.2.0, Cowork can guide you through all of this and write the report itself:
+
+```bash
+relay field-test
+```
+
+Paste the prompt it prints into a new Cowork session. `docs/using.md` has the details. The rest of this page is the same test for doing by hand, and the reference for what each step should show.
+
 ## How to use this
 
 - **Run** means a command in Apple's Terminal. macOS can refuse other terminal apps on OneDrive files.
