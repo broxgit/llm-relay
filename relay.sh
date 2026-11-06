@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.3"
+RELAY_VERSION="0.2.4"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -600,8 +600,116 @@ list_tools() {
   done
 }
 
+# ---- secrets -----------------------------------------------------------------
+
+# Code goes to the cloud from here. So before anything is sent, the relay looks in it for things
+# shaped like secrets, and asks at the terminal before sending any. It reads the files as they
+# are at one commit and never the history, and it goes by shape, so it is a net and not a proof.
+# No flag and no variable skips the question. Don't add one.
+SECRET_KEY_BLOCK='-----BEGIN [A-Z ]*PRIVATE KEY-----'
+SECRET_TOKENS='AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|glpat-[A-Za-z0-9_-]{20}|xox[abprs]-[A-Za-z0-9-]{10,}'
+SQ="'"
+# A line that sets a password, key or token to a value of 8 characters or more, in a settings
+# file. A value that starts like a variable, a template or a path isn't one.
+SECRET_SETS='(^|[^a-z0-9])(pass(word|wd)?|secret|api[_-]?key|access[_-]?key|auth[_-]?token|token|private[_-]?key|client[_-]?secret)["'"$SQ"']?[[:space:]]*[:=][[:space:]]*["'"$SQ"']?[^[:space:]"'"$SQ"'${<(/][^[:space:]"'"$SQ"']{7,}'
+SECRET_NOT='changeme|change-me|example|placeholder|dummy|redacted|xxxx|[*][*][*][*]|your[_-]|<[a-z_ -]+>|[$][{]|[{][{]'
+SECRET_SETTINGS="yaml yml json env ini conf cfg properties toml tfvars xml"
+
+# secret_cut <commit, or nothing> <what it is>: turns git grep's lines into "path:line: what it
+# is". The text that matched is dropped here, so a secret is never printed.
+secret_cut() {
+  sed -n "s|^${1:+$1:}\\([^:]*\\):\\([0-9][0-9]*\\):.*|\\1:\\2: $2|p"
+}
+
+# secret_places <repository> <commit> [folder]: a line for each place in that commit's files that
+# is shaped like a secret. With no commit, it reads the tracked files as they are on disk.
+secret_places() {
+  local root="$1" at="$2" in="${3:-}" ext f
+  local specs=()
+  git -C "$root" grep -n -I -E -e "$SECRET_KEY_BLOCK" ${at:+"$at"} -- ${in:+"$in"} 2>/dev/null | secret_cut "$at" "a private key"
+  git -C "$root" grep -n -I -E -e "$SECRET_TOKENS" ${at:+"$at"} -- ${in:+"$in"} 2>/dev/null | secret_cut "$at" "text shaped like an access token"
+  for ext in $SECRET_SETTINGS; do
+    specs+=(":(glob)${in:+$in/}**/*.$ext")
+  done
+  specs+=(":(glob)${in:+$in/}**/.env*")
+  git -C "$root" grep -n -I -i -E -e "$SECRET_SETS" ${at:+"$at"} -- "${specs[@]}" 2>/dev/null |
+    grep -v -i -E -e "$SECRET_NOT" | secret_cut "$at" "a line that looks like it sets a password or key"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$(basename "$f")" in
+      *.example | *.sample | *.template | *.pub) ;;
+      id_rsa | id_dsa | id_ecdsa | id_ed25519 | *.pem | *.key | *.p12 | *.pfx | *.jks | *.keystore | .env | .env.* | .netrc | kubeconfig | *.kubeconfig | credentials | credentials.* | secrets.yaml | secrets.yml | secrets.json | *.tfvars | *.tfstate)
+        echo "$f: a file named like a key or a set of credentials"
+        ;;
+    esac
+  done <<EOF
+$(if [ -n "$at" ]; then git -C "$root" ls-tree -r --name-only "$at" -- ${in:+"$in"} 2>/dev/null; else git -C "$root" ls-files 2>/dev/null; fi)
+EOF
+}
+
+# secret_places_uncommitted <repository> <file of places at HEAD>: the same places in files that
+# differ from HEAD, as they are on disk, because uncommitted work goes too. One that HEAD
+# already has, on the same line, isn't said twice.
+secret_places_uncommitted() {
+  local root="$1" known="$2" changed line
+  changed="$(git -C "$root" diff HEAD --name-only 2>/dev/null)"
+  [ -n "$changed" ] || return 0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    printf '%s\n' "$changed" | grep -Fxq -- "${line%%:*}" || continue
+    grep -Fxq -- "$line" "$known" || echo "$line, in your uncommitted changes"
+  done <<EOF
+$(secret_places "$root" "")
+EOF
+}
+
+# secrets_gate <what is being sent> <file of places>: asks before sending something that looks
+# like it holds secrets, and sets SECRETS_LINE for the note. False means the user said no.
+secrets_gate() {
+  local label="$1" found="$2" n
+  n="$(grep -c . "$found" || true)"
+  if [ "${n:-0}" -eq 0 ]; then
+    SECRETS_LINE="nothing shaped like a secret was found in the files at this commit. The history wasn't checked"
+    return 0
+  fi
+  {
+    echo
+    echo "Before anything is sent: $label has places that look like they hold secrets. This many: $n"
+    head -n 12 "$found" | sed 's/^/  /'
+    [ "$n" -le 12 ] || echo "  and $((n - 12)) more"
+    echo "This goes by shape, so it can be wrong either way. It reads the files at the commit being sent, and not the history, which goes too."
+  } >&2
+  [ "$AT_TERMINAL" = yes ] || die "relay asks before it sends anything that looks like a secret, so it needs a terminal. Agents: tell the user to run it."
+  ask_key "Send $label to OneDrive anyway? [y]es, [n]o: " || KEY=n
+  case "$KEY" in
+    y | Y) ;;
+    *)
+      echo "Nothing from $label was sent." >&2
+      return 1
+      ;;
+  esac
+  SECRETS_LINE="places that looked like secrets: $n, and the user chose to send them. Never repeat a credential you find here"
+}
+
+# scan_name <repository>: the name its scan gets in OneDrive. A scan is named after its folder,
+# and two repositories can share a folder name, as a service's code and its deployment folder
+# do. The one that comes second takes its parent folder's name in front, and keeps it, so
+# neither replaces the other.
+scan_name() {
+  local root="$1" dir="$1" name had i=0
+  name="$(basename "$root" | tr -c 'A-Za-z0-9._\n-' '-')"
+  while [ "$i" -lt 4 ]; do
+    had="$(sed -n 's/^path: //p' "$COWORK/relay/scans/$name.txt" 2>/dev/null | head -n 1)"
+    if [ -z "$had" ] || [ "$had" = "$root" ]; then break; fi
+    dir="$(dirname "$dir")"
+    name="$(basename "$dir" | tr -c 'A-Za-z0-9._\n-' '-')-$name"
+    i=$((i + 1))
+  done
+  printf '%s\n' "$name"
+}
+
 cmd_scan() {
-  local dir="." root name branch commit size hash dest dirty=no no_wiki="" want=""
+  local dir="." root name plain branch commit size hash dest dirty=no no_wiki="" want=""
   while [ $# -gt 0 ]; do
     case "$1" in
       -h | --help) usage; return 0 ;;
@@ -616,7 +724,8 @@ cmd_scan() {
     esac
   done
   root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "not a git repository: $dir"
-  name="$(basename "$root" | tr -c 'A-Za-z0-9._\n-' '-')"
+  plain="$(basename "$root" | tr -c 'A-Za-z0-9._\n-' '-')"
+  name="$(scan_name "$root")"
   # Cowork is about to be asked for something, so its copies of the user's skills should be current.
   if [ -z "$SKILLS_CHECKED" ]; then
     SKILLS_CHECKED=1
@@ -653,6 +762,13 @@ cmd_scan() {
     [ -s "$WORK/uncommitted.patch" ] && dirty=yes
   fi
 
+  secret_places "$root" "$commit" >"$WORK/secrets.txt"
+  if [ "$dirty" = yes ]; then
+    secret_places_uncommitted "$root" "$WORK/secrets.txt" >"$WORK/secrets-now.txt"
+    cat "$WORK/secrets-now.txt" >>"$WORK/secrets.txt"
+  fi
+  secrets_gate "$name" "$WORK/secrets.txt" || return 1
+
   collect_wiki "$root" "" "$no_wiki"
   {
     echo "LLM-RELAY SCAN"
@@ -663,6 +779,7 @@ cmd_scan() {
     echo "commit: $commit"
     echo "taken: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "wiki: $WIKI_LINE"
+    echo "secrets check: $SECRETS_LINE"
     if [ "$dirty" = yes ]; then
       echo "uncommitted changes: yes, in uncommitted.patch"
     elif [ -n "$want" ]; then
@@ -693,6 +810,8 @@ cmd_scan() {
   # The note goes last, so its hash never describes an archive that isn't there yet.
   cp "$WORK/$name.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
   cp "$WORK/$name.txt" "$dest/" || die "couldn't copy the note to $dest"
+  [ -z "${RELAY_SCAN_NAME_OUT:-}" ] || printf '%s\n' "$name" >"$RELAY_SCAN_NAME_OUT"
+  [ "$name" = "$plain" ] || echo "Another repository's scan is already called $plain, so this one is called $name."
   if [ -n "$want" ]; then
     echo "Scanned $name: $want at $commit, from $SCAN_SOURCE, $size bytes, uncommitted changes left out"
   else
@@ -730,8 +849,10 @@ send_also() {
   sub="$(git -C "$path" rev-parse --show-prefix)"
   [ -n "$branch" ] || branch="$(default_branch "$root")"
   if [ -z "$sub" ]; then
-    (cmd_scan "$root" --branch "$branch" --no-wiki) >&2 || die "--also: couldn't scan $path"
-    echo "Documents/Cowork/relay/scans/$(basename "$root" | tr -c 'A-Za-z0-9._\n-' '-').txt"
+    t="$(mktemp "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch file"
+    (RELAY_SCAN_NAME_OUT="$t" && cmd_scan "$root" --branch "$branch" --no-wiki) >&2 || { rm -f "$t"; die "--also: didn't send $path"; }
+    echo "Documents/Cowork/relay/scans/$(cat "$t").txt"
+    rm -f "$t"
     return 0
   fi
   find_branch "$root" "$branch"
@@ -741,6 +862,8 @@ send_also() {
   name="$(basename "$root")-$sub"
   name="$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '-')"
   t="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  secret_places "$root" "$commit" "$sub" >"$t/secrets.txt"
+  secrets_gate "$name" "$t/secrets.txt" || { rm -rf "$t"; exit 1; }
   git -C "$root" archive --format=tar.gz -o "$t/$name.tar.gz" "$commit" -- "$sub" || { rm -rf "$t"; die "--also: couldn't pack $sub"; }
   hash="$(sha256_of "$t/$name.tar.gz")"
   size="$(wc -c <"$t/$name.tar.gz" | tr -d ' ')"
@@ -752,6 +875,7 @@ send_also() {
     echo "source: $SCAN_SOURCE"
     echo "commit: $commit"
     echo "taken: $(now)"
+    echo "secrets check: $SECRETS_LINE"
     echo "archive: $name.tar.gz, plain files with no git history"
     echo "archive sha256: $hash"
     echo "archive bytes: $size"
@@ -795,14 +919,15 @@ PY
 # "project iid" lines, because a review needs their discussions too. A link can be a bare !12,
 # which is this project's, or name another project by its address or as group/project!12. The
 # text of a link, as in [!12](address), is not a reference of its own. A line that starts with
-# "host:" is a link to another GitLab, which is noted and never fetched.
+# "host:" is a link to another GitLab, which is noted and never fetched. One that starts with
+# "same:" is a bare number that repeats a linked merge request of another project.
 related_refs() {
   python3 - "$@" <<'PY' 2>/dev/null
 import json, re, sys
 d = json.load(open(sys.argv[1]))
 host, project, iid = sys.argv[2], sys.argv[3], sys.argv[4]
 text = str(d.get("description") or "")
-seen, elsewhere = [], []
+seen, elsewhere, same = [], [], []
 def add(p, n):
     if (p, n) != (project, iid) and (p, n) not in seen:
         seen.append((p, n))
@@ -821,9 +946,17 @@ for p, n in short.findall(text):
     add(p, n)
 text = short.sub(" ", text)
 for n in re.findall(r"(?<![\w/])!([0-9]+)", text):
-    add(project, n)
+    # "lib !42" beside a link to lib's !42 is that one again, not this project's !42.
+    other = [p for p, m in seen if m == n and p != project]
+    if other:
+        if (other[0], n) not in same:
+            same.append((other[0], n))
+    else:
+        add(project, n)
 for p, n in seen[:5]:
     print(p, n)
+for p, n in same[:5]:
+    print("same:" + p, n)
 for h, p, n in elsewhere[:5]:
     print("host:" + h, p + "!" + n)
 PY
@@ -1152,6 +1285,10 @@ pack_mr() {
         echo "  ${rp#host:}/$n: on another GitLab, so not fetched" >>"$WORK/related.txt"
         continue
         ;;
+      same:*)
+        echo "  !$n: read as ${rp#same:}!$n, which the description also links, so this project's !$n wasn't fetched" >>"$WORK/related.txt"
+        continue
+        ;;
     esac
     rf="related-$(printf '%s' "$rp" | tr '/' '-')-$n-discussions.json"
     if glab_call api "projects/:fullpath/merge_requests/$n/discussions?per_page=100" --repo "$rp" >"$WORK/mr/$rf" 2>/dev/null; then
@@ -1189,6 +1326,8 @@ EOF
   fi
   commit="$(git -C "$clone" rev-parse --verify -q "$SCAN_REF")" || die "can't find $source in $clone, on origin or as a merge request"
   git -C "$clone" rev-parse --verify -q "refs/remotes/origin/$target" >/dev/null || die "can't find $target in $clone"
+  secret_places "$clone" "$commit" >"$WORK/secrets.txt"
+  secrets_gate "$name" "$WORK/secrets.txt" || exit 1
 
   git init -q --bare "$WORK/branch.git" || die "git couldn't make a scratch repository"
   scratch_fetch "$clone" "$WORK/branch.git" "$SCAN_REF" "refs/heads/$source" || die "git couldn't read $source from $clone"
@@ -1233,6 +1372,7 @@ EOF
     echo "clone: $clone"
     echo "local branch: $local_line"
     echo "wiki: $WIKI_LINE"
+    echo "secrets check: $SECRETS_LINE"
     echo "go modules: $MODULES_LINE"
     echo "changed files: $(grep -c '^diff --git' "$WORK/mr/diff.patch")"
     if [ -s "$WORK/related.txt" ]; then

@@ -17,7 +17,9 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
-- `relay mr` with a link to another project's merge request, since the fix in 0.2.2. Smoke tests only.
+- The secrets check, on real repositories. Smoke tests only. Not known: how often it flags something harmless, what it misses, and whether people read the list or press `y`.
+- Scan names for two repositories with one folder name, since 0.2.4. Smoke tests only.
+- A bare `!N` that repeats a merge request linked in another project, since 0.2.4. Smoke tests only.
 - The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, and the checks are for Go only, so none ran.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
 - Waking Cowork. The user's Teams had no Workflows app, so no webhook could be made. An email trigger worked on 2026-11-03, and hasn't been tried with the relay.
@@ -30,6 +32,13 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### The relay looks for secrets before it sends code (2026-11-06)
+
+- **Why:** in a real review on 2026-11-06, Cowork asked for a deployment repository, and its scan carried production credentials in plain text to OneDrive. The relay sent whatever was committed, with no check. Cowork noticed and didn't repeat them.
+- **What changed:** `relay scan` and `relay mr`, with every `--also`, look in what they're about to send for private keys, access tokens, lines in settings files that set a password or key, and files named like keys or credentials. If any are found, the relay lists where, without printing them, and asks at the terminal before it sends. With no terminal it refuses. No flag skips it. The note says what the check found. The skill tells Cowork never to repeat a credential, and to ask for a deployment repository only when it's needed.
+- **What it doesn't do:** it goes by shape, and it reads the files at one commit. The history goes too, unchecked. Go modules and wiki pages aren't checked.
+- **Also in 0.2.4:** two repositories with the same folder name no longer replace each other's scans. The same session lost a scan that way twice. And `relay mr` on that session's merge request read the linked one from the right project, which is the 0.2.2 fix working for real, but also fetched this project's own merge request of that number, because the description named it a second time in plain words. A bare number that repeats a linked one is now read as the same one, and the note says so.
 
 ### The short re-test, and what it found (2026-11-06)
 

@@ -879,6 +879,7 @@ expect "relay scan says what it sent" "Now tell Cowork: read Documents/Cowork/re
 SD="$OD/Documents/Cowork/relay/scans"
 check "the note names the commit" grep -q "^commit: $(git -C "$SR" rev-parse HEAD)$" "$SD/scan-me.txt"
 check "the note names the branch" grep -q '^branch: main$' "$SD/scan-me.txt"
+check "the note says the secrets check found nothing" grep -q "^secrets check: nothing shaped like a secret was found in the files at this commit. The history wasn't checked\$" "$SD/scan-me.txt"
 check "the note says there are uncommitted changes" grep -q '^uncommitted changes: yes' "$SD/scan-me.txt"
 check "the note lists untracked files" grep -q '?? untracked.env' "$SD/scan-me.txt"
 check "the note's hash matches the archive" grep -q "^archive sha256: $(rl_sha "$SD/scan-me.tar.gz")$" "$SD/scan-me.txt"
@@ -1046,7 +1047,7 @@ cat >"$FG/glab" <<FAKE
 #!/bin/sh
 echo "\$*" >>"$T/glab.log"
 case "\$*" in
-  *"mr view 7 "*) printf '{"title":"Fix the thing","source_branch":"ABC-12-work","target_branch":"master","sha":"%s","description":"Copy of !3 and see !7. Built on [!42](https://gitlab.com/other/lib/-/merge_requests/42), on team/tools!5 and on https://git.elsewhere.example/x/y/-/merge_requests/9","author":{"name":"Some One","username":"someone"}}' "\${FAKE_MR_SHA:-$MR_HEAD}" ;;
+  *"mr view 7 "*) printf '{"title":"Fix the thing","source_branch":"ABC-12-work","target_branch":"master","sha":"%s","description":"Copy of !3 and see !7. Built on [!42](https://gitlab.com/other/lib/-/merge_requests/42), on team/tools!5 and on https://git.elsewhere.example/x/y/-/merge_requests/9. Needs lib !42 first.","author":{"name":"Some One","username":"someone"}}' "\${FAKE_MR_SHA:-$MR_HEAD}" ;;
   *"mr diff 7 "*) echo 'diff --git a/a.txt b/a.txt' ;;
   *"api user "*) [ -z "\${FAKE_ME:-}" ] && exit 1; printf '{"username":"%s"}' "\$FAKE_ME" ;;
   *"merge_requests/7/versions"*) printf '[{"head_commit_sha":"$MR_HEAD","base_commit_sha":"$MR_BASE","start_commit_sha":"$MR_BASE"}]' ;;
@@ -1102,6 +1103,10 @@ check "the note says which file holds each linked merge request" grep -q '^  oth
 check "and names one it couldn't read" grep -q "^  team/tools!5: glab couldn't read it, so it isn't here\$" "$MD/svc-7.txt"
 check "and one on another GitLab, which it never fetches" grep -q '^  git.elsewhere.example/x/y!9: on another GitLab, so not fetched$' "$MD/svc-7.txt"
 refuse "nothing is asked of another GitLab" grep -q 'elsewhere' "$T/glab.log"
+# "lib !42" in plain words, beside a link to that merge request, is the same one again. Seen on
+# a real merge request on 2026-11-06, where this project's own !42 was fetched for it.
+check "a bare number that repeats a linked merge request is read as that one" grep -q "^  !42: read as other/lib!42, which the description also links, so this project's !42 wasn't fetched\$" "$MD/svc-7.txt"
+check "a clean merge request's note says the secrets check found nothing" grep -q '^secrets check: nothing shaped like a secret was found' "$MD/svc-7.txt"
 check "the note has the base" grep -q "^base: $MR_BASE$" "$MD/svc-7.txt"
 check "the note says where the review goes" grep -q '^review goes in the deliverable at: reviews/ABC-12/svc-7.md$' "$MD/svc-7.txt"
 check "the note's hash matches" grep -q "^archive sha256: $(rl_sha "$MD/svc-7.tar.gz")$" "$MD/svc-7.txt"
@@ -1122,6 +1127,7 @@ check "but not this MR again" test ! -e "$MU/mr/related-team-svc-7-discussions.j
 # of 2026-11-06, where the same number in this project came back in its place.
 check "a link to another project is read from that project" grep -q 'from the other project' "$MU/mr/related-other-lib-42-discussions.json"
 refuse "and never as this project's merge request of that number" grep -rq 'the wrong 42' "$MU/mr"
+check "and this project's merge request of that number isn't fetched" test ! -e "$MU/mr/related-team-svc-42-discussions.json"
 check "the diff came" grep -q 'diff --git' "$MU/mr/diff.patch"
 check "the pinned library came" grep -q RETRIES "$MU/go-modules/corp.example.com/lib/kafka@v1.2.3/kafka.go"
 check "one that can't be fetched is listed" grep -q 'corp.example.com/lib/gone v0.0.1: couldn.t be downloaded' "$MU/go-modules/index.txt"
@@ -1463,6 +1469,104 @@ check "--dir puts the scan there" test -f "$RH/Library/CloudStorage/OneDrive-Oth
 check "the skill points at the relay" grep -q 'relay run <task-folder>/<deliverable> --expect 3' "$SK/SKILL.md"
 check "the skill reads reports from the relay's folder" grep -q 'Documents/Cowork/relay/<task-folder>/reports/' "$SK/SKILL.md"
 check "the skill reads scans from the relay's folder" grep -q 'Documents/Cowork/relay/scans/<repository>.txt' "$SK/SKILL.md"
+
+# Secrets: the relay looks in what it is about to send, and asks first. A real scan of a
+# deployment repository carried production credentials to OneDrive on 2026-11-06.
+# By now this home has more than one OneDrive folder, so these name the one they mean.
+xsc() { env HOME="$RH" "$W" --dir "$OD" scan "$@"; }
+xmr() { env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" mr "$@" </dev/null; }
+XR="$T/secret-repo"
+mkdir -p "$XR/deploy" "$XR/src"
+git -C "$XR" init -q
+# Built from halves, so this file never holds anything shaped like a secret itself.
+X_KEY="-----BEGIN RSA PRIV""ATE KEY-----"
+X_TOKEN="gl""pat-abcdefghij0123456789"
+printf '%s\nabc\n' "$X_KEY" >"$XR/deploy/tls.txt"
+printf 'db:\n  password: hunter2hunter2\n  password: {{ .Values.pw }}\n  api_key: changeme123\n  secretName: my-app-secret\n' >"$XR/deploy/values.yaml"
+printf 'password = "abcdefgh12345"\n' >"$XR/src/app.py"
+printf 'x\n' >"$XR/deploy/server.key"
+printf 'A=1\n' >"$XR/.env.example"
+printf 'tok: %s\n' "$X_TOKEN" >"$XR/src/notes.md"
+git -C "$XR" add -A
+git -C "$XR" commit -qm one
+XB="$(git -C "$XR" symbolic-ref --short HEAD)"
+out="$(xsc "$XR" </dev/null 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "a scan that looks like it holds secrets isn't sent with no terminal" "$out" ;; *"needs a terminal"*) ok "a scan that looks like it holds secrets isn't sent with no terminal" ;; *) bad "a scan that looks like it holds secrets isn't sent with no terminal" "$out" ;; esac
+check "nothing reached OneDrive" test ! -e "$SD/secret-repo.txt" -a ! -e "$SD/secret-repo.tar.gz"
+for want in 'deploy/tls.txt:1: a private key' 'src/notes.md:1: text shaped like an access token' 'deploy/values.yaml:2: a line that looks like it sets a password or key' 'deploy/server.key: a file named like a key or a set of credentials' 'This many: 4'; do
+  case "$out" in *"$want"*) ok "it lists: $want" ;; *) bad "it lists: $want" "$out" ;; esac
+done
+for unwanted in 'values.yaml:3' 'values.yaml:4' 'values.yaml:5' 'app.py' '.env.example'; do
+  case "$out" in *"$unwanted"*) bad "it leaves out a template, a placeholder, a name, code and an example file: $unwanted" "$out" ;; *) ok "it leaves out a template, a placeholder, a name, code and an example file: $unwanted" ;; esac
+done
+case "$out" in *hunter2* | *"$X_TOKEN"* | *"PRIVATE KEY"*) bad "it never prints what it matched" "$out" ;; *) ok "it never prints what it matched" ;; esac
+xk() { local keys="$1"; shift; env HOME="$RH" python3 "$TTY" "$keys" "$W" --dir "$OD" scan "$@" 2>&1; }
+out="$(xk n "$XR")"
+case "$out" in *"Send secret-repo to OneDrive anyway? [y]es, [n]o: "*"Nothing from secret-repo was sent."*) ok "at a terminal it asks, and n sends nothing" ;; *) bad "at a terminal it asks, and n sends nothing" "$out" ;; esac
+check "really nothing" test ! -e "$SD/secret-repo.txt"
+out="$(xk x "$XR")"
+case "$out" in *"Nothing from secret-repo was sent."*) ok "any key but y is a no" ;; *) bad "any key but y is a no" "$out" ;; esac
+check "still nothing" test ! -e "$SD/secret-repo.txt"
+out="$(xk y "$XR")"
+case "$out" in *"Now tell Cowork: read Documents/Cowork/relay/scans/secret-repo.txt"*) ok "y sends it" ;; *) bad "y sends it" "$out" ;; esac
+check "and the note says the user chose to" grep -q '^secrets check: places that looked like secrets: 4, and the user chose to send them. Never repeat a credential you find here$' "$SD/secret-repo.txt"
+# Uncommitted work goes too, as a patch, so its added lines are looked at.
+XR2="$T/secret-patch"
+mkdir -p "$XR2"
+git -C "$XR2" init -q
+printf 'name: app\n' >"$XR2/conf.yaml"
+git -C "$XR2" add -A
+git -C "$XR2" commit -qm one
+printf 'token: abcdefgh12345\n' >>"$XR2/conf.yaml"
+out="$(xsc "$XR2" </dev/null 2>&1)"
+case "$out" in *"conf.yaml:2: a line that looks like it sets a password or key, in your uncommitted changes"*"needs a terminal"*) ok "a secret in uncommitted changes is caught too" ;; *) bad "a secret in uncommitted changes is caught too" "$out" ;; esac
+check "and not sent" test ! -e "$SD/secret-patch.txt"
+git -C "$XR2" checkout -q -- conf.yaml
+expect "the same repository without it goes" "Now tell Cowork: read Documents/Cowork/relay/scans/secret-patch.txt" xsc "$XR2"
+# The other ways code leaves: a folder named with --also, and a merge request's own branch.
+out="$(xmr "$MRU" --also "$XR/deploy@$XB" 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "--also asks about a folder that looks like it holds secrets" "$out" ;; *"secret-repo-deploy has places that look like they hold secrets"*"needs a terminal"*) ok "--also asks about a folder that looks like it holds secrets" ;; *) bad "--also asks about a folder that looks like it holds secrets" "$out" ;; esac
+case "$out" in *"src/notes.md"*) bad "and looks only in that folder" "$out" ;; *) ok "and looks only in that folder" ;; esac
+check "the folder isn't sent" test ! -e "$SD/secret-repo-deploy.txt"
+# The relay reads a merge request by its own ref, so that is where the test puts the key.
+X_OLD="$(git -C "$MO" rev-parse refs/merge-requests/7/head)"
+git clone -q "$MO" "$T/mr-push" 2>/dev/null
+git -C "$T/mr-push" checkout -q "$X_OLD" 2>/dev/null
+printf '%s\nabc\n' "$X_KEY" >"$T/mr-push/tls.txt"
+git -C "$T/mr-push" add -A
+git -C "$T/mr-push" commit -qm key
+git -C "$T/mr-push" push -q -f origin HEAD:refs/merge-requests/7/head 2>/dev/null
+out="$(xmr "$MRU" 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "a merge request whose branch looks like it holds secrets isn't sent with no terminal" "$out" ;; *"tls.txt:1: a private key"*"needs a terminal"*) ok "a merge request whose branch looks like it holds secrets isn't sent with no terminal" ;; *) bad "a merge request whose branch looks like it holds secrets isn't sent with no terminal" "$out" ;; esac
+case "$out" in *"Packed "*) bad "and nothing is packed" "$out" ;; *) ok "and nothing is packed" ;; esac
+git -C "$MO" update-ref refs/merge-requests/7/head "$X_OLD"
+expect "with the branch as it was, the merge request goes again" "Packed team/svc !7: ABC-12-work at $X_OLD" xmr "$MRU"
+
+# Two repositories can share a folder name, as a service's code and its deployment folder do.
+# Their scans replaced each other twice in one real session on 2026-11-06.
+N1="$T/names/code/twin"
+N2="$T/names/deploy/twin"
+for r in "$N1" "$N2"; do
+  mkdir -p "$r"
+  git -C "$r" init -q
+  echo "$r" >"$r/where.txt"
+  git -C "$r" add -A
+  git -C "$r" commit -qm one
+done
+expect "the first of two repositories with one folder name gets the plain name" "Now tell Cowork: read Documents/Cowork/relay/scans/twin.txt" xsc "$N1"
+out="$(xsc "$N2" 2>&1)"
+case "$out" in *"Another repository's scan is already called twin, so this one is called deploy-twin."*"Now tell Cowork: read Documents/Cowork/relay/scans/deploy-twin.txt"*) ok "the second takes its parent folder's name in front, and says so" ;; *) bad "the second takes its parent folder's name in front, and says so" "$out" ;; esac
+check "the first one's scan is still its own" grep -q "^path: .*/names/code/twin\$" "$SD/twin.txt"
+check "and the second has its own" grep -q "^path: .*/names/deploy/twin\$" "$SD/deploy-twin.txt"
+expect "the second keeps its name the next time" "Now tell Cowork: read Documents/Cowork/relay/scans/deploy-twin.txt" xsc "$N2"
+expect "and so does the first" "Now tell Cowork: read Documents/Cowork/relay/scans/twin.txt" xsc "$N1"
+N2B="$(git -C "$N2" symbolic-ref --short HEAD)"
+xmr "$MRU" --also "$N2@$N2B" >/dev/null 2>&1
+check "--also names the note the scan really got" grep -q 'Documents/Cowork/relay/scans/deploy-twin.txt' "$MD/svc-7.txt"
+
+check "the skill never repeats a credential" grep -q 'A credential you come across stays where it is' "$SK/SKILL.md"
+check "the skill reads the note the command names" grep -q 'read the note the command names, not one you worked out' "$SK/SKILL.md"
+check "the skill doesn't guess a clone's path" grep -q "Don't guess a path or use a glob" "$SK/SKILL.md"
 
 section "Your own skills in Cowork"
 KH="$T/skill-home"
