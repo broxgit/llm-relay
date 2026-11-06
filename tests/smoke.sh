@@ -88,6 +88,10 @@ lacks() {
 section "Bash 3.2 safety"
 lacks "no loop is fed by process substitution, which can end a script on bash 3.2" "done < <(" grep -n "done < <(" "$REPO/relay.sh" "$REPO/cowork/remote-pair-run/runlib.sh"
 
+# An apostrophe inside ${VAR:-words} ends the string early, and bash reads the rest of the file
+# wrongly with no syntax error. bash -n passes, and whole functions go missing.
+if grep -nE '\$\{[A-Za-z_][A-Za-z0-9_]*:[-+=?][^}"]*'"'" "$REPO/relay.sh" "$REPO/cowork/remote-pair-run/runlib.sh"; then bad "no apostrophe inside a \${VAR:-default}"; else ok "no apostrophe inside a \${VAR:-default}"; fi
+
 section "CI"
 CI_YML="$REPO/.github/workflows/ci.yml"
 lacks "CI never ignores anything under cowork, whose SKILL.md the tests read" '- "cowork' grep -n '^ *- "cowork' "$CI_YML"
@@ -779,6 +783,8 @@ sleep 1
 
 rl y t1/d1
 rl_expect "a run says when it started" 0 "Relay run started at 20"
+RL_OUT="$(env HOME="$RH" TERM_PROGRAM=Apple_Terminal PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" n "$W" run t1/d1 2>&1)"
+case "$RL_OUT" in *"Relay run started at 20"*"Z, in Apple_Terminal."*) ok "and in which terminal app" ;; *) bad "and in which terminal app" "$RL_OUT" ;; esac
 rl_expect "a run says when it ended" 0 "Relay run ended at 20"
 rl vn t1/d1
 rl_expect "n says when it ended too" 1 "Relay run ended at 20"
@@ -1684,7 +1690,10 @@ printf '# Relay field test\n\n## Summary\n\nIt ran.\n\n## Coverage\n\n- Parts A 
 bash "$LIB" manifest "$FR" >/dev/null
 out="$(env HOME="$FH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" y "$W" --dir "$FO" review ft/report --expect 1 2>&1)"
 case "$out" in *"What relay-field-test.md says it covered:"*"Parts A and B"*"Saved: $T/ft-reviews/field-test/relay-field-test.md"*) ok "relay review saves the report where the skill says to put it" ;; *) bad "relay review saves the report where the skill says to put it" "$out" ;; esac
-check "the skill names that place" grep -q 'reviews/field-test/relay-field-test.md' "$FS/SKILL.md"
+check "the skill names that place, with the date so reports don't replace each other" grep -q 'reviews/field-test/relay-field-test-<date>.md' "$FS/SKILL.md"
+# People's names reached a report through the names of skills. Seen in the re-test of 2026-11-06.
+check "the skill keeps the names of other skills out of the report" grep -q "Give the rest as a count, because a skill's name can be a person's or a product's" "$FS/SKILL.md"
+refuse "and doesn't ask for the list of them" grep -q 'the skills listed in your folder' "$FS/SKILL.md"
 # What the skill tells Cowork to expect has to be what the relay prints.
 while IFS= read -r line; do
   [ -n "$line" ] || continue
@@ -1740,6 +1749,14 @@ check "the repository is gone" test ! -e "$FRP"
 check "and its scan" test ! -e "$FO/Documents/Cowork/relay/scans/relay-field-test.txt"
 check "the saved report stays" test -f "$T/ft-reviews/field-test/relay-field-test.md"
 expect "--clean again says there's nothing" "No test repository to remove." env HOME="$FH" "$W" --dir "$FO" field-test --clean
+# The test has the user cd into the repository, and the clean-up then removes it under them.
+ft field-test >/dev/null
+out="$(cd "$FRP" && env HOME="$FH" "$W" --dir "$FO" field-test --clean 2>&1)"
+case "$out" in *"Removed ~/relay-field-test"*"Your terminal was in the folder that's gone now. Before anything else, run: cd ~"*) ok "--clean from inside the repository says to leave the folder" ;; *) bad "--clean from inside the repository says to leave the folder" "$out" ;; esac
+case "$out" in *getcwd* | *"No such file"*) bad "and prints no error of its own about the missing folder" "$out" ;; *) ok "and prints no error of its own about the missing folder" ;; esac
+ft field-test >/dev/null
+out="$(env HOME="$FH" "$W" --dir "$FO" field-test --clean 2>&1)"
+case "$out" in *"Your terminal was in"*) bad "--clean from elsewhere doesn't say it" "$out" ;; *) ok "--clean from elsewhere doesn't say it" ;; esac
 # The note is all Cowork has, so it says where a skill stands in plain words, not the relay's own.
 mkdir -p "$FH/.claude/skills/byhand" "$FO/Documents/Cowork/skills/byhand"
 echo '# On the Mac' >"$FH/.claude/skills/byhand/SKILL.md"
