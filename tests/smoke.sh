@@ -1282,7 +1282,69 @@ git -C "$MNG" remote add origin "$MNG/.git"
 git -C "$MNG" update-ref refs/merge-requests/7/head HEAD
 git -C "$MNG" update-ref refs/remotes/origin/master master
 mr https://gitlab.com/team/nogo/-/merge_requests/7 --repo "$MNG" --checks >/dev/null 2>&1
-check "a repository with no go.mod says so" grep -q '^checks: not run, because this repository has no go.mod$' "$MD/nogo-7.txt"
+check "a repository with nothing the relay can run says so, and how to name its tests" grep -q '^checks: not run, because the relay found nothing it knows how to run here. Name the test command once, with --test, and the relay remembers it$' "$MD/nogo-7.txt"
+# Checks for a repository that isn't Go. Two real reviews of a Python repository ended with
+# every finding unvalidated, because there was nothing the relay would run.
+cat >"$FG/pre-commit" <<FAKE
+#!/bin/sh
+echo "\$*" >>"$T/pre-commit.log"
+[ "\${FAKE_PC_FORMAT:-}" = "" ] || echo "formatted" >>x.txt
+[ "\${FAKE_PC_FAIL:-}" = "" ] || { echo "a hook failed"; exit 1; }
+echo "all hooks passed"
+FAKE
+chmod +x "$FG/pre-commit"
+NGU=https://gitlab.com/team/nogo/-/merge_requests/7
+nogo() { mr "$NGU" --repo "$MNG" "$@" 2>&1; }
+nogo_commit() { git -C "$MNG" add -A && git -C "$MNG" commit -qm "$1" && git -C "$MNG" update-ref refs/merge-requests/7/head HEAD; }
+nogo_unpack() { rm -rf "$T/nogo-unpack" && mkdir -p "$T/nogo-unpack" && tar -xzf "$MD/nogo-7.tar.gz" -C "$T/nogo-unpack"; }
+echo 'repos: []' >"$MNG/.pre-commit-config.yaml"
+echo y >>"$MNG/x.txt"
+nogo_commit lint
+rm -f "$T/pre-commit.log"
+out="$(nogo --checks)"
+case "$out" in *"pre-commit, on 2 changed files: passed"*"Checks: 1 run, 0 failed"*) ok "a repository with a pre-commit config has its hooks run" ;; *) bad "a repository with a pre-commit config has its hooks run" "$out" ;; esac
+check "on the files the merge request changes, and no others" grep -qx 'run --files .pre-commit-config.yaml x.txt' "$T/pre-commit.log"
+nogo_unpack
+check "the hooks' output goes to Cowork" grep -q 'all hooks passed' "$T/nogo-unpack/mr/checks/pre-commit.txt"
+check "and the summary names the check" grep -q '^pre-commit, on 2 changed files: passed' "$T/nogo-unpack/mr/checks/summary.txt"
+check "the user's clone is left as it was" test -z "$(git -C "$MNG" status --short)"
+out="$(FAKE_PC_FAIL=1 nogo --checks)"
+case "$out" in *"pre-commit, on 2 changed files: FAILED, exit 1"*"Checks: 1 run, 1 failed"*) ok "a failing hook is a failed check" ;; *) bad "a failing hook is a failed check" "$out" ;; esac
+FAKE_PC_FORMAT=1 nogo --checks >/dev/null
+nogo_unpack
+check "a hook that rewrites a file is reported with the files it changed" grep -q 'pre-commit changed these files' "$T/nogo-unpack/mr/checks/pre-commit.txt"
+check "and still leaves the user's clone as it was" test -z "$(git -C "$MNG" status --short)"
+if PATH="/usr/bin:/bin" command -v pre-commit >/dev/null 2>&1; then
+  skipped "with no pre-commit, the note says why (this machine has it in /usr/bin)"
+else
+  env HOME="$RH" PATH="$FNG:/usr/bin:/bin" "$W" mr "$NGU" --repo "$MNG" --checks </dev/null >/dev/null 2>&1
+  check "with a config and no pre-commit, the note says how to get it" grep -q "^checks: not run, because pre-commit isn't on this machine: brew install pre-commit\$" "$MD/nogo-7.txt"
+fi
+printf '#!/bin/sh\necho "tests ran"\n' >"$MNG/runtests.sh"
+chmod +x "$MNG/runtests.sh"
+nogo_commit tests
+out="$(nogo --checks)"
+case "$out" in *"tests, with ./runtests.sh: passed"*"pre-commit, on 3 changed files: passed"*"Checks: 2 run, 0 failed"*) ok "a runtests.sh is run, before the hooks that can rewrite files" ;; *) bad "a runtests.sh is run, before the hooks that can rewrite files" "$out" ;; esac
+nogo_unpack
+check "the tests' output goes to Cowork" grep -q 'tests ran' "$T/nogo-unpack/mr/checks/tests.txt"
+git -C "$MNG" rm -q runtests.sh
+printf 'test:\n\t@echo made-it\n' >"$MNG/Makefile"
+nogo_commit make
+out="$(nogo --checks)"
+case "$out" in *"tests, with make test: passed"*) ok "a make test target is run when there's no runtests.sh" ;; *) bad "a make test target is run when there's no runtests.sh" "$out" ;; esac
+out="$(mr_key n "$NGU" --repo "$MNG")"
+case "$out" in *"Run these on a temporary copy of !7 at "*"with git hooks off?"*"  the tests, with: make test"*"  pre-commit, on the files the merge request changes"*"runs that branch's code"*) ok "at a terminal it lists what it would run, and asks" ;; *) bad "at a terminal it lists what it would run, and asks" "$out" ;; esac
+case "$out" in *"make test: passed"* | *"pre-commit, on"*"passed"*) bad "and n runs none of it" "$out" ;; *) ok "and n runs none of it" ;; esac
+# A repository whose tests start some other way: name the command once.
+out="$(nogo --checks --test 'echo custom-tests')"
+case "$out" in *"Remembered how to test team/nogo, so --test isn't needed for it next time: echo custom-tests"*"tests, with echo custom-tests: passed"*) ok "--test names the test command, and the relay says it's remembered" ;; *) bad "--test names the test command, and the relay says it's remembered" "$out" ;; esac
+out="$(nogo --checks)"
+case "$out" in *"tests, with echo custom-tests: passed"*) ok "the named command is used the next time, ahead of what the relay would have found" ;; *) bad "the named command is used the next time, ahead of what the relay would have found" "$out" ;; esac
+out="$(nogo --checks --test 'exit 3')"
+case "$out" in *"tests, with exit 3: FAILED, exit 3"*) ok "failing tests are a failed check" ;; *) bad "failing tests are a failed check" "$out" ;; esac
+out="$(nogo --checks --test none)"
+case "$out" in *"Forgot how to test team/nogo."*"tests, with make test: passed"*) ok "--test none forgets it, and the relay goes back to what it finds" ;; *) bad "--test none forgets it, and the relay goes back to what it finds" "$out" ;; esac
+refuse "--test needs a command" nogo --test
 
 # relay review: Cowork's file comes back to where the user keeps reviews.
 rv() { local keys="$1"; shift; env HOME="$RH" PATH="$FG:$PATH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" "$keys" "$W" review "$@" 2>&1; }
@@ -1862,6 +1924,8 @@ Nothing ran, and no report was sent.
 Applied, and nothing is committed.
 uncommitted changes left out
 Run go build, vet, test and mod tidy on a temporary copy
+Run these on a temporary copy
+the relay found nothing it knows how to run here
 says it covered:
 your skill has changed since Cowork's copy was made
 Cowork's copy was out of date, so it was made again
@@ -2164,6 +2228,7 @@ expect "--dir completes a folder" "__dirs__" "$W" __complete 2 --dir ""
 expect "then the commands" "scan" "$W" __complete 3 --dir /x ""
 lacks "without a second --dir" "--dir" "$W" __complete 3 --dir /x ""
 expect "mr completes its flags" "--no-checks" "$W" __complete 2 mr ""
+expect "with the one that names its tests" "--test" "$W" __complete 2 mr ""
 expect "and after --dir too" "--no-checks" "$W" __complete 4 --dir /x mr ""
 expect "scan completes its flags" "--branch" "$W" __complete 2 scan ""
 lacks "and not another command's" "--no-checks" "$W" __complete 2 scan ""

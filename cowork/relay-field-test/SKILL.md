@@ -7,7 +7,7 @@ description: |
 
 # Relay field test
 
-This skill is for relay 0.2.7.
+This skill is for relay 0.2.8.
 
 You are running a field test of `relay` with its user. They run commands on their Mac and tell you what they see. You do your own side with the remote-pair-run skill, watch what happens on both sides, and write it down.
 
@@ -79,7 +79,7 @@ Before anything else:
 3. If either differs, **stop.** Your copy of a skill is stale, and this test would prove nothing. Say so in a block, and ask them to wait five minutes and start a new session. Cowork's copy of a skill can lag OneDrive by several minutes.
 4. Record the skills you invoked, and how many skills were in your folder at the start. Name only the relay's two and the ones the note names. Give the rest as a count, because a skill's name can be a person's or a product's. In your sandbox, record `uname -m` and `command -v git python3 node go mkfifo cmp seq which curl`. Try to reach any public address with whatever your sandbox has, such as `python3`, and record what happened.
 
-Then tell them the parts and the minutes each takes, and ask how long they have. If they don't say, do A, B and I. Ask in one block for what the chosen parts need: the address of one real merge request in a Go repository for D, a small Go repository of theirs for F, a ticket key for G.
+Then tell them the parts and the minutes each takes, and ask how long they have. If they don't say, do A, B and I. Ask in one block for what the chosen parts need: the address of one real merge request for D, in a repository with a `go.mod`, a pre-commit config or a `runtests.sh`, a small Go repository of theirs for F, a ticket key for G.
 
 ## The parts
 
@@ -123,7 +123,7 @@ Then tell them the parts and the minutes each takes, and ask how long they have.
 
 ### D. A merge request
 
-1. Have them run: `relay mr <url>`, pressing **y** when it asks about the checks. Expect a question starting `Run go build, vet, test and mod tidy on a temporary copy` (if the repository isn't Go, expect `Checks: not run, because this repository has no go.mod`, and mark the checks NOT TESTED), a line for each check, `Packed`, and a prompt on their clipboard. Have them paste the terminal output, and then the prompt.
+1. Have them run: `relay mr <url>`, pressing **y** when it asks about the checks. Expect a question starting `Run go build, vet, test and mod tidy on a temporary copy`, or `Run these on a temporary copy` with a list when the repository has pre-commit hooks or tests of its own to run (if it has nothing the relay can run, expect `Checks: not run, because the relay found nothing it knows how to run here`, and mark the checks NOT TESTED), a line for each check, `Packed`, and a prompt on their clipboard. Have them paste the terminal output, and then the prompt.
 2. Review it, as remote-pair-run's section on merge requests says. If their own review skill is loaded, follow it.
 3. Have them run the `relay review` command, pressing **y**. Expect `What <file> says it covered:` and `Saved:`. A warning about a missing Coverage section, or about an older copy of a skill, is a finding.
 4. Prove or disprove one finding with a run, starting with `safe_worktree`. Before you build the run, ask in one block how the user runs this repository's tests on their Mac, and use that. If they can't run them there, mark it NOT TESTED and don't spend rounds on it. In the report, look for `RESULT worktree identical to`, `RESULT tracked files unchanged in the worktree` and `RESULT your checkout unchanged`.

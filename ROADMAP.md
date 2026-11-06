@@ -25,7 +25,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The secrets check, on ordinary code. It ran once for real, on 2026-11-06 at 0.2.4, on the deployment folder whose scan had carried credentials: it listed 52 places, the user pressed `n`, and nothing was sent. Not known: how often it flags something harmless in a repository that holds no secrets, what it misses, and whether people read the list or press `y`.
 - A scan sent under a longer name, and Cowork reading it. The same run named the deployment folder's scan with its parent folder in front, because the code repository's scan already had the plain name. It was never sent.
 - A bare `!N` that repeats a merge request linked in another project, since 0.2.4. Smoke tests only.
-- The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, and the checks are for Go only, so none ran.
+- The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, when the checks were for Go only, so none ran. Since 0.2.8 they cover pre-commit and a repository's own tests, which have only run in smoke tests against stand-ins for `pre-commit` and `go`. Not known: how long real pre-commit hooks take on a temporary copy, and whether they need the network there.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
 - Waking Cowork. The user's Teams had no Workflows app, so no webhook could be made. An email trigger worked on 2026-11-03, and hasn't been tried with the relay.
 - Anything with Jira or Confluence. Cowork couldn't read a ticket or its page by any route. The Mac has `jira` and `acli`, and the relay doesn't use them yet.
@@ -37,6 +37,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Checks for repositories that aren't Go (2026-11-06)
+
+- **Why:** two real reviews in one day ended with every finding unvalidated, because the repository was Python and the checks were for Go only. A count over one Mac's clones showed what repositories have instead: a pre-commit config in nearly half, and tests started by `go test`, a `runtests.sh` or `make test`.
+- **What changed:** `relay mr` now runs what the repository has. Go's checks where there's a `go.mod`. The repository's pre-commit hooks, on the files the merge request changes. And its tests, by a `runtests.sh` or a `make test` target, in a repository that isn't Go. `--test COMMAND` names the test command for a repository with neither, and it's remembered. It still asks first, on a temporary copy with git hooks off, and the question lists what will run. `relay start` lists pre-commit with the other tools. This is 0.2.8.
+- **What it doesn't do:** tests that need a service or a container run only if the named command starts one. pre-commit can need the network the first time it meets a hook.
 
 ### A practice round, and a secrets question that isn't asked every time (2026-11-06)
 

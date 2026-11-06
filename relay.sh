@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.7"
+RELAY_VERSION="0.2.8"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -100,7 +100,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
        relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki] [--ask]
-       relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--no-wiki] [--ask]
+       relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
@@ -141,8 +141,12 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          --also sends another repository, or just one folder of it, at origin's default
          branch or the one you name. Use it as many times as you like. --go-prefix says which
          modules count as yours, if it's not the ones that share your module's host.
-         If it's Go, it asks whether to run go build, vet, test and mod tidy on a temporary
-         copy of the branch first, and sends the results. --checks and --no-checks answer for you.
+         It asks whether to run the repository's checks on a temporary copy of the branch
+         first, and sends the results: go build, vet, test and mod tidy where there's a
+         go.mod, the repository's pre-commit hooks on the files the merge request changes,
+         and its tests by a runtests.sh or a make test target. --test COMMAND names the
+         test command for a repository that has neither, and is remembered for it.
+         --checks and --no-checks answer for you.
   review Waits for the review Cowork published, shows it and what it says it covered, and when
          you press y saves it under $REVIEWS_DIR. A copy you already have is kept as
          <name>.previous.
@@ -1214,16 +1218,81 @@ EOF
   MODULES_PART=go-modules
 }
 
+# A test command the user named for a project, kept beside the settings as the clones are.
+KNOWN_TESTS="$(dirname "$SETTINGS")/tests"
+
+# known_test: the test command kept for this project, if there is one.
+known_test() {
+  [ -f "$KNOWN_TESTS" ] || return 0
+  awk -F '\t' -v k="$MR_HOST/$MR_PROJECT" '$1 == k { c = $2 } END { if (c != "") print c }' "$KNOWN_TESTS" 2>/dev/null
+}
+
+# remember_test <command, or none>: keeps or forgets it. It never stops the command.
+remember_test() {
+  local key="$MR_HOST/$MR_PROJECT" tmp="$KNOWN_TESTS.$$"
+  mkdir -p "$(dirname "$KNOWN_TESTS")" 2>/dev/null || return 0
+  {
+    [ ! -f "$KNOWN_TESTS" ] || awk -F '\t' -v k="$key" '$1 != k' "$KNOWN_TESTS"
+    [ "$1" = none ] || printf '%s\t%s\n' "$key" "$1"
+  } >"$tmp" 2>/dev/null && mv -f "$tmp" "$KNOWN_TESTS" 2>/dev/null
+  rm -f "$tmp" 2>/dev/null
+  return 0
+}
+
+# plan_checks <clone> <commit>: what there is to run for this repository at that commit. Go's
+# own checks where there is a go.mod. The repository's pre-commit hooks, on the files the merge
+# request changes, where it has a config for them. And its tests: by the command the user named
+# for the project, or else by a runtests.sh or a make test target, in a repository that isn't Go.
+# Sets PLAN_GO, PLAN_PRECOMMIT and PLAN_TEST, PLAN_LIST for a person, and PLAN_LACKS for a tool
+# that would have run and isn't here.
+plan_checks() {
+  local clone="$1" commit="$2" names
+  PLAN_GO=""
+  PLAN_PRECOMMIT=""
+  PLAN_TEST=""
+  PLAN_LIST=""
+  PLAN_LACKS=""
+  names="$(git -C "$clone" ls-tree -r --name-only "$commit" 2>/dev/null)"
+  if printf '%s\n' "$names" | grep -qE '(^|/)go\.mod$'; then
+    if command -v go >/dev/null 2>&1; then
+      PLAN_GO=yes
+      PLAN_LIST="  go build, vet, test and mod tidy"
+    else
+      PLAN_LACKS="go isn't on this machine"
+    fi
+  fi
+  PLAN_TEST="$(known_test)"
+  if [ -z "$PLAN_TEST" ] && ! printf '%s\n' "$names" | grep -qE '(^|/)go\.mod$'; then
+    if printf '%s\n' "$names" | grep -qx 'runtests.sh'; then
+      PLAN_TEST="./runtests.sh"
+    elif printf '%s\n' "$names" | grep -qx 'Makefile' && git -C "$clone" show "$commit:Makefile" 2>/dev/null | grep -qE '^test:'; then
+      PLAN_TEST="make test"
+    fi
+  fi
+  [ -z "$PLAN_TEST" ] || PLAN_LIST="${PLAN_LIST:+$PLAN_LIST
+}  the tests, with: $PLAN_TEST"
+  if printf '%s\n' "$names" | grep -qx '.pre-commit-config.yaml'; then
+    if command -v pre-commit >/dev/null 2>&1; then
+      PLAN_PRECOMMIT=yes
+      PLAN_LIST="${PLAN_LIST:+$PLAN_LIST
+}  pre-commit, on the files the merge request changes"
+    else
+      PLAN_LACKS="${PLAN_LACKS:+$PLAN_LACKS, and }pre-commit isn't on this machine: $(tool_hint pre-commit)"
+    fi
+  fi
+}
+
 # want_checks <mode> <clone> <commit> <author>: whether to run this MR's checks. Sets CHECKS_LINE
 # when they won't run.
 want_checks() {
   local mode="$1" clone="$2" commit="$3" author="$4"
-  if ! git -C "$clone" ls-tree -r --name-only "$commit" | grep -qE '(^|/)go\.mod$'; then
-    CHECKS_LINE="not run, because this repository has no go.mod"
-    return 1
-  fi
-  if ! command -v go >/dev/null 2>&1; then
-    CHECKS_LINE="not run, because go isn't on this machine"
+  plan_checks "$clone" "$commit"
+  if [ -z "$PLAN_LIST" ]; then
+    if [ -n "$PLAN_LACKS" ]; then
+      CHECKS_LINE="not run, because $PLAN_LACKS"
+    else
+      CHECKS_LINE="not run, because the relay found nothing it knows how to run here. Name the test command once, with --test, and the relay remembers it"
+    fi
     return 1
   fi
   case "$mode" in
@@ -1238,7 +1307,12 @@ want_checks() {
     return 1
   fi
   {
-    echo "Run go build, vet, test and mod tidy on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}?"
+    if [ -n "$PLAN_GO" ] && [ -z "$PLAN_TEST" ] && [ -z "$PLAN_PRECOMMIT" ]; then
+      echo "Run go build, vet, test and mod tidy on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}?"
+    else
+      echo "Run these on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}, with git hooks off?"
+      printf '%s\n' "$PLAN_LIST"
+    fi
     echo "This runs that branch's code on this Mac, and sends the output to OneDrive."
   } >/dev/tty
   while :; do
@@ -1285,11 +1359,13 @@ run_check() {
   echo "$label: $result ($((SECONDS - start))s)" >>"$WORK/mr/checks/summary.txt"
 }
 
-# run_checks <commit>: go checks on a clone of the bundle, so the user's clone stays out of it and
-# files they haven't committed can't change a result. Hooks are off, because a post-checkout hook
-# that rewrote go.mod once spoiled every result of a real run. Sets CHECKS_LINE.
+# run_checks <commit> <target branch>: what plan_checks found, on a clone of the bundle, so the
+# user's clone stays out of it and files they haven't committed can't change a result. Hooks are
+# off, because a post-checkout hook that rewrote go.mod once spoiled every result of a real run.
+# pre-commit goes last, because its hooks can rewrite files. Sets CHECKS_LINE.
 run_checks() {
-  local commit="$1" tree="$WORK/checkout" hooks="$WORK/no-hooks" f d slug label changed
+  local commit="$1" target="${2:-}" tree="$WORK/checkout" hooks="$WORK/no-hooks" f d slug label changed
+  local files=()
   CHECKS_RUN=0
   CHECKS_BAD=0
   mkdir -p "$hooks"
@@ -1308,7 +1384,11 @@ run_checks() {
   mkdir -p "$WORK/mr/checks"
   {
     echo "commit: $commit"
-    echo "ran on: $(uname -sm), $(go version 2>&1 | head -n 1)"
+    if [ -n "$PLAN_GO" ]; then
+      echo "ran on: $(uname -sm), $(go version 2>&1 | head -n 1)"
+    else
+      echo "ran on: $(uname -sm)"
+    fi
   } >"$WORK/mr/checks/summary.txt"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
@@ -1322,8 +1402,9 @@ run_checks() {
     run_check "$tree/$d" "${label}go test" "$WORK/mr/checks/$slug-go-test.txt" go test ./...
     run_check "$tree/$d" "${label}go mod tidy -diff" "$WORK/mr/checks/$slug-go-mod-tidy.txt" go mod tidy -diff
   done <<EOF
-$(git -C "$tree" ls-files | grep -E '(^|/)go\.mod$' | grep -vE '(^|/)(vendor|testdata)/')
+$([ -z "$PLAN_GO" ] || git -C "$tree" ls-files | grep -E '(^|/)go\.mod$' | grep -vE '(^|/)(vendor|testdata)/')
 EOF
+  [ -z "$PLAN_TEST" ] || run_check "$tree" "tests, with $PLAN_TEST" "$WORK/mr/checks/tests.txt" sh -c "$PLAN_TEST"
   changed="$(git -C "$tree" status --porcelain --untracked-files=no)"
   if [ -n "$changed" ]; then
     CHECKS_BAD=$((CHECKS_BAD + 1))
@@ -1333,6 +1414,30 @@ EOF
       echo "the checks changed tracked files, so later results may not be of this commit:"
       printf '%s\n' "$changed"
     } >>"$WORK/mr/checks/summary.txt"
+  fi
+  if [ -n "$PLAN_PRECOMMIT" ]; then
+    # The hooks see the commit as it is, whatever a build or a test left behind.
+    git -C "$tree" checkout -q -- . 2>/dev/null
+    while IFS= read -r f; do
+      [ -n "$f" ] && [ -f "$tree/$f" ] || continue
+      files+=("$f")
+    done <<EOF
+$(git -C "$tree" diff --name-only --diff-filter=ACMR "origin/$target...$commit" 2>/dev/null)
+EOF
+    if [ "${#files[@]}" -eq 0 ]; then
+      echo "pre-commit: not run, because the relay couldn't list the files the merge request changes"
+      echo "pre-commit: not run, because the relay couldn't list the files the merge request changes" >>"$WORK/mr/checks/summary.txt"
+    else
+      run_check "$tree" "pre-commit, on ${#files[@]} changed files" "$WORK/mr/checks/pre-commit.txt" pre-commit run --files "${files[@]}"
+      changed="$(git -C "$tree" status --porcelain --untracked-files=no)"
+      if [ -n "$changed" ]; then
+        {
+          echo
+          echo "pre-commit changed these files, which is how a formatting hook says a file needs it:"
+          printf '%s\n' "$changed"
+        } >>"$WORK/mr/checks/pre-commit.txt"
+      fi
+    fi
   fi
   # A build or test can leave read-only files, and the scratch folder has to be removable.
   chmod -R u+w "$tree" 2>/dev/null
@@ -1369,10 +1474,18 @@ is_yours() {
 
 # pack_mr <url> <repo override> <no-wiki flag> <go prefixes> <also notes> <checks mode>: one MR, in OneDrive.
 pack_mr() {
-  local url="$1" repo_arg="$2" no_wiki="$3" prefixes="$4" also_notes="$5" checks_mode="$6" local_line yours clone repo name ticket source target head base start commit page out n hash size dest review rp rf prev existing=none
+  local url="$1" repo_arg="$2" no_wiki="$3" prefixes="$4" also_notes="$5" checks_mode="$6" test_cmd="${7:-}" local_line yours clone repo name ticket source target head base start commit page out n hash size dest review rp rf prev existing=none
   parse_mr "$url"
   repo="${MR_PROJECT##*/}"
   name="$(printf '%s-%s' "$repo" "$MR_IID" | tr -c 'A-Za-z0-9._-' '-')"
+  if [ -n "$test_cmd" ]; then
+    remember_test "$test_cmd"
+    if [ "$test_cmd" = none ]; then
+      echo "Forgot how to test $MR_PROJECT."
+    else
+      echo "Remembered how to test $MR_PROJECT, so --test isn't needed for it next time: $test_cmd"
+    fi
+  fi
   if [ -n "$repo_arg" ]; then
     clone="$(git -C "$repo_arg" rev-parse --show-toplevel 2>/dev/null)" || die "--repo: not a git repository: $repo_arg"
     prev="$(known_clone)" || prev=""
@@ -1474,7 +1587,7 @@ EOF
   collect_modules "$clone" "$commit" "$prefixes"
   collect_wiki "$clone" "$repo" "$no_wiki"
   if want_checks "$checks_mode" "$clone" "$commit" "$(json_get "$WORK/mr/view.json" author.name)"; then
-    run_checks "$commit"
+    run_checks "$commit" "$target"
   fi
 
   local_line="$(local_branch_line "$clone" "$source" "$commit")"
@@ -1539,7 +1652,7 @@ EOF
 }
 
 cmd_mr() {
-  local urls="" also="" also_notes="" repo_arg="" no_wiki="" prefixes="" checks="" url spec note prompt names=""
+  local urls="" also="" also_notes="" repo_arg="" no_wiki="" prefixes="" checks="" test_cmd="" url spec note prompt names=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --also)
@@ -1560,6 +1673,11 @@ cmd_mr() {
         ;;
       --checks) checks=yes; shift ;;
       --no-checks) checks=no; shift ;;
+      --test)
+        [ -n "${2:-}" ] || die "--test needs the command that runs this repository's tests, or none to forget it"
+        test_cmd="$2"
+        shift 2
+        ;;
       --no-wiki) no_wiki=1; shift ;;
       --ask) SECRETS_ASK=1; shift ;;
       -h | --help) usage; return 0 ;;
@@ -1597,7 +1715,7 @@ EOF
 }"
   while IFS= read -r url; do
     [ -n "$url" ] || continue
-    (pack_mr "$url" "$repo_arg" "$no_wiki" "$prefixes" "$also_notes" "$checks") || exit 1
+    (pack_mr "$url" "$repo_arg" "$no_wiki" "$prefixes" "$also_notes" "$checks" "$test_cmd") || exit 1
   done <<EOF
 $urls
 EOF
@@ -2330,6 +2448,7 @@ FEATURES="Try a practice round first|git|practice
 Change code with Cowork|git|scan
 Review a merge request|glab python3|mr
 Run Go checks in a review|go|mr
+Lint a review with the repository's pre-commit|pre-commit|mr
 Send a repository's wiki with it|wiki|scan"
 
 tool_hint() {
@@ -2338,6 +2457,7 @@ tool_hint() {
     glab) echo "brew install glab, then sign in with: glab auth login" ;;
     python3) echo "xcode-select --install, or: brew install python" ;;
     go) echo "brew install go" ;;
+    pre-commit) echo "brew install pre-commit" ;;
     wiki) echo "optional, from github.com/broxgit/llm-wiki" ;;
   esac
 }
@@ -2745,7 +2865,7 @@ cmd_complete() {
     setup) printf -- '--dir\n--reviews\n--clones\n--skills\n--skills-from\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
-    mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--no-wiki\n--ask\n' ;;
+    mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     review) echo --expect ;;
     field-test | practice) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
