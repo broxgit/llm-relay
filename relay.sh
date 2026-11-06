@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.4"
+RELAY_VERSION="0.2.5"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -90,7 +90,8 @@ COWORK_LACKS="glab gh curl wget ssh scp docker kubectl jira acli aws mongosh psq
 
 usage() {
   cat <<EOF
-Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
+Usage: relay [--dir ONEDRIVE_FOLDER] start
+       relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
        relay [--dir ONEDRIVE_FOLDER] skills
        relay [--dir ONEDRIVE_FOLDER] field-test [--clean]
        relay completion zsh|bash
@@ -101,6 +102,9 @@ Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
+  start  The one command to begin with. Checks that Cowork has this relay's skills, and
+         installs them if not. Says what this Mac is set up for, and what a missing tool
+         needs. Puts a prompt on the clipboard, and Cowork takes it from there.
   setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
          Run it again to update the skill. --skills copies your own Claude skills there too,
          each with a note on what to do differently in Cowork. setup --help has more.
@@ -691,6 +695,37 @@ secrets_gate() {
   SECRETS_LINE="places that looked like secrets: $n, and the user chose to send them. Never repeat a credential you find here"
 }
 
+# tilde <path>: the path as a person would write it, with ~ for their home folder.
+tilde() {
+  # shellcheck disable=SC2088
+  case "$1" in
+    "$HOME") echo "~" ;;
+    "$HOME"/*) echo "~/${1#"$HOME"/}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# clip_scan <a scan's note, as its place in OneDrive>: puts what to tell Cowork on the clipboard.
+# Cowork often asks for two scans at once, so scans within two minutes of each other add up,
+# and the last doesn't wipe the first. False when there's no terminal or no clipboard.
+clip_scan() {
+  local state now_s last=0 lines=""
+  state="$(dirname "$SETTINGS")/clipboard"
+  [ "$AT_TERMINAL" = yes ] && command -v pbcopy >/dev/null 2>&1 || return 1
+  now_s="$(date +%s)"
+  [ ! -f "$state" ] || last="$(head -n 1 "$state" 2>/dev/null)"
+  case "$last" in '' | *[!0-9]*) last=0 ;; esac
+  [ $((now_s - last)) -gt 120 ] || lines="$(tail -n +2 "$state" | grep -vxF -- "- $1")"
+  lines="${lines:+$lines
+}- $1"
+  mkdir -p "$(dirname "$state")" 2>/dev/null
+  { echo "$now_s"; printf '%s\n' "$lines"; } >"$state" 2>/dev/null
+  {
+    echo "With nothing attached, read these from my OneDrive:"
+    printf '%s\n' "$lines"
+  } | pbcopy 2>/dev/null
+}
+
 # scan_name <repository>: the name its scan gets in OneDrive. A scan is named after its folder,
 # and two repositories can share a folder name, as a service's code and its deployment folder
 # do. The one that comes second takes its parent folder's name in front, and keeps it, so
@@ -821,6 +856,10 @@ cmd_scan() {
   size_warning "$size"
   echo "Sent to OneDrive: Documents/Cowork/relay/scans/$name.txt and $name.tar.gz"
   echo "Now tell Cowork: read Documents/Cowork/relay/scans/$name.txt"
+  # A scan made for relay mr is named in that command's own prompt.
+  if [ -z "${RELAY_SCAN_NAME_OUT:-}" ] && clip_scan "Documents/Cowork/relay/scans/$name.txt"; then
+    echo "That's on your clipboard to paste, with any other scan from the last two minutes."
+  fi
 }
 
 # ---- also --------------------------------------------------------------------
@@ -1440,8 +1479,8 @@ cmd_mr() {
     esac
   done
   [ -n "$urls" ] || die "relay mr needs a merge request's URL"
-  command -v glab >/dev/null 2>&1 || die "relay mr needs glab"
-  command -v python3 >/dev/null 2>&1 || die "relay mr needs python3"
+  needs_tool mr glab
+  needs_tool mr python3
   SKILLS_CHECKED=1
   check_own_skill
   sync_skills quiet
@@ -1827,11 +1866,22 @@ EOF
   [ $((total + size)) -le 10485760 ] || { echo "it comes to over 10 MB, Cowork's limit for one skill"; return 1; }
 }
 
-# copy_state <folder in Cowork's skills>: foreign, edited or intact, in COPY_STATE. Foreign means
+# macOS can refuse one terminal app a file in OneDrive that another reads. A copy that can't be
+# read says nothing about who made it, so it is its own state, and never "foreign".
+UNREADABLE_WHY="macOS can refuse one terminal app on OneDrive files and not another. Try Apple's Terminal."
+
+# can_read <file>: false when the file is there and this process isn't allowed its contents.
+can_read() { [ ! -e "$1" ] || head -c 1 "$1" >/dev/null 2>&1; }
+
+# copy_state <folder in Cowork's skills>: foreign, edited, unreadable or intact, in COPY_STATE. Foreign means
 # the relay didn't make it, and edited that it changed in OneDrive after the relay did.
 copy_state() {
   local dst="$1" want
   COPY_STATE=intact
+  if ! can_read "$dst/SKILL.md"; then
+    COPY_STATE=unreadable
+    return 0
+  fi
   want="$(stamp_field "$dst/SKILL.md" copy)"
   if [ -z "$want" ]; then
     COPY_STATE=foreign
@@ -1859,7 +1909,7 @@ skill_state() {
   fi
   copy_state "$dst"
   case "$COPY_STATE" in
-    foreign | edited) SKILL_STATE="$COPY_STATE" ;;
+    foreign | edited | unreadable) SKILL_STATE="$COPY_STATE" ;;
     *)
       if [ "$(stamp_field "$dst/SKILL.md" source)" != "$SKILL_SHA" ] || [ "$(stamp_field "$dst/SKILL.md" template)" != "$SKILL_TEMPLATE" ]; then
         SKILL_STATE=stale
@@ -1904,6 +1954,7 @@ remove_dropped_skills() {
     case "$COPY_STATE" in
       intact) rm -rf "$d" && echo "skill $name: no longer named, so Cowork's copy was removed" ;;
       edited) echo "skill $name: no longer named, but its copy was changed in OneDrive, so it stays. Delete it in Finder if you don't want it." ;;
+      unreadable) echo "skill $name: no longer named, but this terminal app can't read its copy, so it stays. $UNREADABLE_WHY" ;;
     esac
   done <<EOF
 $(printf '%s\n' "$1" | tr ':' '\n')
@@ -1922,6 +1973,11 @@ check_own_skill() {
       return 0
     fi
     for f in "$REPO/cowork/$s"/*; do
+      if ! can_read "$SKILLS_DIR/$s/$(basename "$f")"; then
+        OWN_SKILL_STATE="unreadable from this terminal app"
+        echo "This terminal app can't read Cowork's copy of the $s skill, so the relay can't tell if it's current. $UNREADABLE_WHY" >&2
+        return 0
+      fi
       if ! cmp -s "$f" "$SKILLS_DIR/$s/$(basename "$f")"; then
         OWN_SKILL_STATE="not this relay's"
         echo "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: relay setup" >&2
@@ -1968,6 +2024,11 @@ sync_skills() {
         else
           echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. relay setup says what to do." >&2
         fi
+        rc=1
+        continue
+        ;;
+      unreadable)
+        echo "skill $name: this terminal app can't read Cowork's copy, so it's left as it is. $UNREADABLE_WHY" >&2
         rc=1
         continue
         ;;
@@ -2066,6 +2127,7 @@ cmd_skills() {
       absent) echo "$name: not in Cowork's folder yet. relay setup copies it." ;;
       edited) echo "$name: Cowork's copy was changed in OneDrive. relay setup shows the difference." ;;
       foreign) echo "$name: Cowork's folder has a skill of that name, which the relay didn't make. relay setup says what to do." ;;
+      unreadable) echo "$name: this terminal app can't read Cowork's copy, so the relay can't say where it stands. $UNREADABLE_WHY" ;;
       nosource) echo "$name: there's no $SKILLS_FROM/$name/SKILL.md." ;;
     esac
     rc=1
@@ -2135,8 +2197,172 @@ clean_field_test() {
   [ -z "$inside" ] || echo "Your terminal was in the folder that's gone now. Before anything else, run: cd ~"
 }
 
+# named_skill_lines: where each of the user's skills stands in Cowork's folder, in plain words,
+# for a note Cowork reads.
+named_skill_lines() {
+  local name words stamp
+  if [ -z "$SKILLS" ]; then
+    echo "the user's skills named for Cowork: none"
+    return 0
+  fi
+  echo "the user's skills named for Cowork:"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    skill_state "$name"
+    case "$SKILL_STATE" in
+      same) words="in step with the user's" ;;
+      stale) words="behind the user's, which has changed since the copy was made" ;;
+      edited) words="changed in Cowork's folder since the relay made it" ;;
+      foreign) words="in Cowork's folder, but put there by hand, not by the relay" ;;
+      unreadable) words="in Cowork's folder, but the terminal app this ran in couldn't read it" ;;
+      absent) words="not in Cowork's folder yet" ;;
+      *) words="named, but this Mac has no skill of that name" ;;
+    esac
+    stamp=""
+    [ -z "$SKILL_SHA" ] || stamp=". The user's own is ${SKILL_SHA:0:8}"
+    echo "  $name: $words$stamp"
+  done <<EOF
+$(printf '%s\n' "$SKILLS" | tr ':' '\n')
+EOF
+}
+
+# ---- start -------------------------------------------------------------------
+
+# What the relay can do, in one place: what a person would call it, the tools it needs, and the
+# command that begins it. relay start and relay setup print it, and a command that lacks a tool
+# gives the same line. A new feature is a line here and its tools in tool_hint, and the skill's
+# starting section has to say when to give its command: a smoke test holds all three together,
+# so the guided way in can't fall behind what the relay does.
+FEATURES="Change code with Cowork|git|scan
+Review a merge request|glab python3|mr
+Run Go checks in a review|go|mr
+Send a repository's wiki with it|wiki|scan"
+
+tool_hint() {
+  case "$1" in
+    git) echo "xcode-select --install" ;;
+    glab) echo "brew install glab, then sign in with: glab auth login" ;;
+    python3) echo "xcode-select --install, or: brew install python" ;;
+    go) echo "brew install go" ;;
+    wiki) echo "optional, from github.com/broxgit/llm-wiki" ;;
+  esac
+}
+
+# needs_tool <command> <tool>: stops with how to get a tool the command can't do without.
+needs_tool() { command -v "$2" >/dev/null 2>&1 || die "relay $1 needs $2: $(tool_hint "$2")"; }
+
+# feature_lines: a line for each thing the relay does, saying it's ready or what it needs.
+feature_lines() {
+  local what tools begins t missing
+  while IFS='|' read -r what tools begins; do
+    [ -n "$what" ] || continue
+    missing=""
+    for t in $tools; do
+      command -v "$t" >/dev/null 2>&1 || missing="${missing:+$missing. }needs $t: $(tool_hint "$t")"
+    done
+    printf '  %-34s%s\n' "$what" "${missing:-ready}"
+  done <<EOF
+$FEATURES
+EOF
+}
+
+# install_own_skills <OneDrive folder>: puts this relay's skills where Cowork reads them.
+install_own_skills() {
+  local key target
+  for key in $OWN_SKILLS; do
+    target="$1/Documents/Cowork/skills/$key"
+    mkdir -p "$target" || die "can't create $target"
+    cp "$REPO/cowork/$key"/* "$target/" || die "can't copy the skill to $target"
+    echo "installed: $target"
+  done
+}
+
+# clock_in <minutes>: the time that many minutes from now, as the user's clock shows it.
+clock_in() {
+  local at=$(($(date +%s) + $1 * 60))
+  date -r "$at" +%H:%M 2>/dev/null || date -d "@$at" +%H:%M 2>/dev/null
+}
+
+# relay start: the one command to begin with. It gets Cowork this relay's skills, says what this
+# Mac is set up for, and hands Cowork a note and the user a prompt. It asks nothing.
+cmd_start() {
+  local dest note prompt changed="" runs=0
+  case "${1:-}" in
+    -h | --help) usage; return 0 ;;
+    "") ;;
+    *) die "relay start takes no arguments" ;;
+  esac
+  echo "relay $RELAY_VERSION"
+  check_own_skill 2>/dev/null
+  case "$OWN_SKILL_STATE" in
+    "this relay's") ;;
+    unreadable*)
+      echo "This terminal app can't read Cowork's copy of the relay's skills, so the relay can't tell if they're current. $UNREADABLE_WHY" >&2
+      ;;
+    *)
+      install_own_skills "$ONEDRIVE" >/dev/null
+      changed=1
+      check_own_skill 2>/dev/null
+      ;;
+  esac
+  SKILLS_CHECKED=1
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  trap cleanup EXIT
+  SKILL_TMP="$WORK/skills"
+  mkdir -p "$SKILL_TMP"
+  sync_skills quiet || true
+  SKILL_TMP="$WORK/skills"
+  mkdir -p "$SKILL_TMP"
+  echo
+  echo "What you can do on this Mac:"
+  feature_lines
+  echo "Clones are looked for under $(tilde "$CLONES_DIRS"), and reviews are saved under $(tilde "$REVIEWS_DIR"). relay setup changes either."
+  case "${TERM_PROGRAM:-}" in
+    Apple_Terminal) ;;
+    *)
+      echo
+      echo "This is ${TERM_PROGRAM:-a terminal app that gives no name}, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply: macOS has refused other terminal apps on OneDrive files."
+      ;;
+  esac
+  [ ! -f "$REPORTS/.relay-runs" ] || runs="$(grep -c . "$REPORTS/.relay-runs" || true)"
+  dest="$COWORK/relay/start"
+  note="$WORK/note.txt"
+  {
+    echo "LLM-RELAY START"
+    echo "taken: $(now)"
+    echo "relay: $RELAY_VERSION"
+    echo "runlib: $RUNLIB_VERSION"
+    echo "terminal app: ${TERM_PROGRAM:-unknown}"
+    echo "the relay's own skills in Cowork's folder: $OWN_SKILL_STATE${changed:+, installed just now}"
+    echo "runs on this Mac so far: ${runs:-0}"
+    echo "what this Mac is set up for:"
+    feature_lines
+    named_skill_lines
+  } >"$note"
+  mkdir -p "$dest" && cp "$note" "$dest/note.txt" || die "couldn't write to $dest"
+  SKILL_TMP=""
+  prompt="Use remote-pair-run. I've just run relay start. With nothing attached, read Documents/Cowork/relay/start/note.txt from my OneDrive first, then follow the skill's section on starting."
+  echo
+  if [ -n "$changed" ]; then
+    echo "Cowork takes up to 10 minutes to see its new skills. It's $(date +%H:%M) now, so start at $(clock_in 10)."
+  fi
+  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
+    echo "A prompt for Cowork is on your clipboard."
+  else
+    echo "Paste this into Cowork:"
+    echo
+    printf '%s\n' "$prompt"
+    echo
+  fi
+  if [ -n "$changed" ]; then
+    echo "Next: at $(clock_in 10), open a new Cowork session and paste it."
+  else
+    echo "Next: open a new Cowork session and paste it."
+  fi
+}
+
 cmd_field_test() {
-  local dest note how name prompt key words stamp
+  local dest note how prompt key
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     --clean)
@@ -2172,28 +2398,7 @@ cmd_field_test() {
       if [ -n "$(setting "$key" "")" ]; then echo "setting $key: set"; else echo "setting $key: default"; fi
     done
     if command -v wiki >/dev/null 2>&1; then echo "wiki command: yes"; else echo "wiki command: no"; fi
-    if [ -z "$SKILLS" ]; then
-      echo "the user's skills named for Cowork: none"
-    else
-      echo "the user's skills named for Cowork:"
-      while IFS= read -r name; do
-        [ -n "$name" ] || continue
-        skill_state "$name"
-        case "$SKILL_STATE" in
-          same) words="in step with the user's" ;;
-          stale) words="behind the user's, which has changed since the copy was made" ;;
-          edited) words="changed in Cowork's folder since the relay made it" ;;
-          foreign) words="in Cowork's folder, but put there by hand, not by the relay" ;;
-          absent) words="not in Cowork's folder yet" ;;
-          *) words="named, but this Mac has no skill of that name" ;;
-        esac
-        stamp=""
-        [ -z "$SKILL_SHA" ] || stamp=". The user's own is ${SKILL_SHA:0:8}"
-        echo "  $name: $words$stamp"
-      done <<EOF
-$(printf '%s\n' "$SKILLS" | tr ':' '\n')
-EOF
-    fi
+    named_skill_lines
     echo "tools:"
     list_tools
   } >"$note"
@@ -2261,7 +2466,7 @@ relay_setting() {
 
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" target reviews="" clones="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0
+  local dir="$1" reviews="" clones="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -2317,12 +2522,7 @@ EOF
   done
   [ -n "$dir" ] || dir="$(onedrive_folder)" || exit 1
   [ -d "$dir" ] || die "no such folder: $dir"
-  for key in $OWN_SKILLS; do
-    target="$dir/Documents/Cowork/skills/$key"
-    mkdir -p "$target" || die "can't create $target"
-    cp "$REPO/cowork/$key"/* "$target/" || die "can't copy the skill to $target"
-    echo "installed: $target"
-  done
+  install_own_skills "$dir"
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
   for key in reviews clones; do
@@ -2344,7 +2544,10 @@ EOF
   SKILLS_DIR="$dir/Documents/Cowork/skills"
   sync_skills setup "$before" || rc=1
   [ -z "$SKILLS" ] || echo "relay setting: skills=$SKILLS, from $SKILLS_FROM"
+  echo "What you can do on this Mac:"
+  feature_lines
   echo "Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps."
+  echo "Next: run relay start. It puts a prompt for Cowork on your clipboard."
   return "$rc"
 }
 
@@ -2362,7 +2565,7 @@ cmd_complete() {
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'setup\nrun\nscan\nmr\nreview\napply\nskills\nfield-test\ncompletion\n'
+    printf 'start\nsetup\nrun\nscan\nmr\nreview\napply\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
@@ -2428,7 +2631,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  run | scan | mr | review | apply | skills | field-test)
+  start | run | scan | mr | review | apply | skills | field-test)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -2437,6 +2640,7 @@ case "${1:-}" in
     ;;
 esac
 case "${1:-}" in
+  start) shift; cmd_start "$@"; exit $? ;;
   run) shift; cmd_run "$@"; exit $? ;;
   scan) shift; cmd_scan "$@"; exit $? ;;
   mr) shift; cmd_mr "$@"; exit $? ;;

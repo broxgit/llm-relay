@@ -10,7 +10,7 @@ Check that your company allows your code in OneDrive and through its tenant befo
 
 ## Install
 
-You need git and bash, which macOS has, and OneDrive syncing a work or school account. `relay mr` also needs `glab` and `python3`.
+You need git and bash, which macOS has, and OneDrive syncing a work or school account. `relay mr` also needs `glab` and `python3`. `relay start` says what each thing needs and how to get it.
 
 With [Homebrew](https://brew.sh):
 
@@ -19,12 +19,12 @@ brew install broxgit/tap/llm-relay
 ```
 
 ```bash
-relay setup
+relay start
 ```
 
-`relay setup` copies a skill called `remote-pair-run` to `Documents/Cowork/skills` in your OneDrive, and asks where your clones and reviews live. Cowork finds the skill when a new session starts.
+`relay start` is the one command to begin with. It copies the relay's skills to `Documents/Cowork/skills` in your OneDrive, says what this Mac is set up for, and puts a prompt for Cowork on your clipboard. Paste it into a new Cowork session, and Cowork takes it from there, one step at a time. `relay setup` is where you say where your clones and reviews live.
 
-To update, upgrade and run setup again. The relay tells you when Cowork's copy of the skill isn't its own. Give Cowork 10 minutes before a new session, because its copy can lag. Homebrew doesn't check a tap for a new version on every command, so without `brew update` it can say the old version is already installed.
+To update, upgrade and run setup again. `relay start` puts a stale skill right too. The relay tells you when Cowork's copy of the skill isn't its own. Give Cowork 10 minutes before a new session, because its copy can lag. Homebrew doesn't check a tap for a new version on every command, so without `brew update` it can say the old version is already installed.
 
 ```bash
 brew update && brew upgrade llm-relay && relay setup
@@ -58,6 +58,8 @@ To update a clone, run `git pull` in it and `relay setup` again.
 
 ## Use it
 
+Start with `relay start`, and Cowork gives you each command as you need it. These are the commands it gives, if you'd sooner run them yourself.
+
 Share your code, then tell Cowork what it prints:
 
 ```bash
@@ -74,6 +76,7 @@ It waits for OneDrive, shows you what's there, and runs it when you press `y`. T
 
 | Command | What it does |
 |---|---|
+| `relay start` | The one command to begin with. Gets Cowork the skills, says what this Mac is set up for, and puts a prompt on your clipboard. |
 | `relay setup` | Installs or updates the skill, and records where your clones and reviews are. With `--skills`, copies your own Claude skills to Cowork too, adapted. |
 | `relay skills` | Says whether Cowork's copy of each of your skills is still in step with yours. |
 | `relay field-test` | Starts a test that Cowork guides you through, step by step, and reports on. |

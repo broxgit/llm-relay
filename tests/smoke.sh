@@ -1670,6 +1670,17 @@ check "really left alone" grep -q 'By hand, in OneDrive' "$KC/handmade/SKILL.md"
 expect "setup says how to compare it with yours" "diff -r \"$KS/handmade\" \"$KC/handmade\"" ks --skills review:plain:handmade
 expect "and where Cowork-only text goes" "COWORK.md" ks --skills review:plain:handmade
 expect "and that your own skill goes over whatever you choose" "Your own skill's text goes to Cowork whatever you do here" ks --skills review:plain:handmade
+# macOS can refuse one terminal app a file in OneDrive. A copy that can't be read was once
+# reported as made by hand, which it wasn't. Seen in a note made from iTerm on 2026-11-06.
+if [ "$(id -u)" != 0 ]; then
+  chmod 000 "$KC/plain/SKILL.md"
+  out="$(kk)"
+  case "$out" in *"plain: this terminal app can't read Cowork's copy, so the relay can't say where it stands."*) ok "a copy that can't be read is called that, not made by hand" ;; *) bad "a copy that can't be read is called that, not made by hand" "$out" ;; esac
+  case "$out" in *"plain: Cowork's folder has a skill of that name, which the relay didn't make"*) bad "and never the relay didn't make it" "$out" ;; *) ok "and never the relay didn't make it" ;; esac
+  out="$(ks --skills review:plain:handmade)"
+  case "$out" in *"skill plain: this terminal app can't read Cowork's copy, so it's left as it is."*) ok "setup leaves a copy it can't read as it is, and says why" ;; *) bad "setup leaves a copy it can't read as it is, and says why" "$out" ;; esac
+  chmod 644 "$KC/plain/SKILL.md"
+fi
 out="$(kscan)"
 case "$out" in *"skill handmade: Cowork's folder already has a skill of that name"*"relay setup says what to do"*) ok "a scan warns in one line and points at setup" ;; *) bad "a scan warns in one line and points at setup" "$out" ;; esac
 case "$out" in *"diff -r"*) bad "a scan doesn't give the steps" "$out" ;; *) ok "a scan doesn't give the steps" ;; esac
@@ -1871,6 +1882,138 @@ check "the note says a hand-made skill is one, in plain words" grep -q "^  byhan
 refuse "the note still holds no path from this Mac" grep -q -e "$T" -e "$FH" -e "$HOME" -e '/Users/' -e '/home/' "$FN"
 env HOME="$FH" "$W" --dir "$FO" field-test --clean >/dev/null 2>&1
 
+section "Starting with relay start"
+# One command to begin with: it gets Cowork the skills, says what the Mac is set up for, and
+# hands over a prompt. A teammate shouldn't need to know any other command to begin.
+GH="$T/start-home"
+GO="$T/start-onedrive"
+mkdir -p "$GH" "$GO"
+# shellcheck disable=SC2120
+gs() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM="${GS_TERM:-Apple_Terminal}" "$W" --dir "$GO" start "$@" 2>&1; }
+rm -f "$T/clipboard"
+out="$(gs)"; rc=$?
+case "$rc:$out" in 0:"relay $("$W" --version | sed 's/^relay //')"*"What you can do on this Mac:"*"Change code with Cowork"*"A prompt for Cowork is on your clipboard."*) ok "relay start says which relay, what the Mac can do, and that a prompt is ready" ;; *) bad "relay start says which relay, what the Mac can do, and that a prompt is ready" "$out" ;; esac
+check "it installs the relay's skills when Cowork has none" test -f "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md" -a -f "$GO/Documents/Cowork/skills/relay-field-test/SKILL.md"
+case "$out" in *"Cowork takes up to 10 minutes to see its new skills."*"Next: at "[0-2][0-9]:[0-5][0-9]", open a new Cowork session and paste it."*) ok "and says when to start, by the clock" ;; *) bad "and says when to start, by the clock" "$out" ;; esac
+check "the prompt is on the clipboard" grep -q "Use remote-pair-run. I've just run relay start. With nothing attached, read Documents/Cowork/relay/start/note.txt" "$T/clipboard"
+GN="$GO/Documents/Cowork/relay/start/note.txt"
+check "the note says which relay" grep -q "^relay: $("$W" --version | sed 's/^relay //')\$" "$GN"
+check "and which runlib" grep -q '^runlib: [0-9][0-9]*$' "$GN"
+check "and that the skills were installed just now" grep -q "^the relay's own skills in Cowork's folder: this relay's, installed just now\$" "$GN"
+check "and that nothing has run here yet" grep -q '^runs on this Mac so far: 0$' "$GN"
+check "and what the Mac is set up for" grep -q '^  Change code with Cowork  *ready$' "$GN"
+refuse "the note holds no path from this Mac" grep -q -e "$T" -e "$GH" -e "$HOME" -e '/Users/' -e '/home/' "$GN"
+out="$(gs)"
+case "$out" in *"takes up to 10 minutes"* | *"Next: at "*) bad "a second start has nothing to wait for" "$out" ;; *"Next: open a new Cowork session and paste it."*) ok "a second start has nothing to wait for" ;; *) bad "a second start has nothing to wait for" "$out" ;; esac
+check "and its note doesn't say the skills are new" grep -q "^the relay's own skills in Cowork's folder: this relay's\$" "$GN"
+case "$out" in *"not Apple's Terminal"*) bad "in Apple's Terminal it says nothing about terminal apps" "$out" ;; *) ok "in Apple's Terminal it says nothing about terminal apps" ;; esac
+out="$(GS_TERM=iTerm.app gs)"
+case "$out" in *"This is iTerm.app, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply"*) ok "in another terminal app it says to use Apple's Terminal" ;; *) bad "in another terminal app it says to use Apple's Terminal" "$out" ;; esac
+# After an upgrade Cowork's copy is the old relay's. start puts that right, where scan and mr only say so.
+echo '# an older skill' >"$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
+out="$(gs)"
+case "$out" in *"Cowork takes up to 10 minutes to see its new skills."*) ok "a stale copy of the relay's skill is replaced, and start says to wait" ;; *) bad "a stale copy of the relay's skill is replaced, and start says to wait" "$out" ;; esac
+check "really replaced" cmp -s "$REPO/cowork/remote-pair-run/SKILL.md" "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
+refuse "start takes no arguments" gs extra
+# A copy this terminal app can't read isn't a stale one, and isn't written over.
+if [ "$(id -u)" != 0 ]; then
+  chmod 000 "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
+  out="$(gs)"
+  case "$out" in *"This terminal app can't read Cowork's copy of the relay's skills"*"Try Apple's Terminal."*) ok "start says when it can't read Cowork's copy of its skills" ;; *) bad "start says when it can't read Cowork's copy of its skills" "$out" ;; esac
+  case "$out" in *"takes up to 10 minutes"*) bad "and doesn't write over what it couldn't read" "$out" ;; *) ok "and doesn't write over what it couldn't read" ;; esac
+  check "the note says so too" grep -q "^the relay's own skills in Cowork's folder: unreadable from this terminal app\$" "$GN"
+  chmod 644 "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
+fi
+# What a feature needs is said before it's needed, and again when it's missing.
+NO_GLAB=""
+OLD_IFS="$IFS"
+IFS=:
+for d in $PATH; do
+  [ -x "$d/glab" ] || NO_GLAB="$NO_GLAB${NO_GLAB:+:}$d"
+done
+IFS="$OLD_IFS"
+out="$(env HOME="$GH" PATH="$NO_GLAB" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" start 2>&1)"
+case "$out" in *"Review a merge request"*"needs glab: brew install glab, then sign in with: glab auth login"*) ok "start says what a missing tool is for, and how to get it" ;; *) bad "start says what a missing tool is for, and how to get it" "$out" ;; esac
+check "and so does the note, for Cowork" grep -q 'needs glab: brew install glab' "$GN"
+out="$(env HOME="$GH" PATH="$NO_GLAB" "$W" --dir "$GO" mr https://gitlab.com/team/svc/-/merge_requests/7 </dev/null 2>&1)"
+case "$out" in *"relay mr needs glab: brew install glab, then sign in with: glab auth login"*) ok "relay mr says how to get glab when it's missing" ;; *) bad "relay mr says how to get glab when it's missing" "$out" ;; esac
+out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clones "$T/start-clones" </dev/null 2>&1)"
+case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
+out="$(gs)"
+case "$out" in *"Clones are looked for under $T/start-clones, and reviews are saved under $T/start-reviews."*) ok "start says where clones and reviews are" ;; *) bad "start says where clones and reviews are" "$out" ;; esac
+# A scan at a terminal puts what to tell Cowork on the clipboard, and two in a row add up.
+GR1="$T/start-repo-one"
+GR2="$T/start-repo-two"
+for r in "$GR1" "$GR2"; do
+  mkdir -p "$r"
+  git -C "$r" init -q
+  echo one >"$r/a.txt"
+  git -C "$r" add -A
+  git -C "$r" commit -qm one
+done
+gk() { env HOME="$GH" PATH="$FB:$PATH" python3 "$TTY" "" "$W" --dir "$GO" scan "$@" 2>&1; }
+rm -f "$T/clipboard"
+out="$(gk "$GR1")"
+case "$out" in *"That's on your clipboard to paste"*) ok "a scan at a terminal says its line is on the clipboard" ;; *) bad "a scan at a terminal says its line is on the clipboard" "$out" ;; esac
+check "the clipboard names the scan's note" grep -qx -- '- Documents/Cowork/relay/scans/start-repo-one.txt' "$T/clipboard"
+gk "$GR2" >/dev/null
+check "a second scan adds its note" grep -qx -- '- Documents/Cowork/relay/scans/start-repo-two.txt' "$T/clipboard"
+check "and keeps the first" grep -qx -- '- Documents/Cowork/relay/scans/start-repo-one.txt' "$T/clipboard"
+check "under one line that says what to do" grep -qx 'With nothing attached, read these from my OneDrive:' "$T/clipboard"
+gk "$GR2" >/dev/null
+[ "$(grep -c 'start-repo-two' "$T/clipboard")" = 1 ] && ok "scanning the same repository again doesn't list it twice" || bad "scanning the same repository again doesn't list it twice" "$(cat "$T/clipboard")"
+rm -f "$T/clipboard"
+env HOME="$GH" PATH="$FB:$PATH" "$W" --dir "$GO" scan "$GR1" </dev/null >/dev/null 2>&1
+check "a scan with no terminal leaves the clipboard alone" test ! -e "$T/clipboard"
+# The skill's side of it.
+check "the everyday skill says which relay it's for" grep -q "^This skill is for relay $("$W" --version | sed 's/^relay //')\\.\$" "$SK/SKILL.md"
+check "it has a section for a session that begins with relay start" grep -q '^## When the user starts with `relay start`$' "$SK/SKILL.md"
+check "it reads the note relay start writes" grep -q 'Documents/Cowork/relay/start/note.txt' "$SK/SKILL.md"
+check "it stops when its copy is stale" grep -q 'your copy is stale, and what you hand over could be wrong' "$SK/SKILL.md"
+check "it asks one question" grep -q 'Ask one thing: "What are you working on?"' "$SK/SKILL.md"
+check "it gives each step as a block" grep -q '^## 🔴 YOUR TURN$' "$SK/SKILL.md"
+# The questions the skill says the relay asks have to be the ones it asks.
+for q in 'Run it?' 'Save it?' 'Apply it, uncommitted?'; do
+  if grep -qF -- "\`$q\`" "$SK/SKILL.md" && grep -qF -- "$q" "$W"; then ok "the skill names a question the relay asks: $q"; else bad "the skill names a question the relay asks: $q"; fi
+done
+# The note's lines the skill reads have to be the ones relay start writes.
+for line in 'relay: ' 'runlib: ' 'runs on this Mac so far: '; do
+  if grep -qF -- "\`${line% }" "$SK/SKILL.md" && grep -qF -- "$line" "$GN"; then ok "the skill reads a line the note has: $line"; else bad "the skill reads a line the note has: $line"; fi
+done
+
+# The guided way in has to keep up with the relay. These fail when a command or a tool is added
+# and the guide doesn't know it yet.
+GUIDE="$(sed -n '/^## When the user starts with `relay start`$/,/^## How to give the user a step$/p' "$SK/SKILL.md")"
+FEATURE_LIST="$(sed -n '/^FEATURES="/,/"$/p' "$W" | sed 's/^FEATURES="//; s/"$//')"
+[ -n "$GUIDE" ] && [ -n "$FEATURE_LIST" ] && ok "the guide and the list of features can be read" || bad "the guide and the list of features can be read"
+while IFS='|' read -r what tools begins; do
+  [ -n "$what" ] || continue
+  case "$GUIDE" in *"\`relay $begins\`"*) ok "the guide says when to give the command that begins: $what" ;; *) bad "the guide says when to give the command that begins: $what" "relay $begins isn't in the skill's starting section" ;; esac
+  for t in $tools; do
+    if grep -q "^    $t) echo " "$W"; then ok "there's a line on how to get $t, for: $what"; else bad "there's a line on how to get $t, for: $what"; fi
+  done
+done <<EOF
+$FEATURE_LIST
+EOF
+# A tool a command can't do without has to be in that list, so start and setup say so first.
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  if printf '%s\n' "$FEATURE_LIST" | cut -d'|' -f2 | tr ' ' '\n' | grep -qx -- "$t"; then ok "a tool a command stops without is in the list of features: $t"; else bad "a tool a command stops without is in the list of features: $t"; fi
+done <<EOF
+$(grep -o 'needs_tool [a-z-]* [a-z0-9]*' "$W" | awk '{ print $3 }' | LC_ALL=C sort -u)
+EOF
+# Every command is one Cowork can hand over, so the skill names it, or one a person runs on
+# their own, which this list holds. A new command has to go in one or the other.
+ON_YOUR_OWN=" start setup skills field-test completion "
+while IFS= read -r c; do
+  case "$c" in '' | --*) continue ;; esac
+  case "$ON_YOUR_OWN" in *" $c "*) ok "a command a person runs on their own: $c"; continue ;; esac
+  if grep -qF -- "relay $c" "$SK/SKILL.md"; then ok "the skill can hand over: relay $c"; else bad "the skill can hand over: relay $c" "a new command has to be in the skill, or in ON_YOUR_OWN in this test"; fi
+  if "$W" --help 2>&1 | grep -q "relay .*$c"; then ok "relay --help has: $c"; else bad "relay --help has: $c"; fi
+done <<EOF
+$("$W" __complete 1 "")
+EOF
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"
@@ -1955,6 +2098,7 @@ expect "setup completes its flags" "--clones" "$W" __complete 2 setup ""
 expect "with the ones for skills" "--skills-from" "$W" __complete 2 setup ""
 expect "--skills-from completes a folder" "__dirs__" "$W" __complete 3 setup --skills-from ""
 expect "completion knows skills" "skills" "$W" __complete 1 ""
+expect "and start" "start" "$W" __complete 1 ""
 expect "and field-test" "field-test" "$W" __complete 1 ""
 expect "field-test completes --clean" "--clean" "$W" __complete 2 field-test ""
 expect "--also completes a folder" "__dirs__" "$W" __complete 3 mr --also ""

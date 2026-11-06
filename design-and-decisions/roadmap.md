@@ -24,7 +24,7 @@ Phase 1 goes first so the real run exercises the final prompt. If phase 2 turns 
 
 Added on 2026-11-06. The relay was built for one person who knows it well. It is now meant for the developers on Brock's team too, of varying skill levels, and they shouldn't need to know its commands or its unwritten rules.
 
-Three pieces, in this order. They come after phase 2's report is read and its failures are fixed, and before phase 3 and the steps of [leverage.md](leverage.md) that aren't built. None has a design yet.
+Three pieces, in this order. They come after phase 2's report is read and its failures are fixed, and before phase 3 and the steps of [leverage.md](leverage.md) that aren't built. [guided.md](guided.md) has the design. A and B are built, as 0.2.5. Of C, the starting question and the short block are built, and the practice round is not. None of it has run with real Cowork.
 
 | # | Piece | What it does | Waits on |
 |---|---|---|---|
@@ -68,4 +68,5 @@ The first two are answered, and phase 1 was built on them. The rest can wait unt
 - 2026-11-05: `relay mr --checks` stays, as the one exception to the keypress rule.
 - 2026-11-06: the relay is for Brock's team too, so each feature gets guided. The team-use pieces wait for phase 2's report.
 - 2026-11-06: a feature that depends on a tool tells the user so. Depending on a Jira command-line tool is fine.
+- 2026-11-06: design and build the guided way in. [guided.md](guided.md) has what was built and why.
 - 2026-11-06: phase 2's report came back. The repository's [ROADMAP.md](../ROADMAP.md) has what passed, what 0.2.2 fixed, and what is still open. Three of its answers bear on what comes next: Cowork can't read Jira or Confluence and the Mac has `jira` and `acli`, a Go module with vendored dependencies builds in Cowork's sandbox, and Teams offered no way to make a webhook.

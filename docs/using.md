@@ -2,6 +2,22 @@
 
 Cowork can't reach your files or run your build, but it can still change your code. It publishes a folder to OneDrive, you run one command, and the report goes back. Check that your company allows your code in OneDrive and through its tenant.
 
+## Start here
+
+```bash
+relay start
+```
+
+It's the only command you need to know to begin, and it's worth running at the start of any session.
+
+- **It gets Cowork the relay's skills.** If Cowork has none, or an older relay's after an upgrade, it installs them and tells you when to start, by the clock, because Cowork can take 10 minutes to see a new skill.
+- **It says what this Mac is set up for.** Each thing the relay does is listed as ready, or with the tool it needs and how to get it. A review needs `glab`, for one.
+- **It puts a prompt for Cowork on your clipboard.** Paste it into a new Cowork session. Cowork reads a short note about your setup, with no paths in it, checks that its copy of the skill is current, and asks what you're working on.
+
+From there Cowork gives you one step at a time, each in the same block: the command, what to expect if anything would surprise you, and what to tell it afterwards. If its steps drift from that, send it: `Use the YOUR TURN block format.`
+
+It asks you nothing. Where your clones and reviews live is set with `relay setup`, below.
+
 ## Setup
 
 The [README](../README.md#install) has how to install it. With OneDrive syncing, in a terminal:
@@ -29,6 +45,8 @@ relay setup --skills mr-review:simple-english
 - **It goes one way.** If Cowork changes its copy in OneDrive, nothing comes back to your Mac, and nothing overwrites the change unasked. `relay setup` shows you the difference and asks before it replaces the copy.
 - **Only what you name.** `--skills none` stops copying them and removes the copies. `--skills-from` says where your skills live, if it isn't `~/.claude/skills`. A skill of the same name that you put in Cowork's folder yourself is never touched. To hand such a skill over to the relay, move anything that's only for Cowork into a `COWORK.md` beside your skill, move the folder out of Cowork's skills folder, and run `relay setup` again.
 
+If `relay skills` or `relay setup` says a terminal app can't read Cowork's copy, the copy is left as it is. macOS can refuse one terminal app a file in OneDrive that another reads, so try Apple's Terminal.
+
 To see where things stand, without changing anything:
 
 ```bash
@@ -39,7 +57,7 @@ A skill can hold rules you wouldn't want in the company's cloud, so check what y
 
 ## Share your code
 
-Run this in the repository, then tell Cowork what it prints:
+Run this in the repository, then tell Cowork what it prints. At a terminal that line is also put on your clipboard, and scans within two minutes of each other add up there, so you can paste once for several:
 
 ```bash
 relay scan
