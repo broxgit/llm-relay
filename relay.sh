@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.5"
+RELAY_VERSION="0.2.6"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -43,6 +43,7 @@ READ_LIMIT="${RELAY_READ_LIMIT:-120}"
 CHECK_LIMIT="${RELAY_CHECK_LIMIT:-600}"
 REPORTS="${RUNLIB_REPORT_DIR:-$HOME/pair-run-reports}"
 SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-relay/settings"
+KNOWN_CLONES="$(dirname "$SETTINGS")/clones"
 # Where the settings lived when the relay was part of llm-wiki. Read, never written.
 OLD_SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-wiki/relay"
 WORK=""
@@ -1042,11 +1043,45 @@ is_clone_of() {
   [ "$u" = "$MR_HOST/$MR_PROJECT" ]
 }
 
+# remember_clone <path>: keeps where this project's clone is, one line per project, so --repo is
+# needed once at most. It never stops the command: if the file can't be written, nothing is kept.
+remember_clone() {
+  local key="$MR_HOST/$MR_PROJECT" tmp
+  mkdir -p "$(dirname "$KNOWN_CLONES")" 2>/dev/null || return 0
+  tmp="$KNOWN_CLONES.$$"
+  {
+    if [ -f "$KNOWN_CLONES" ]; then
+      awk -F '\t' -v k="$key" '$1 != k' "$KNOWN_CLONES"
+    fi
+    printf '%s\t%s\n' "$key" "$1"
+  } >"$tmp" 2>/dev/null && mv -f "$tmp" "$KNOWN_CLONES" 2>/dev/null
+  rm -f "$tmp" 2>/dev/null
+  return 0
+}
+
+# known_clone: prints the remembered clone of this project, if it is still a git repository's top
+# folder. One that has gone is ignored, so the search runs as if nothing was remembered.
+known_clone() {
+  local path top
+  [ -f "$KNOWN_CLONES" ] || return 1
+  path="$(awk -F '\t' -v k="$MR_HOST/$MR_PROJECT" '$1 == k { p = $2 } END { print p }' "$KNOWN_CLONES" 2>/dev/null)"
+  [ -n "$path" ] || return 1
+  top="$(git -C "$path" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [ -n "$top" ] || return 1
+  printf '%s' "$path"
+}
+
+# find_clone: the clone of this project. The folder you are in first, then the one the relay
+# remembers, then a search under the folders in the clones setting.
 find_clone() {
-  local root d here
+  local root d here known
   here="$(git rev-parse --show-toplevel 2>/dev/null)" || here=""
   if [ -n "$here" ] && is_clone_of "$here"; then
     printf '%s' "$here"
+    return 0
+  fi
+  if known="$(known_clone)"; then
+    printf '%s' "$known"
     return 0
   fi
   while IFS= read -r root; do
@@ -1283,14 +1318,20 @@ is_yours() {
 
 # pack_mr <url> <repo override> <no-wiki flag> <go prefixes> <also notes> <checks mode>: one MR, in OneDrive.
 pack_mr() {
-  local url="$1" repo_arg="$2" no_wiki="$3" prefixes="$4" also_notes="$5" checks_mode="$6" local_line yours clone repo name ticket source target head base start commit page out n hash size dest review rp rf existing=none
+  local url="$1" repo_arg="$2" no_wiki="$3" prefixes="$4" also_notes="$5" checks_mode="$6" local_line yours clone repo name ticket source target head base start commit page out n hash size dest review rp rf prev existing=none
   parse_mr "$url"
   repo="${MR_PROJECT##*/}"
   name="$(printf '%s-%s' "$repo" "$MR_IID" | tr -c 'A-Za-z0-9._-' '-')"
   if [ -n "$repo_arg" ]; then
     clone="$(git -C "$repo_arg" rev-parse --show-toplevel 2>/dev/null)" || die "--repo: not a git repository: $repo_arg"
+    prev="$(known_clone)" || prev=""
+    remember_clone "$clone"
+    if [ "$prev" != "$clone" ]; then
+      echo "Remembered where $MR_PROJECT is, so --repo isn't needed for it next time."
+    fi
   else
-    clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Name it with --repo PATH, or add the folder that holds it to where the relay looks: relay setup --clones '$CLONES_DIRS:FOLDER'"
+    clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Name it once with --repo PATH and the relay remembers it, or add the folder that holds it to where the relay looks: relay setup --clones '$CLONES_DIRS:FOLDER'"
+    remember_clone "$clone"
   fi
 
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"

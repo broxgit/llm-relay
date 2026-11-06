@@ -17,8 +17,8 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
-- `relay start` and the skill's starting section, with real Cowork. Smoke tests only. Not known: whether Cowork reads the note, checks its copy and asks the one question with no menu, whether the lighter YOUR TURN block holds, and whether people run it each session.
-- A scan's line on the clipboard, at a real terminal with the real clipboard. Smoke tests only.
+- `relay start` over a long session, and its stop for a stale copy. It ran for real once, on 2026-11-06 at 0.2.5, and the user reported four things: Cowork read the note and asked "What are you working on?" with no menu, its steps came as the short YOUR TURN block with one command each, two scans in a row were both on the clipboard, and a second `relay start` had nothing to wait for. Not known: whether the block holds late in a long session, whether Cowork stops when its copy is stale, which that run had no reason to show, and whether people run it each session.
+- Remembered clones, since 0.2.6. Smoke tests only.
 - A skill copy that a terminal app can't read. The tests take the file's permission away, which isn't the refusal macOS gives. Whether that refusal was behind the wrong "made by hand" on 2026-11-06 isn't confirmed.
 - The secrets check, on ordinary code. It ran once for real, on 2026-11-06 at 0.2.4, on the deployment folder whose scan had carried credentials: it listed 52 places, the user pressed `n`, and nothing was sent. Not known: how often it flags something harmless in a repository that holds no secrets, what it misses, and whether people read the list or press `y`.
 - A scan sent under a longer name, and Cowork reading it. The same run named the deployment folder's scan with its parent folder in front, because the code repository's scan already had the plain name. It was never sent.
@@ -35,6 +35,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### The relay remembers where a clone is (2026-11-06)
+
+- **Why:** `relay mr` looked only under the folders in the `clones` setting. A clone kept anywhere else needed `--repo` on every review.
+- **What changed:** naming a clone once with `--repo` is enough. The relay keeps where each project's clone is, beside its settings, and looks there before it searches. A clone it finds by searching is kept the same way, so the search is paid once. A remembered folder that has gone is ignored. This is 0.2.6.
 
 ### One command to begin with (2026-11-06)
 

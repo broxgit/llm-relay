@@ -1,6 +1,6 @@
 # The guided way in
 
-**Status: Brock said to design and build it on 2026-11-06. The terminal side and the skill's side are built, as 0.2.5. The practice round is designed here and not built. None of it has run with real Cowork.** It is the "Team use" part of [roadmap.md](roadmap.md).
+**Status: Brock said to design and build it on 2026-11-06. The terminal side and the skill's side are built, as 0.2.5, and ran with real Cowork once that day: Cowork read the note, asked the one question with no menu, and gave its steps in the short block. The practice round is designed here and not built.** It is the "Team use" part of [roadmap.md](roadmap.md).
 
 The relay was built for one person who knows it well. It is now meant for the developers on his team too, of varying skill levels. They shouldn't need to know its commands or its unwritten rules to begin.
 
@@ -116,7 +116,7 @@ A new person should be able to press `y` on code that doesn't matter before thei
 - Cowork would walk one real round on it: a scan, one small change, a run with **v** and **y**, an apply, and a clean-up. About four steps, with no diagnostic report.
 - It needs a section in the skill, and it reuses `make_field_repo`.
 
-It waits until `relay start` has been tried with real Cowork, because it leans on the same block and the same note.
+It waited until `relay start` had been tried with real Cowork, because it leans on the same block and the same note. That try went well on 2026-11-06, so it can be built.
 
 ## Not here
 
@@ -125,7 +125,7 @@ It waits until `relay start` has been tried with real Cowork, because it leans o
 
 ## Not known
 
-- Whether Cowork follows the starting section: reads the note, checks its copy, and asks the one question with no menu.
-- Whether the lighter block holds as well as the test's block did.
+- Whether Cowork stops when its copy of the skill is stale. The first real run had a current copy.
+- Whether the lighter block holds late in a long session. It held in the first real run.
 - Whether people run `relay start` each session, or only once.
-- Whether writing to the clipboard on every scan is welcome.
+- Whether writing to the clipboard on every scan is welcome over weeks of use.

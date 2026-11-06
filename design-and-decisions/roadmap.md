@@ -24,7 +24,7 @@ Phase 1 goes first so the real run exercises the final prompt. If phase 2 turns 
 
 Added on 2026-11-06. The relay was built for one person who knows it well. It is now meant for the developers on Brock's team too, of varying skill levels, and they shouldn't need to know its commands or its unwritten rules.
 
-Three pieces, in this order. They come after phase 2's report is read and its failures are fixed, and before phase 3 and the steps of [leverage.md](leverage.md) that aren't built. [guided.md](guided.md) has the design. A and B are built, as 0.2.5. Of C, the starting question and the short block are built, and the practice round is not. None of it has run with real Cowork.
+Three pieces, in this order. They come after phase 2's report is read and its failures are fixed, and before phase 3 and the steps of [leverage.md](leverage.md) that aren't built. [guided.md](guided.md) has the design. A and B are built, as 0.2.5. Of C, the starting question and the short block are built, and the practice round is not. It ran with real Cowork once, on 2026-11-06, and the repository's [ROADMAP.md](../ROADMAP.md) has what that showed.
 
 | # | Piece | What it does | Waits on |
 |---|---|---|---|
