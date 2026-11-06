@@ -2154,6 +2154,116 @@ done <<EOF
 $("$W" __complete 1 "")
 EOF
 
+section "Starting from a ticket"
+# Cowork can't reach Jira or Confluence, and the Mac can, through acli. The stand-in below
+# answers in the shapes a real acli printed on 2026-11-06, on the error stream as it did.
+TA="$T/acli"
+TB="$T/acli-bin"
+TH="$T/ticket-home"
+TO="$T/ticket-onedrive"
+mkdir -p "$TA" "$TB" "$TH" "$TO"
+cat >"$TA/ABC-12.json" <<'JSON'
+{"expand":"x","key":"ABC-12","fields":{"summary":"Make the widget faster","issuetype":{"name":"Story","iconUrl":"https://x.example/i.png"},"status":{"name":"In Progress"},"priority":{"name":"High"},"labels":["perf","q4"],"assignee":{"displayName":"A Person","emailAddress":"a.person@example.com","accountId":"abc123","avatarUrls":{"48x48":"https://x.example/a.png"}},"reporter":{"displayName":"B Person","emailAddress":"b.person@example.com"},"parent":{"key":"ABC-1","fields":{"summary":"The epic"}},"created":"2026-11-01","updated":"2026-11-05","customfield_10001":null,"customfield_10002":5,"description":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Cold starts take 4 seconds. See "},{"type":"text","text":"the design","marks":[{"type":"link","attrs":{"href":"https://site.example/wiki/spaces/ENG/pages/123/Widget+design"}}]},{"type":"text","text":"."}]},{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"cache the config"}]}]}]}]},"issuelinks":[{"type":{"inward":"is blocked by","outward":"blocks"},"outwardIssue":{"key":"ABC-13","fields":{"summary":"Ship the dashboard","status":{"name":"To Do"}}}}],"attachment":[{"filename":"trace.png","size":2048}],"comment":{"comments":[{"author":{"displayName":"C Person","emailAddress":"c@example.com"},"created":"2026-11-02","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Measured on staging."}]}]}}]}}}
+JSON
+cat >"$TA/ABC-14.json" <<'JSON'
+{"key":"ABC-14","fields":{"summary":"A plain one","description":null,"comment":{"comments":[]},"issuelinks":[],"attachment":[]}}
+JSON
+cat >"$TA/ABC-15.json" <<'JSON'
+{"key":"ABC-15","fields":{"summary":"One with a secret","description":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://site.example/wiki/x/AbCd"}}]}]},"comment":{"comments":[{"author":{"displayName":"C Person"},"created":"2026-11-02","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"password: hunter2hunter2"}]}]}}]},"issuelinks":[],"attachment":[]}}
+JSON
+cat >"$TA/page-123.json" <<'JSON'
+{"id":"123","title":"Widget design","status":"current","version":{"number":7,"createdAt":"2026-10-30"},"body":{"storage":{"representation":"storage","value":"<h1>Goals</h1><p>Start in under <strong>one</strong> second.</p><ul><li>cache</li><li>lazy <a href=\"https://x.example/load\">load</a></li></ul><ac:structured-macro ac:name=\"code\"><ac:plain-text-body><![CDATA[go run ./cmd]]></ac:plain-text-body></ac:structured-macro>"}}}
+JSON
+cat >"$TB/acli" <<FAKE
+#!/bin/sh
+echo "\$*" >>"$T/acli.log"
+out() { if [ -n "\${FAKE_ACLI_STDOUT:-}" ]; then cat "\$1"; else cat "\$1" >&2; fi; }
+case "\$*" in
+  "jira workitem view ABC-12 --fields *all --json") out "$TA/ABC-12.json" ;;
+  "jira workitem view ABC-14 --fields *all --json") out "$TA/ABC-14.json" ;;
+  "jira workitem view ABC-15 --fields *all --json") out "$TA/ABC-15.json" ;;
+  "confluence page view --id 123 --json --body-format storage") out "$TA/page-123.json" ;;
+  *) echo "Error: not found" >&2; exit 1 ;;
+esac
+FAKE
+chmod +x "$TB/acli"
+# shellcheck disable=SC2120
+tk() { env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket "$@" </dev/null 2>&1; }
+TD="$TO/Documents/Cowork/relay/tickets"
+tk_unpack() { rm -rf "$T/ticket-unpack" && mkdir -p "$T/ticket-unpack" && tar -xzf "$TD/$1.tar.gz" -C "$T/ticket-unpack"; }
+rm -f "$T/clipboard"
+out="$(tk ABC-12)"; rc=$?
+case "$rc:$out" in 0:*"Packed ABC-12: comments 1, linked tickets 1, attachments 1, Confluence pages 1"*"Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt and ABC-12.tar.gz"*) ok "relay ticket packs a ticket, though acli answered on the error stream" ;; *) bad "relay ticket packs a ticket, though acli answered on the error stream" "$out" ;; esac
+check "the prompt for Cowork is on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
+check "the note names the ticket" grep -qx 'ticket: ABC-12' "$TD/ABC-12.txt"
+check "and its title" grep -qx 'title: Make the widget faster' "$TD/ABC-12.txt"
+check "and the page that came with it" grep -qx '  pages/123.md: Widget design' "$TD/ABC-12.txt"
+check "and that attachments stayed behind" grep -qx 'attachments: not sent' "$TD/ABC-12.txt"
+check "and what the secrets check found" grep -qx 'secrets check: nothing shaped like a secret was found in the ticket or its pages' "$TD/ABC-12.txt"
+check "the note's hash matches the archive" grep -q "^archive sha256: $(rl_sha "$TD/ABC-12.tar.gz")\$" "$TD/ABC-12.txt"
+tk_unpack ABC-12
+TM="$T/ticket-unpack/ticket/ticket.md"
+check "the page to read starts with the key and title" grep -qx '# ABC-12: Make the widget faster' "$TM"
+check "it has the description, with a link's address beside its words" grep -q 'See the design (https://site.example/wiki/spaces/ENG/pages/123/Widget+design)' "$TM"
+check "a list in the description stays a list" grep -qx -- '- cache the config' "$TM"
+check "it has the linked ticket, with how it's linked" grep -qx -- '- blocks ABC-13: Ship the dashboard (To Do)' "$TM"
+check "it names the attachment" grep -q 'trace.png, 2048 bytes' "$TM"
+check "it has the comment and who made it" bash -c "grep -q '^### C Person, 2026-11-02' '$TM' && grep -qx 'Measured on staging.' '$TM'"
+check "the JSON goes too" grep -q '"summary": "Make the widget faster"' "$T/ticket-unpack/ticket/ticket.json"
+refuse "without people's emails, account ids or pictures" grep -q -e '@example.com' -e accountId -e avatarUrls -e 'i.png' "$T/ticket-unpack/ticket/ticket.json"
+check "a custom field with a value is kept" grep -q 'customfield_10002' "$T/ticket-unpack/ticket/ticket.json"
+refuse "and an empty one isn't" grep -q 'customfield_10001' "$T/ticket-unpack/ticket/ticket.json"
+check "the Confluence page in the ticket's text is fetched" grep -qx '# Widget design' "$T/ticket-unpack/ticket/pages/123.md"
+check "as plain text, lists and links kept" bash -c "grep -q 'Start in under one second.' '$T/ticket-unpack/ticket/pages/123.md' && grep -q 'lazy load (https://x.example/load)' '$T/ticket-unpack/ticket/pages/123.md'"
+check "with the text of a code block" grep -q 'go run ./cmd' "$T/ticket-unpack/ticket/pages/123.md"
+check "and as Confluence keeps it, beside that" grep -q '<h1>Goals</h1>' "$T/ticket-unpack/ticket/pages/123.storage.html"
+out="$(FAKE_ACLI_STDOUT=1 tk ABC-12)"
+case "$out" in *"Packed ABC-12: comments 1"*) ok "an answer on standard output is read as well" ;; *) bad "an answer on standard output is read as well" "$out" ;; esac
+# A ticket's links to pages don't come with it, so pages are named.
+out="$(tk ABC-14)"
+case "$out" in *"Packed ABC-14: comments 0, linked tickets 0, attachments 0, Confluence pages 0"*"No Confluence page went with it."*"relay ticket ABC-14 --page ADDRESS"*) ok "with no page, it says how to name one" ;; *) bad "with no page, it says how to name one" "$out" ;; esac
+check "and the note tells Cowork to ask" grep -q '^Confluence pages: none. A ticket.s links to pages don.t come with it' "$TD/ABC-14.txt"
+tk_unpack ABC-14
+check "a ticket with no description says so" grep -qx 'There is none.' "$T/ticket-unpack/ticket/ticket.md"
+out="$(tk ABC-14 --page https://site.example/wiki/spaces/ENG/pages/123/Widget+design)"
+case "$out" in *"Confluence pages 1"*) ok "--page takes a page's address" ;; *) bad "--page takes a page's address" "$out" ;; esac
+out="$(tk ABC-14 --page 123 --page 123)"
+case "$out" in *"Confluence pages 1"*) ok "or its number, and the same page twice is one page" ;; *) bad "or its number, and the same page twice is one page" "$out" ;; esac
+out="$(tk ABC-14 --page 999 --page not-a-page)"
+case "$out" in *"Confluence pages 0"*"2 pages couldn't be read. The note says which."*) ok "a page that can't be read is said, and the ticket still goes" ;; *) bad "a page that can't be read is said, and the ticket still goes" "$out" ;; esac
+check "the note says which page" grep -q "^  page 999: acli couldn't read it, so it isn't here\$" "$TD/ABC-14.txt"
+# Tickets can hold credentials, so the secrets check reads them too.
+rm -f "$TD/ABC-15.txt"
+out="$(tk ABC-15)"; rc=$?
+case "$rc:$out" in 0:*) bad "a ticket that looks like it holds a secret isn't sent with no terminal" "$out" ;; *"ticket ABC-15 has places that look like they hold secrets"*"ticket.md:"*"a line that looks like it sets a password or key"*"It reads the ticket and its pages as they are now."*"needs a terminal"*) ok "a ticket that looks like it holds a secret isn't sent with no terminal" ;; *) bad "a ticket that looks like it holds a secret isn't sent with no terminal" "$out" ;; esac
+case "$out" in *hunter2*) bad "and the secret isn't printed" "$out" ;; *) ok "and the secret isn't printed" ;; esac
+check "nothing reached OneDrive" test ! -e "$TD/ABC-15.txt"
+out="$(env HOME="$TH" PATH="$TB:$FB:$PATH" python3 "$TTY" y "$W" --dir "$TO" ticket ABC-15 2>&1)"
+case "$out" in *"Send ticket ABC-15 to OneDrive anyway? [y]es, [n]o: "*"Packed ABC-15"*) ok "at a terminal it asks, and y sends it" ;; *) bad "at a terminal it asks, and y sends it" "$out" ;; esac
+check "a short Confluence address is said to need a full one" grep -q 'short Confluence addresses, which can.t be turned into pages from here' "$TD/ABC-15.txt"
+out="$(tk ZZZ-9)"; rc=$?
+case "$rc:$out" in 0:*) bad "a ticket acli can't read says what acli said" "$out" ;; *"acli couldn't read ZZZ-9: Error: not found. Check that you're signed in: acli auth status"*) ok "a ticket acli can't read says what acli said" ;; *) bad "a ticket acli can't read says what acli said" "$out" ;; esac
+refuse "relay ticket needs a key" tk
+out="$(tk 'not a key')"
+case "$out" in *"that doesn't look like a ticket's key"*) ok "something that isn't a key is refused" ;; *) bad "something that isn't a key is refused" "$out" ;; esac
+refuse "one ticket at a time" tk ABC-12 ABC-14
+NO_ACLI=""
+OLD_IFS="$IFS"
+IFS=:
+for d in $PATH; do
+  [ -x "$d/acli" ] || NO_ACLI="$NO_ACLI${NO_ACLI:+:}$d"
+done
+IFS="$OLD_IFS"
+out="$(env HOME="$TH" PATH="$NO_ACLI" "$W" --dir "$TO" ticket ABC-12 </dev/null 2>&1)"
+case "$out" in *"relay ticket needs acli: brew tap atlassian/homebrew-acli && brew install acli, then sign in with: acli auth login"*) ok "with no acli it says how to get it and sign in" ;; *) bad "with no acli it says how to get it and sign in" "$out" ;; esac
+refuse "nothing in the relay asks for or reads a token" grep -n -i -e 'API_TOKEN' -e 'api token' -e '--token' "$W"
+check "the skill has a section on starting from a ticket" grep -q '^## Starting from a ticket$' "$SK/SKILL.md"
+# What the skill says is in the archive has to be what the relay puts there.
+for f in 'ticket/ticket.md' 'ticket/ticket.json' 'ticket/pages/'; do
+  if grep -qF -- "\`$f" "$SK/SKILL.md" && [ -e "$T/ticket-unpack/${f%/}" ] || [ "$f" = 'ticket/pages/' ]; then ok "the skill names a file the archive has: $f"; else bad "the skill names a file the archive has: $f"; fi
+done
+check "the skill tells Cowork to ask for a page it needs" grep -q 'the same `relay ticket` command with `--page`' "$SK/SKILL.md"
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"
@@ -2241,6 +2351,8 @@ expect "--skills-from completes a folder" "__dirs__" "$W" __complete 3 setup --s
 expect "completion knows skills" "skills" "$W" __complete 1 ""
 expect "and start" "start" "$W" __complete 1 ""
 expect "and practice" "practice" "$W" __complete 1 ""
+expect "and ticket" "ticket" "$W" __complete 1 ""
+expect "ticket completes --page" "--page" "$W" __complete 2 ticket ""
 expect "practice completes --clean" "--clean" "$W" __complete 2 practice ""
 expect "scan completes --ask" "--ask" "$W" __complete 2 scan ""
 expect "and field-test" "field-test" "$W" __complete 1 ""

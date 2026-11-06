@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.8"
+RELAY_VERSION="0.2.9"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -101,6 +101,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
        relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
+       relay [--dir ONEDRIVE_FOLDER] ticket KEY [--page NUMBER_OR_ADDRESS]... [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
@@ -134,6 +135,12 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          --branch NAME scans that branch instead, as origin has it after a fetch, or your
          local copy if origin doesn't have it. Your checkout isn't touched, and uncommitted
          changes stay out.
+  ticket Fetches a Jira ticket with acli, Atlassian's own tool, and puts it in OneDrive for
+         Cowork to start from: its description, comments, linked tickets and the names of
+         its attachments, as a page to read and as JSON. --page adds a Confluence page, by
+         the number in its address or the address itself, as many times as you like. A
+         ticket's links to pages don't come with it, so name the ones that matter. It asks
+         before sending anything that looks like a secret, and puts a prompt on the clipboard.
   mr     Fetches a GitLab merge request with glab, and puts it in OneDrive for Cowork to review:
          its discussions and diff, its source and target branches, the libraries its go.mod
          pins, your earlier review if there is one, and its wiki. It only fetches in your
@@ -711,7 +718,7 @@ secrets_keep() {
   return 0
 }
 
-# secrets_gate <what is being sent> <file of places> <what it is on this Mac>: asks before sending something that looks
+# secrets_gate <what is being sent> <file of places> <what it is on this Mac> [what was read]: asks before sending something that looks
 # like it holds secrets, and sets SECRETS_LINE for the note. False means the user said no.
 secrets_gate() {
   local label="$1" found="$2" key="${3:-}" n mark="" before=""
@@ -734,7 +741,7 @@ secrets_gate() {
     echo "Before anything is sent: $label has places that look like they hold secrets. This many: $n"
     head -n 12 "$found" | sed 's/^/  /'
     [ "$n" -le 12 ] || echo "  and $((n - 12)) more"
-    echo "This goes by shape, so it can be wrong either way. It reads the files at the commit being sent, and not the history, which goes too."
+    echo "This goes by shape, so it can be wrong either way. ${4:-It reads the files at the commit being sent, and not the history, which goes too.}"
     [ -z "$before" ] || [ "$mark" = "$before" ] || echo "What it found has changed since you last said to send this."
   } >&2
   [ "$AT_TERMINAL" = yes ] || die "relay asks before it sends anything that looks like a secret, so it needs a terminal. Agents: tell the user to run it."
@@ -1949,6 +1956,316 @@ EOF
   git -C "$root" status --short
 }
 
+# ---- ticket ------------------------------------------------------------------
+
+# relay ticket: most work starts from a ticket, and Cowork can't reach Jira or Confluence. This
+# Mac can, through acli, Atlassian's own tool, which signs in through the browser, so the relay
+# never sees a token. Jira shows a ticket's linked Confluence pages, and keeps them as remote
+# links, which acli returns neither with the ticket nor with its links. So pages are named with
+# --page. An address in the ticket's own text is found too.
+
+# acli_json <output file> <acli arguments...>: runs acli and keeps its answer if it is JSON. acli
+# has written its answer to standard output and to the error stream, so each is read on its own.
+acli_json() {
+  local out="$1" a
+  shift
+  acli "$@" >"$out.1" 2>"$out.2" </dev/null
+  for a in "$out.1" "$out.2"; do
+    if python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "$a" 2>/dev/null; then
+      mv "$a" "$out"
+      rm -f "$out.1" "$out.2"
+      return 0
+    fi
+  done
+  # What it said, for the message. Never the token or anything typed.
+  ACLI_SAID="$(cat "$out.2" "$out.1" 2>/dev/null | grep -v '^[[:space:]]*$' | head -n 1 | cut -c 1-200)"
+  rm -f "$out.1" "$out.2"
+  return 1
+}
+
+# ticket_render <raw ticket JSON> <folder>: writes ticket.md, for reading, and ticket.json, with
+# people's emails, account ids and picture addresses taken out. Prints one line of counts, then
+# a "page ID" line for each Confluence page the ticket's text gives the address of, and "short"
+# for each short address, which can't be turned into a page from here.
+ticket_render() {
+  python3 - "$1" "$2" <<'PY'
+import json, os, re, sys
+raw, out = sys.argv[1], sys.argv[2]
+d = json.load(open(raw))
+DROP = {"avatarUrls", "emailAddress", "accountId", "accountType", "self", "timeZone", "iconUrl", "avatarId", "expand", "editmeta", "changelog"}
+def slim(v):
+    if isinstance(v, dict):
+        return {k: slim(x) for k, x in v.items() if k not in DROP and not (k.startswith("customfield_") and x is None)}
+    if isinstance(v, list):
+        return [slim(x) for x in v]
+    return v
+def text(n, depth=0):
+    if n is None:
+        return ""
+    if isinstance(n, str):
+        return n
+    if isinstance(n, list):
+        return "".join(text(x, depth) for x in n)
+    t, c, a = n.get("type"), n.get("content") or [], n.get("attrs") or {}
+    if t == "text":
+        s = n.get("text", "")
+        for m in n.get("marks") or []:
+            href = (m.get("attrs") or {}).get("href", "")
+            if m.get("type") == "link" and href and href != s:
+                s = "%s (%s)" % (s, href)
+        return s
+    if t in ("inlineCard", "blockCard", "embedCard"):
+        return a.get("url", "")
+    if t == "mention":
+        return a.get("text", "@someone")
+    if t == "emoji":
+        return a.get("text", "") or a.get("shortName", "")
+    if t == "hardBreak":
+        return "\n"
+    if t == "paragraph":
+        return text(c, depth) + "\n\n"
+    if t == "heading":
+        return "**" + text(c, depth).strip() + "**\n\n"
+    if t == "codeBlock":
+        return "```\n" + text(c, depth) + "\n```\n\n"
+    if t in ("bulletList", "orderedList"):
+        return "".join("  " * depth + "- " + text(i.get("content") or [], depth + 1).strip() + "\n" for i in c) + ("\n" if depth == 0 else "")
+    if t == "rule":
+        return "---\n\n"
+    if t == "tableRow":
+        return " | ".join(text(x, depth).strip() for x in c) + "\n"
+    return text(c, depth)
+def who(v):
+    return (v or {}).get("displayName") or "nobody"
+def named(v):
+    return (v or {}).get("name") or "none"
+f = d.get("fields") or {}
+key = d.get("key") or "the ticket"
+lines = ["# %s: %s" % (key, f.get("summary") or ""), ""]
+lines += ["- type: " + named(f.get("issuetype")), "- status: " + named(f.get("status")), "- priority: " + named(f.get("priority"))]
+lines += ["- assignee: " + who(f.get("assignee")), "- reporter: " + who(f.get("reporter"))]
+if f.get("labels"):
+    lines.append("- labels: " + ", ".join(str(x) for x in f["labels"]))
+p = f.get("parent") or {}
+if p.get("key"):
+    lines.append("- parent: %s, %s" % (p["key"], (p.get("fields") or {}).get("summary") or ""))
+lines += ["- created: %s" % (f.get("created") or "unknown"), "- updated: %s" % (f.get("updated") or "unknown"), ""]
+lines += ["## Description", "", text(f.get("description")).strip() or "There is none.", ""]
+links = f.get("issuelinks") or []
+if links:
+    lines += ["## Linked tickets", ""]
+    for l in links:
+        ty = l.get("type") or {}
+        for side, word in (("outwardIssue", ty.get("outward")), ("inwardIssue", ty.get("inward"))):
+            o = l.get(side)
+            if o:
+                of = o.get("fields") or {}
+                lines.append("- %s %s: %s (%s)" % (word or "linked to", o.get("key"), of.get("summary") or "", named(of.get("status"))))
+    lines.append("")
+att = f.get("attachment") or []
+if att:
+    lines += ["## Attachments, which are not in this archive", ""]
+    lines += ["- %s, %s bytes" % (a.get("filename"), a.get("size")) for a in att]
+    lines.append("")
+comments = (f.get("comment") or {}).get("comments") or []
+lines += ["## Comments: %d" % len(comments), ""]
+for c in comments:
+    lines += ["### %s, %s" % (who(c.get("author")), c.get("created") or ""), "", text(c.get("body")).strip(), ""]
+md = "\n".join(lines).rstrip() + "\n"
+os.makedirs(out, exist_ok=True)
+open(os.path.join(out, "ticket.md"), "w").write(md)
+json.dump(slim(d), open(os.path.join(out, "ticket.json"), "w"), indent=1, sort_keys=True)
+print("comments %d, linked tickets %d, attachments %d" % (len(comments), len(links), len(att)))
+seen = []
+for i in re.findall(r"/wiki/[^\s)\"']*?/pages/(\d+)", md) + re.findall(r"[?&]pageId=(\d+)", md):
+    if i not in seen:
+        seen.append(i)
+        print("page", i)
+for _ in set(re.findall(r"/wiki/x/[\w-]+", md)):
+    print("short")
+PY
+}
+
+# page_render <raw page JSON> <folder>: writes ID.md, the page as plain text under its title, and
+# ID.storage.html, the page as Confluence keeps it. Prints the page's title.
+page_render() {
+  python3 - "$1" "$2" <<'PY'
+import html.parser, json, os, re, sys
+d = json.load(open(sys.argv[1]))
+out = sys.argv[2]
+body = ((d.get("body") or {}).get("storage") or {}).get("value") or ""
+BLOCK = {"p", "div", "br", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "pre", "blockquote"}
+class Plain(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts, self.href = [], []
+    def handle_starttag(self, tag, attrs):
+        if tag == "li":
+            self.parts.append("\n- ")
+        elif tag in ("td", "th"):
+            self.parts.append(" | ")
+        elif tag in BLOCK:
+            self.parts.append("\n")
+        if tag == "a":
+            self.href.append(dict(attrs).get("href") or "")
+    def handle_endtag(self, tag):
+        if tag == "a" and self.href:
+            h = self.href.pop()
+            if h:
+                self.parts.append(" (%s)" % h)
+        elif tag in BLOCK:
+            self.parts.append("\n")
+    def handle_data(self, data):
+        self.parts.append(data)
+    def unknown_decl(self, data):
+        if data.startswith("CDATA["):
+            self.parts.append(data[6:])
+p = Plain()
+p.feed(body)
+plain = re.sub(r"\n[ \t]*\n[\s]*", "\n\n", "".join(p.parts)).strip()
+i = str(d.get("id") or "page")
+title = d.get("title") or "untitled"
+v = (d.get("version") or {})
+os.makedirs(out, exist_ok=True)
+open(os.path.join(out, i + ".md"), "w").write("# %s\n\nConfluence page %s, version %s, of %s.\n\n%s\n" % (title, i, v.get("number", "unknown"), v.get("createdAt", "an unknown date"), plain or "The page is empty."))
+open(os.path.join(out, i + ".storage.html"), "w").write(body)
+print(title)
+PY
+}
+
+# secret_places_in <folder>: as secret_places, for files that aren't in git. The ticket's JSON is
+# left out, since ticket.md says the same things once.
+secret_places_in() {
+  local dir="$1"
+  (
+    cd "$dir" || exit 0
+    grep -rnI -E --exclude=ticket.json -e "$SECRET_KEY_BLOCK" . 2>/dev/null | sed -n 's|^\./\([^:]*\):\([0-9][0-9]*\):.*|\1:\2: a private key|p'
+    grep -rnI -E --exclude=ticket.json -e "$SECRET_TOKENS" . 2>/dev/null | sed -n 's|^\./\([^:]*\):\([0-9][0-9]*\):.*|\1:\2: text shaped like an access token|p'
+    grep -rnI -i -E --exclude=ticket.json --exclude='*.html' -e "$SECRET_SETS" . 2>/dev/null | grep -v -i -E -e "$SECRET_NOT" |
+      sed -n 's|^\./\([^:]*\):\([0-9][0-9]*\):.*|\1:\2: a line that looks like it sets a password or key|p'
+  )
+}
+
+cmd_ticket() {
+  local key="" pages="" p id counts="" line title got=0 missed=0 short=0 hash size dest note prompt
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --page)
+        [ -n "${2:-}" ] || die "--page needs a Confluence page, as its number or its address"
+        pages="$pages$2
+"
+        shift 2
+        ;;
+      --ask) SECRETS_ASK=1; shift ;;
+      -h | --help) usage; return 0 ;;
+      -*) die "relay ticket: unknown option $1. Try relay --help" ;;
+      *)
+        [ -z "$key" ] || die "relay ticket takes one ticket. Run it again for another."
+        key="$1"
+        shift
+        ;;
+    esac
+  done
+  [ -n "$key" ] || die "relay ticket needs a ticket's key, such as ABC-123"
+  case "$key" in
+    [A-Za-z]*-[0-9]*) ;;
+    *) die "that doesn't look like a ticket's key: $key. One looks like ABC-123." ;;
+  esac
+  case "$key" in *[!A-Za-z0-9_-]*) die "that doesn't look like a ticket's key: $key. One looks like ABC-123." ;; esac
+  needs_tool ticket acli
+  needs_tool ticket python3
+  if [ -z "$SKILLS_CHECKED" ]; then
+    SKILLS_CHECKED=1
+    check_own_skill
+    sync_skills quiet
+  fi
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  trap cleanup EXIT
+  mkdir -p "$WORK/ticket/pages"
+  acli_json "$WORK/raw.json" jira workitem view "$key" --fields '*all' --json ||
+    die "acli couldn't read $key: ${ACLI_SAID:-it gave no answer}. Check that you're signed in: acli auth status"
+  counts="$(ticket_render "$WORK/raw.json" "$WORK/ticket")" || die "couldn't read what acli returned for $key"
+  # Pages the ticket's own text gives the address of, then the ones named here.
+  while IFS= read -r line; do
+    case "$line" in
+      "page "*) pages="$pages${line#page }
+" ;;
+      short) short=$((short + 1)) ;;
+    esac
+  done <<EOF
+$(printf '%s\n' "$counts" | tail -n +2)
+EOF
+  counts="$(printf '%s\n' "$counts" | head -n 1)"
+  : >"$WORK/pages.txt"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in
+      *[!0-9]*) id="$(printf '%s\n' "$p" | sed -n 's|.*/pages/\([0-9][0-9]*\).*|\1|p; s|.*[?&]pageId=\([0-9][0-9]*\).*|\1|p' | head -n 1)" ;;
+      *) id="$p" ;;
+    esac
+    if [ -z "$id" ]; then
+      echo "  one page couldn't be told from what was given for it. Name it by the number after /pages/ in its address" >>"$WORK/pages.txt"
+      missed=$((missed + 1))
+      continue
+    fi
+    [ ! -f "$WORK/ticket/pages/$id.md" ] || continue
+    if acli_json "$WORK/page.json" confluence page view --id "$id" --json --body-format storage && title="$(page_render "$WORK/page.json" "$WORK/ticket/pages")"; then
+      echo "  pages/$id.md: $title" >>"$WORK/pages.txt"
+      got=$((got + 1))
+    else
+      echo "  page $id: acli couldn't read it, so it isn't here" >>"$WORK/pages.txt"
+      missed=$((missed + 1))
+    fi
+  done <<EOF
+$pages
+EOF
+  [ "$short" -eq 0 ] || echo "  the ticket has $short short Confluence addresses, which can't be turned into pages from here. Ask the user for --page with the page's full address" >>"$WORK/pages.txt"
+  rmdir "$WORK/ticket/pages" 2>/dev/null
+  secret_places_in "$WORK/ticket" >"$WORK/secrets.txt"
+  secrets_gate "ticket $key" "$WORK/secrets.txt" "ticket:$key" "It reads the ticket and its pages as they are now." || return 1
+  case "$SECRETS_LINE" in "nothing shaped"*) SECRETS_LINE="nothing shaped like a secret was found in the ticket or its pages" ;; esac
+  make_archive "$WORK/$key.tar.gz" -C "$WORK" ticket || die "tar couldn't make the archive"
+  hash="$(sha256_of "$WORK/$key.tar.gz")"
+  size="$(wc -c <"$WORK/$key.tar.gz" | tr -d ' ')"
+  note="$WORK/$key.txt"
+  {
+    echo "LLM-RELAY TICKET"
+    echo "ticket: $key"
+    echo "title: $(sed -n "1s/^# $key: //p" "$WORK/ticket/ticket.md")"
+    echo "taken: $(now)"
+    echo "in it: $counts"
+    echo "read first: ticket/ticket.md. ticket/ticket.json has every field"
+    if [ -s "$WORK/pages.txt" ]; then
+      echo "Confluence pages:"
+      cat "$WORK/pages.txt"
+    else
+      echo "Confluence pages: none. A ticket's links to pages don't come with it, so ask the user for any you need, with --page"
+    fi
+    echo "attachments: not sent"
+    echo "secrets check: $SECRETS_LINE"
+    echo "archive: $key.tar.gz"
+    echo "archive sha256: $hash"
+    echo "archive bytes: $size"
+  } >"$note"
+  dest="$COWORK/relay/tickets"
+  mkdir -p "$dest" || die "can't create $dest"
+  cp "$WORK/$key.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
+  cp "$note" "$dest/" || die "couldn't copy the note to $dest"
+  echo "Packed $key: $counts, Confluence pages $got, $size bytes"
+  [ "$missed" -eq 0 ] || echo "$missed pages couldn't be read. The note says which."
+  [ "$got" -gt 0 ] || [ "$missed" -gt 0 ] || echo "No Confluence page went with it. Jira lists a ticket's pages under Confluence content, but acli doesn't return them, so name any that matter: relay ticket $key --page ADDRESS"
+  echo "Sent to OneDrive: Documents/Cowork/relay/tickets/$key.txt and $key.tar.gz"
+  prompt="Use remote-pair-run, and start from this ticket, following the skill's section on tickets. With nothing attached, read Documents/Cowork/relay/tickets/$key.txt from my OneDrive, and get the archive it names. Tell me in your own words what it asks for, what you'd need to see to do it, and what isn't clear. Don't change anything yet."
+  echo
+  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
+    echo "Paste this into Cowork. It's on your clipboard:"
+  else
+    echo "Paste this into Cowork:"
+  fi
+  echo
+  printf '%s\n' "$prompt"
+}
+
 # ---- skills ------------------------------------------------------------------
 
 # The user's own Claude skills, copied to Cowork with a note on top. The copy is made here every
@@ -2447,6 +2764,7 @@ EOF
 FEATURES="Try a practice round first|git|practice
 Change code with Cowork|git|scan
 Review a merge request|glab python3|mr
+Start from a Jira ticket|acli python3|ticket
 Run Go checks in a review|go|mr
 Lint a review with the repository's pre-commit|pre-commit|mr
 Send a repository's wiki with it|wiki|scan"
@@ -2455,6 +2773,7 @@ tool_hint() {
   case "$1" in
     git) echo "xcode-select --install" ;;
     glab) echo "brew install glab, then sign in with: glab auth login" ;;
+    acli) echo "brew tap atlassian/homebrew-acli && brew install acli, then sign in with: acli auth login" ;;
     python3) echo "xcode-select --install, or: brew install python" ;;
     go) echo "brew install go" ;;
     pre-commit) echo "brew install pre-commit" ;;
@@ -2857,7 +3176,7 @@ cmd_complete() {
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'start\npractice\nsetup\nrun\nscan\nmr\nreview\napply\nskills\nfield-test\ncompletion\n'
+    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nreview\napply\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
@@ -2867,6 +3186,7 @@ cmd_complete() {
     scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     review) echo --expect ;;
+    ticket) printf -- '--page\n--ask\n' ;;
     field-test | practice) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
     completion) printf 'zsh\nbash\n' ;;
@@ -2923,7 +3243,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  start | practice | run | scan | mr | review | apply | skills | field-test)
+  start | practice | run | scan | mr | ticket | review | apply | skills | field-test)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -2937,6 +3257,7 @@ case "${1:-}" in
   run) shift; cmd_run "$@"; exit $? ;;
   scan) shift; cmd_scan "$@"; exit $? ;;
   mr) shift; cmd_mr "$@"; exit $? ;;
+  ticket) shift; cmd_ticket "$@"; exit $? ;;
   review) shift; cmd_review "$@"; exit $? ;;
   apply) shift; cmd_apply "$@"; exit $? ;;
   skills) shift; cmd_skills "$@"; exit $? ;;

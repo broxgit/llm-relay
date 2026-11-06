@@ -43,7 +43,7 @@ Ordered by how much of that work each step moves, and by what depends on what.
 | 3 | Use what only Cowork sees | 12, 14, and context for 1 and 3 | Built on 2026-11-05, as text in the skill. Not yet tried with Cowork |
 | 4 | Toolchain and dependencies in the sandbox | 5 to 8 | The biggest unknown. Needs a short test on the work Mac first |
 | 5 | Deliverables with branches | 7, 8 | Built on 2026-11-05, as attempts. One keypress buys several iterations. Not yet tried with Cowork |
-| 6 | `relay ticket` | 3 | The Mac fetches the Jira ticket, its Confluence pages and GitLab history, and sends them |
+| 6 | `relay ticket` | 3 | Built on 2026-11-06, with `acli`. The Mac fetches the Jira ticket and the Confluence pages the user names. Not yet tried with real Cowork. A ticket's GitLab history isn't in it |
 | 7 | `relay ask` | 4 | Cowork as the cheap sub-agent for Claude. Smoother once the wake-up exists |
 | 8 | Cowork drafts wiki pages | 4, 13 | Returned the same way as an answer from `relay ask` |
 | 9 | Overnight reviews | 1 | Last, because sending code to OneDrive unattended is a policy decision |
