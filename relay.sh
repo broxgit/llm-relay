@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.6"
+RELAY_VERSION="0.2.7"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -92,20 +92,26 @@ COWORK_LACKS="glab gh curl wget ssh scp docker kubectl jira acli aws mongosh psq
 usage() {
   cat <<EOF
 Usage: relay [--dir ONEDRIVE_FOLDER] start
+       relay [--dir ONEDRIVE_FOLDER] practice [--clean]
        relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
        relay [--dir ONEDRIVE_FOLDER] skills
        relay [--dir ONEDRIVE_FOLDER] field-test [--clean]
        relay completion zsh|bash
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
-       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki]
-       relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--no-wiki]
+       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki] [--ask]
+       relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
   start  The one command to begin with. Checks that Cowork has this relay's skills, and
          installs them if not. Says what this Mac is set up for, and what a missing tool
          needs. Puts a prompt on the clipboard, and Cowork takes it from there.
+  practice
+         One whole round on code that doesn't matter, with Cowork leading. It makes a small
+         repository at ~/relay-practice and puts a prompt on the clipboard, as start does.
+         Cowork adds a line of its own to a file there, you run it and apply it, and
+         --clean removes the repository afterwards.
   setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
          Run it again to update the skill. --skills copies your own Claude skills there too,
          each with a note on what to do differently in Cowork. setup --help has more.
@@ -668,13 +674,55 @@ $(secret_places "$root" "")
 EOF
 }
 
-# secrets_gate <what is being sent> <file of places>: asks before sending something that looks
+# The check finds something in about three repositories in ten, mostly settings for deployment.
+# Asking every time teaches people to press y without reading. So a yes is kept for a
+# repository, with a mark of what was found, and the question comes back only when what's
+# found has changed. It is kept only for a person at a terminal: with none, the relay still
+# refuses, so an agent can't lean on an old answer.
+SECRETS_ANSWERED="$(dirname "$SETTINGS")/secrets-answered"
+SECRETS_ASK=""
+
+# secrets_mark <file of places>: one hash for what was found, by file and kind and how many. A
+# line that only moved doesn't change it, and a new one does.
+secrets_mark() {
+  sed 's/:[0-9][0-9]*: /: /' "$1" | LC_ALL=C sort >"$1.mark" 2>/dev/null || return 1
+  sha256_of "$1.mark"
+}
+
+# secrets_answer <key>: the mark kept from the last yes for this repository, if there is one.
+secrets_answer() {
+  [ -f "$SECRETS_ANSWERED" ] || return 0
+  awk -F '\t' -v k="$1" '$1 == k { m = $2 } END { if (m != "") print m }' "$SECRETS_ANSWERED" 2>/dev/null
+}
+
+# secrets_keep <key> <mark>: keeps a yes. It never stops the command.
+secrets_keep() {
+  local tmp="$SECRETS_ANSWERED.$$"
+  mkdir -p "$(dirname "$SECRETS_ANSWERED")" 2>/dev/null || return 0
+  {
+    [ ! -f "$SECRETS_ANSWERED" ] || awk -F '\t' -v k="$1" '$1 != k' "$SECRETS_ANSWERED"
+    printf '%s\t%s\n' "$1" "$2"
+  } >"$tmp" 2>/dev/null && mv -f "$tmp" "$SECRETS_ANSWERED" 2>/dev/null
+  rm -f "$tmp" 2>/dev/null
+  return 0
+}
+
+# secrets_gate <what is being sent> <file of places> <what it is on this Mac>: asks before sending something that looks
 # like it holds secrets, and sets SECRETS_LINE for the note. False means the user said no.
 secrets_gate() {
-  local label="$1" found="$2" n
+  local label="$1" found="$2" key="${3:-}" n mark="" before=""
   n="$(grep -c . "$found" || true)"
   if [ "${n:-0}" -eq 0 ]; then
     SECRETS_LINE="nothing shaped like a secret was found in the files at this commit. The history wasn't checked"
+    return 0
+  fi
+  if [ -n "$key" ]; then
+    mark="$(secrets_mark "$found")" || mark=""
+    before="$(secrets_answer "$key")"
+  fi
+  if [ -n "$mark" ] && [ "$mark" = "$before" ] && [ -z "$SECRETS_ASK" ] && [ "$AT_TERMINAL" = yes ]; then
+    echo "$label has places that look like they hold secrets, $n of them, the same as when you said to send it. Sending. Add --ask to be asked again." >&2
+    SECRETS_LINE="places that looked like secrets: $n, the same as when the user chose to send them before. Never repeat a credential you find here"
     return 0
   fi
   {
@@ -683,6 +731,7 @@ secrets_gate() {
     head -n 12 "$found" | sed 's/^/  /'
     [ "$n" -le 12 ] || echo "  and $((n - 12)) more"
     echo "This goes by shape, so it can be wrong either way. It reads the files at the commit being sent, and not the history, which goes too."
+    [ -z "$before" ] || [ "$mark" = "$before" ] || echo "What it found has changed since you last said to send this."
   } >&2
   [ "$AT_TERMINAL" = yes ] || die "relay asks before it sends anything that looks like a secret, so it needs a terminal. Agents: tell the user to run it."
   ask_key "Send $label to OneDrive anyway? [y]es, [n]o: " || KEY=n
@@ -693,6 +742,7 @@ secrets_gate() {
       return 1
       ;;
   esac
+  [ -z "$mark" ] || secrets_keep "$key" "$mark"
   SECRETS_LINE="places that looked like secrets: $n, and the user chose to send them. Never repeat a credential you find here"
 }
 
@@ -750,6 +800,7 @@ cmd_scan() {
     case "$1" in
       -h | --help) usage; return 0 ;;
       --no-wiki) no_wiki=1; shift ;;
+      --ask) SECRETS_ASK=1; shift ;;
       --branch)
         [ -n "${2:-}" ] || die "--branch needs a branch name"
         want="$2"
@@ -803,7 +854,7 @@ cmd_scan() {
     secret_places_uncommitted "$root" "$WORK/secrets.txt" >"$WORK/secrets-now.txt"
     cat "$WORK/secrets-now.txt" >>"$WORK/secrets.txt"
   fi
-  secrets_gate "$name" "$WORK/secrets.txt" || return 1
+  secrets_gate "$name" "$WORK/secrets.txt" "$root" || return 1
 
   collect_wiki "$root" "" "$no_wiki"
   {
@@ -903,7 +954,7 @@ send_also() {
   name="$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '-')"
   t="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   secret_places "$root" "$commit" "$sub" >"$t/secrets.txt"
-  secrets_gate "$name" "$t/secrets.txt" || { rm -rf "$t"; exit 1; }
+  secrets_gate "$name" "$t/secrets.txt" "$root/$sub" || { rm -rf "$t"; exit 1; }
   git -C "$root" archive --format=tar.gz -o "$t/$name.tar.gz" "$commit" -- "$sub" || { rm -rf "$t"; die "--also: couldn't pack $sub"; }
   hash="$(sha256_of "$t/$name.tar.gz")"
   size="$(wc -c <"$t/$name.tar.gz" | tr -d ' ')"
@@ -1407,7 +1458,7 @@ EOF
   commit="$(git -C "$clone" rev-parse --verify -q "$SCAN_REF")" || die "can't find $source in $clone, on origin or as a merge request"
   git -C "$clone" rev-parse --verify -q "refs/remotes/origin/$target" >/dev/null || die "can't find $target in $clone"
   secret_places "$clone" "$commit" >"$WORK/secrets.txt"
-  secrets_gate "$name" "$WORK/secrets.txt" || exit 1
+  secrets_gate "$name" "$WORK/secrets.txt" "$clone" || exit 1
 
   git init -q --bare "$WORK/branch.git" || die "git couldn't make a scratch repository"
   scratch_fetch "$clone" "$WORK/branch.git" "$SCAN_REF" "refs/heads/$source" || die "git couldn't read $source from $clone"
@@ -1510,6 +1561,7 @@ cmd_mr() {
       --checks) checks=yes; shift ;;
       --no-checks) checks=no; shift ;;
       --no-wiki) no_wiki=1; shift ;;
+      --ask) SECRETS_ASK=1; shift ;;
       -h | --help) usage; return 0 ;;
       -*) die "relay mr: unknown option $1. Try relay --help" ;;
       *)
@@ -2274,7 +2326,8 @@ EOF
 # gives the same line. A new feature is a line here and its tools in tool_hint, and the skill's
 # starting section has to say when to give its command: a smoke test holds all three together,
 # so the guided way in can't fall behind what the relay does.
-FEATURES="Change code with Cowork|git|scan
+FEATURES="Try a practice round first|git|practice
+Change code with Cowork|git|scan
 Review a merge request|glab python3|mr
 Run Go checks in a review|go|mr
 Send a repository's wiki with it|wiki|scan"
@@ -2324,15 +2377,82 @@ clock_in() {
   date -r "$at" +%H:%M 2>/dev/null || date -d "@$at" +%H:%M 2>/dev/null
 }
 
+# A repository for a practice round, so a person's first y is on code that doesn't matter. A
+# file in it says the relay made it, and nothing here touches a folder without that file.
+PRACTICE_REPO="$HOME/relay-practice"
+PRACTICE_LINE=""
+
+make_practice_repo() {
+  local g
+  if [ -e "$PRACTICE_REPO" ]; then
+    [ -f "$PRACTICE_REPO/.relay-practice" ] || die "$PRACTICE_REPO is there, and relay practice didn't make it. Move it away, and run this again."
+    PRACTICE_LINE="there already"
+    return 0
+  fi
+  mkdir -p "$PRACTICE_REPO" || die "can't create $PRACTICE_REPO"
+  git init -q "$PRACTICE_REPO" || die "git couldn't make $PRACTICE_REPO"
+  # No hooks, no signing and a fixed author, so the user's git setup can't change where it starts.
+  g="git -C $PRACTICE_REPO -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.name=relay-practice -c user.email=relay-practice@example.invalid"
+  # shellcheck disable=SC2086
+  {
+    $g symbolic-ref HEAD refs/heads/main
+    echo "relay practice made this repository. relay practice --clean removes it." >"$PRACTICE_REPO/.relay-practice"
+    printf '# relay practice\n\nA repository for trying relay. Nothing here matters.\n' >"$PRACTICE_REPO/README.md"
+    printf 'hello\n' >"$PRACTICE_REPO/greeting.txt"
+    $g add -A && $g commit -q -m "The start of a practice round"
+  } || die "git couldn't commit in $PRACTICE_REPO"
+  PRACTICE_LINE="made now"
+}
+
+clean_practice() {
+  local f inside=""
+  if [ -f "$PRACTICE_REPO/.relay-practice" ]; then
+    case "$(pwd -P 2>/dev/null)/" in "$(cd "$PRACTICE_REPO" 2>/dev/null && pwd -P)/"*) inside=1 ;; esac
+    # Out of it first, so nothing this command runs next is left in a folder that's gone.
+    cd "$HOME" 2>/dev/null || cd / || true
+    rm -rf "$PRACTICE_REPO" && echo "Removed ~/relay-practice"
+  elif [ -e "$PRACTICE_REPO" ]; then
+    echo "Left ~/relay-practice: relay practice didn't make it."
+  else
+    echo "No practice repository to remove."
+  fi
+  for f in relay/scans/relay-practice.txt relay/scans/relay-practice.tar.gz; do
+    [ ! -f "$COWORK/$f" ] || { rm -f "$COWORK/$f" && echo "Removed Documents/Cowork/$f from OneDrive"; }
+  done
+  [ -z "$inside" ] || echo "Your terminal was in the folder that's gone now. Before anything else, run: cd ~"
+}
+
 # relay start: the one command to begin with. It gets Cowork this relay's skills, says what this
 # Mac is set up for, and hands Cowork a note and the user a prompt. It asks nothing.
 cmd_start() {
-  local dest note prompt changed="" runs=0
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     "") ;;
     *) die "relay start takes no arguments" ;;
   esac
+  begin_session start
+}
+
+# relay practice: the same beginning, with a repository made for it and a prompt that asks
+# Cowork for one whole round there.
+cmd_practice() {
+  case "${1:-}" in
+    -h | --help) usage; return 0 ;;
+    --clean)
+      [ $# -eq 1 ] || die "relay practice --clean takes nothing else"
+      clean_practice
+      return 0
+      ;;
+    "") ;;
+    *) die "relay practice takes --clean, or nothing" ;;
+  esac
+  make_practice_repo
+  begin_session practice
+}
+
+# begin_session <start|practice>: what both of those do.
+begin_session() {
+  local mode="$1" dest note prompt changed="" runs=0
   echo "relay $RELAY_VERSION"
   check_own_skill 2>/dev/null
   case "$OWN_SKILL_STATE" in
@@ -2376,13 +2496,24 @@ cmd_start() {
     echo "terminal app: ${TERM_PROGRAM:-unknown}"
     echo "the relay's own skills in Cowork's folder: $OWN_SKILL_STATE${changed:+, installed just now}"
     echo "runs on this Mac so far: ${runs:-0}"
+    if [ "$mode" = practice ]; then
+      echo "practice: yes. The repository is ~/relay-practice, $PRACTICE_LINE, with greeting.txt on main, which says hello"
+    else
+      echo "practice: no"
+    fi
     echo "what this Mac is set up for:"
     feature_lines
     named_skill_lines
   } >"$note"
   mkdir -p "$dest" && cp "$note" "$dest/note.txt" || die "couldn't write to $dest"
   SKILL_TMP=""
-  prompt="Use remote-pair-run. I've just run relay start. With nothing attached, read Documents/Cowork/relay/start/note.txt from my OneDrive first, then follow the skill's section on starting."
+  if [ "$mode" = practice ]; then
+    prompt="Use remote-pair-run for a practice round. I've just run relay practice. With nothing attached, read Documents/Cowork/relay/start/note.txt from my OneDrive first, then follow the skill's section on a practice round."
+    echo
+    echo "The practice changes ~/relay-practice, which this command made. relay practice --clean removes it."
+  else
+    prompt="Use remote-pair-run. I've just run relay start. With nothing attached, read Documents/Cowork/relay/start/note.txt from my OneDrive first, then follow the skill's section on starting."
+  fi
   echo
   if [ -n "$changed" ]; then
     echo "Cowork takes up to 10 minutes to see its new skills. It's $(date +%H:%M) now, so start at $(clock_in 10)."
@@ -2606,17 +2737,17 @@ cmd_complete() {
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'start\nsetup\nrun\nscan\nmr\nreview\napply\nskills\nfield-test\ncompletion\n'
+    printf 'start\npractice\nsetup\nrun\nscan\nmr\nreview\napply\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
   case "$sub" in
     setup) printf -- '--dir\n--reviews\n--clones\n--skills\n--skills-from\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
-    scan) printf -- '--branch\n--no-wiki\n' ;;
-    mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--no-wiki\n' ;;
+    scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
+    mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--no-wiki\n--ask\n' ;;
     review) echo --expect ;;
-    field-test) echo --clean ;;
+    field-test | practice) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
     completion) printf 'zsh\nbash\n' ;;
   esac
@@ -2672,7 +2803,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  start | run | scan | mr | review | apply | skills | field-test)
+  start | practice | run | scan | mr | review | apply | skills | field-test)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -2682,6 +2813,7 @@ case "${1:-}" in
 esac
 case "${1:-}" in
   start) shift; cmd_start "$@"; exit $? ;;
+  practice) shift; cmd_practice "$@"; exit $? ;;
   run) shift; cmd_run "$@"; exit $? ;;
   scan) shift; cmd_scan "$@"; exit $? ;;
   mr) shift; cmd_mr "$@"; exit $? ;;

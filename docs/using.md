@@ -18,6 +18,14 @@ From there Cowork gives you one step at a time, each in the same block: the comm
 
 It asks you nothing. Where your clones and reviews live is set with `relay setup`, below.
 
+## Practice first
+
+```bash
+relay practice
+```
+
+If you'd like to try the whole thing on code that doesn't matter, start here. It does what `relay start` does, and it also makes a small repository at `~/relay-practice`. Paste the prompt, and Cowork walks you through one round on it, in about ten minutes: you share the repository, Cowork adds a line of its own to a file, you run that and apply it, and you see the line on your Mac. Nothing of yours is touched. `relay practice --clean` removes the repository afterwards, and Cowork gives you that command as the last step.
+
 ## Setup
 
 The [README](../README.md#install) has how to install it. With OneDrive syncing, in a terminal:
@@ -66,6 +74,8 @@ relay scan
 It puts the current branch and your uncommitted changes in OneDrive, at `Documents/Cowork/relay/scans`, so you don't have to attach anything. That includes the branch's whole history. Untracked files stay out.
 
 **It looks for secrets first.** Before `relay scan` or `relay mr` sends code, it looks in the files for private keys, access tokens, lines in settings files that set a password or key, and files named like keys or credentials. If it finds any, it lists where they are, without printing them, and asks before it sends. That question needs a terminal, and no flag answers it for you. Say no, and nothing is sent.
+
+It asks once for a repository. A yes is kept with a mark of what was found, and you're asked again only when that changes: a new file, a new kind of thing, or more of them. A line that only moved doesn't count. Until then a scan says how many places it found and that they're the same as before, and sends. Add `--ask` to `relay scan` or `relay mr` to be asked again. The kept answer is only used when you're at a terminal, so a script or an agent on your Mac is still refused.
 
 It goes by shape, so it can miss a secret, and it can flag something harmless. It reads the files at the commit being sent, and your uncommitted changes to them, and not the history, which goes too. So a repository that holds credentials, or ever did, is one to think about before you scan it, whatever the check says.
 

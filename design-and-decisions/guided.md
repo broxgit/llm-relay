@@ -1,6 +1,6 @@
 # The guided way in
 
-**Status: Brock said to design and build it on 2026-11-06. The terminal side and the skill's side are built, as 0.2.5, and ran with real Cowork once that day: Cowork read the note, asked the one question with no menu, and gave its steps in the short block. The practice round is designed here and not built.** It is the "Team use" part of [roadmap.md](roadmap.md).
+**Status: Brock said to design and build it on 2026-11-06. The terminal side and the skill's side are built, as 0.2.5, and ran with real Cowork once that day: Cowork read the note, asked the one question with no menu, and gave its steps in the short block. The practice round followed as 0.2.7, and has only run in smoke tests.** It is the "Team use" part of [roadmap.md](roadmap.md).
 
 The relay was built for one person who knows it well. It is now meant for the developers on his team too, of varying skill levels. They shouldn't need to know its commands or its unwritten rules to begin.
 
@@ -108,13 +108,16 @@ macOS has refused one terminal app a file in OneDrive that another app reads. Wh
 
 Now a copy that is there and can't be read is its own state. `relay skills`, `relay setup`, `relay start` and the notes say so, say that another terminal app may be able to read it, and leave it as it is.
 
-## The practice round, not built
+## The practice round
+
+Built on 2026-11-06, as 0.2.7. It has only run in smoke tests.
 
 A new person should be able to press `y` on code that doesn't matter before their own.
 
-- `relay practice` would make a small repository, as `relay field-test` does, and put a prompt on the clipboard.
-- Cowork would walk one real round on it: a scan, one small change, a run with **v** and **y**, an apply, and a clean-up. About four steps, with no diagnostic report.
-- It needs a section in the skill, and it reuses `make_field_repo`.
+- `relay practice` makes a small repository at `~/relay-practice`, holding one file that says `hello`, and puts a prompt on the clipboard. It shares its beginning with `relay start`, so the note and the checks are the same.
+- Cowork walks one real round on it: a scan, a patch that adds a line of Cowork's own, a run with **v** and **y**, an apply, and a look at the file before the clean-up. There is no diagnostic report.
+- The line is Cowork's to choose, on purpose. The person sees something written in the cloud arrive in a file on their Mac, having pressed a key at each step.
+- The skill's starting section offers it when the note says nothing has run on that Mac yet.
 
 It waited until `relay start` had been tried with real Cowork, because it leans on the same block and the same note. That try went well on 2026-11-06, so it can be built.
 

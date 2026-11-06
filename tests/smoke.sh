@@ -1531,6 +1531,27 @@ check "still nothing" test ! -e "$SD/secret-repo.txt"
 out="$(xk y "$XR")"
 case "$out" in *"Now tell Cowork: read Documents/Cowork/relay/scans/secret-repo.txt"*) ok "y sends it" ;; *) bad "y sends it" "$out" ;; esac
 check "and the note says the user chose to" grep -q '^secrets check: places that looked like secrets: 4, and the user chose to send them. Never repeat a credential you find here$' "$SD/secret-repo.txt"
+# Asked every time, people stop reading. A yes is kept until what's found changes.
+out="$(xk "" "$XR")"; rc=$?
+case "$rc:$out" in 0:*"the same as when you said to send it. Sending."*"Now tell Cowork: read"*) ok "a second scan of the same repository isn't asked again, and says why" ;; *) bad "a second scan of the same repository isn't asked again, and says why" "exit $rc: $out" ;; esac
+check "its note says the answer was an earlier one" grep -q '^secrets check: places that looked like secrets: 4, the same as when the user chose to send them before' "$SD/secret-repo.txt"
+out="$(xk n "$XR" --ask)"
+case "$out" in *"Send secret-repo to OneDrive anyway? [y]es, [n]o: "*"Nothing from secret-repo was sent."*) ok "--ask asks again" ;; *) bad "--ask asks again" "$out" ;; esac
+out="$(xsc "$XR" </dev/null 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "a kept answer isn't used with no terminal" "$out" ;; *"needs a terminal"*) ok "a kept answer isn't used with no terminal" ;; *) bad "a kept answer isn't used with no terminal" "$out" ;; esac
+# A line that only moved is the same finding. A new one isn't.
+printf '# a comment above\ndb:\n  password: hunter2hunter2\n  password: {{ .Values.pw }}\n  api_key: changeme123\n  secretName: my-app-secret\n' >"$XR/deploy/values.yaml"
+git -C "$XR" commit -qam "a line moved"
+out="$(xk "" "$XR")"; rc=$?
+case "$rc:$out" in 0:*"the same as when you said to send it"*) ok "a flagged line that only moved doesn't bring the question back" ;; *) bad "a flagged line that only moved doesn't bring the question back" "exit $rc: $out" ;; esac
+printf 'x\n' >"$XR/deploy/other.key"
+git -C "$XR" add -A
+git -C "$XR" commit -qm "one more"
+out="$(xk n "$XR")"
+case "$out" in *"This many: 5"*"What it found has changed since you last said to send this."*"Send secret-repo to OneDrive anyway?"*) ok "a new finding brings the question back, and says it's changed" ;; *) bad "a new finding brings the question back, and says it's changed" "$out" ;; esac
+git -C "$XR" rm -q deploy/other.key
+git -C "$XR" commit -qm "back to four"
+refuse "the file of kept answers holds no secret" grep -q -e hunter2 -e "$X_TOKEN" "$RH/.config/llm-relay/secrets-answered"
 # Uncommitted work goes too, as a patch, so its added lines are looked at.
 XR2="$T/secret-patch"
 mkdir -p "$XR2"
@@ -1962,6 +1983,40 @@ out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clon
 case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
 case "$out" in *"Clones are looked for under $T/start-clones, and reviews are saved under $T/start-reviews."*) ok "start says where clones and reviews are" ;; *) bad "start says where clones and reviews are" "$out" ;; esac
+# A practice round: the same beginning, with a repository made for it.
+gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
+rm -f "$T/clipboard"
+out="$(gp)"; rc=$?
+case "$rc:$out" in 0:*"What you can do on this Mac:"*"The practice changes ~/relay-practice, which this command made. relay practice --clean removes it."*"A prompt for Cowork is on your clipboard."*) ok "relay practice begins as start does, and says what it made" ;; *) bad "relay practice begins as start does, and says what it made" "$out" ;; esac
+check "it makes a repository that says the relay made it" test -f "$GH/relay-practice/.relay-practice"
+check "with one file that says hello" bash -c "[ \"\$(cat '$GH/relay-practice/greeting.txt')\" = hello ]"
+check "committed, with nothing left over" bash -c "[ -z \"\$(git -C '$GH/relay-practice' status --short)\" ] && git -C '$GH/relay-practice' rev-parse -q --verify HEAD >/dev/null"
+check "the prompt asks for a practice round" grep -q "Use remote-pair-run for a practice round. I've just run relay practice." "$T/clipboard"
+check "the note says it's a practice, and what's in the repository" grep -q '^practice: yes. The repository is ~/relay-practice, made now, with greeting.txt on main, which says hello$' "$GN"
+refuse "the practice note holds no path from this Mac" grep -q -e "$T" -e "$GH" -e "$HOME" -e '/Users/' -e '/home/' "$GN"
+gp >/dev/null
+check "a second relay practice keeps the repository, and says it was there" grep -q '^practice: yes. The repository is ~/relay-practice, there already' "$GN"
+gs >/dev/null
+check "a plain start says it isn't a practice" grep -q '^practice: no$' "$GN"
+env HOME="$GH" "$W" --dir "$GO" scan "$GH/relay-practice" </dev/null >/dev/null 2>&1
+out="$(cd "$GH/relay-practice" && env HOME="$GH" "$W" --dir "$GO" practice --clean 2>&1)"
+case "$out" in *"Removed ~/relay-practice"*"Removed Documents/Cowork/relay/scans/relay-practice.txt from OneDrive"*"Your terminal was in the folder that's gone now."*) ok "--clean removes the repository and its scan, and says to leave the folder" ;; *) bad "--clean removes the repository and its scan, and says to leave the folder" "$out" ;; esac
+check "the practice repository is gone" test ! -e "$GH/relay-practice"
+expect "--clean again says there's nothing" "No practice repository to remove." gp --clean
+mkdir -p "$GH/relay-practice"
+refuse "relay practice won't use a folder it didn't make" gp
+out="$(gp --clean)"
+case "$out" in *"Left ~/relay-practice: relay practice didn't make it."*) ok "and --clean leaves such a folder alone" ;; *) bad "and --clean leaves such a folder alone" "$out" ;; esac
+check "it's still there" test -d "$GH/relay-practice"
+rmdir "$GH/relay-practice"
+refuse "relay practice takes --clean or nothing" gp extra
+check "the skill has a section for a practice round" grep -q '^## A practice round$' "$SK/SKILL.md"
+check "it offers practice to someone who hasn't run anything yet" grep -q 'they can run `relay practice`' "$SK/SKILL.md"
+# What the skill says about the practice repository has to be what the relay makes.
+if grep -qF '`greeting.txt` holds one line, `hello`' "$SK/SKILL.md" && grep -qF "printf 'hello\\n' >\"\$PRACTICE_REPO/greeting.txt\"" "$W"; then ok "the skill describes the practice repository as the relay makes it"; else bad "the skill describes the practice repository as the relay makes it"; fi
+for c in 'cd ~/relay-practice && relay scan' 'relay practice --clean' '--repo ~/relay-practice'; do
+  check "the practice section gives: $c" grep -qF -- "$c" "$SK/SKILL.md"
+done
 # A scan at a terminal puts what to tell Cowork on the clipboard, and two in a row add up.
 GR1="$T/start-repo-one"
 GR2="$T/start-repo-two"
@@ -2120,6 +2175,9 @@ expect "with the ones for skills" "--skills-from" "$W" __complete 2 setup ""
 expect "--skills-from completes a folder" "__dirs__" "$W" __complete 3 setup --skills-from ""
 expect "completion knows skills" "skills" "$W" __complete 1 ""
 expect "and start" "start" "$W" __complete 1 ""
+expect "and practice" "practice" "$W" __complete 1 ""
+expect "practice completes --clean" "--clean" "$W" __complete 2 practice ""
+expect "scan completes --ask" "--ask" "$W" __complete 2 scan ""
 expect "and field-test" "field-test" "$W" __complete 1 ""
 expect "field-test completes --clean" "--clean" "$W" __complete 2 field-test ""
 expect "--also completes a folder" "__dirs__" "$W" __complete 3 mr --also ""
