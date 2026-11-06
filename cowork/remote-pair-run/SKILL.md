@@ -136,13 +136,15 @@ Then make the manifest, last, after every file is final:
 bash runlib.sh manifest <deliverable>
 ```
 
+Wait for that command to finish before you publish. Never run the two together: a deliverable has gone out with no manifest that way.
+
 It adds one to the version each time, so the first version you publish may not be 1. That's fine. Never edit `manifest.txt` by hand, and make it again after any change.
 
 Publish the whole folder, passing your tool's overwrite option if you're replacing files, since a republish can be refused with `already_exists`. Then read `manifest.txt` back from the output folder until it shows the version you just made and every file matches it. The manifest can arrive first: in one test it showed the new version for at least 9 seconds while `run.sh` was still the old one. In the published folder, check with `sed -n 's/^sha256 //p' manifest.txt | sha256sum -c -`. If your shell can't reach the folder, compare through your OneDrive tools. A folder you've just published can list as not found, and a write can report success before you can read it back, so allow up to 30 seconds. If it never matches, say so instead of handing over a command. Through your OneDrive tools, a new file can return 404 and a replaced one its old size for about 2 minutes. `relay` waits for that itself, so once the check passes in your output folder, you can hand over the command and say it may take a couple of minutes.
 
 ### 3. Hand it over
 
-Give the user one command, using the version the manifest printed and your task folder's name, and say what it will change. Tell them to run it in Apple's Terminal:
+Give the user one command, using the version the manifest printed and your task folder's name, and say what it will change. Tell them a wait is normal: the first publish of a new folder has taken up to two minutes to reach their Mac, and a changed file about a minute, and `relay run` waits for it. Tell them to run it in Apple's Terminal:
 
 ```bash
 relay run <task-folder>/<deliverable> --expect 3
@@ -292,7 +294,7 @@ End every review with a `## Coverage` section, with no headings inside it. `rela
 - What you found about this change in Teams, email and SharePoint, or that you found nothing.
 - How many findings are validated, how many aren't, and how many came from a sub-agent and weren't re-checked.
 
-When a finding depends on running the code, use the loop above, and start with `safe_worktree`. A skill's default against running commands doesn't stop this, because nothing runs until the user presses y. A review's `run.sh` must never change the user's checkout, which can hold uncommitted work, so don't call `git worktree add` yourself:
+When a finding depends on running the code, use the loop above, and start with `safe_worktree`. It is for a run that changes no tracked file, and fails the run if one changed. To try a change, use `attempt`, or the user's checkout with `on_exit` to put it back. A skill's default against running commands doesn't stop this, because nothing runs until the user presses y. A review's `run.sh` must never change the user's checkout, which can hold uncommitted work, so don't call `git worktree add` yourself:
 
 ```bash
 safe_worktree "$repo" "$commit"

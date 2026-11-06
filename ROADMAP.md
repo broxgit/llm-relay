@@ -17,7 +17,6 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
-- `relay apply` with attempts, since the fix in 0.2.2. The field test found it refusing a run that had passed. The fix has only run in smoke tests.
 - `relay mr` with a link to another project's merge request, since the fix in 0.2.2. Smoke tests only.
 - The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, and the checks are for Go only, so none ran.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
@@ -27,9 +26,17 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - Cowork's review findings against a Claude review of the same merge request. Never compared.
 - Attempts on real code. The field test's two attempts were planted. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several builds take in one run.
 - Whether Cowork follows what a repository's wiki says. The wiki reached it with a scan and with a merge request in the field test, and the review listed it. Nothing showed a page changing what Cowork did.
-- The guided test's skill as reworded after the field test.
+- The guided test's skill as reworded in 0.2.3: the count of skills in place of their names, the dated report name, and the order of the screenshot and the keys.
+- `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### The short re-test, and what it found (2026-11-06)
+
+- **What ran:** check 0 and part B of the guided test on the work Mac at 0.2.2, about 20 minutes. Everything passed, with nothing killed or refused. `relay apply` named the attempt that passed and applied its patch, which is the fix from 0.2.2 working for real.
+- **Fixed in 0.2.3:** the test's skill asked Cowork to list the skills in its folder, and skills can be named after people, so names reached a report that is meant to hold none. It now asks for a count, and rule 8 says a name can sit inside another name. Each test's report is saved under its date, so one test no longer replaces the last. `relay field-test --clean` says to run `cd ~` when it has removed the folder the terminal was in, and the skill's step starts with `cd ~`. The skill asks for the screenshot before the keys, in that order. `relay run` says which terminal app it's in on its first line.
+- **Also in the skills:** wait for the manifest command before publishing, since a deliverable went out without one. `safe_worktree` is for runs that change no tracked file. The first publish of a new folder has taken up to two minutes to reach the Mac.
+- **Seen, and left:** the first run waited 110 seconds for a manifest that Cowork's side already showed. The relay waited as it should.
 
 ### The field test, and what it found (2026-11-06)
 

@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.2"
+RELAY_VERSION="0.2.3"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -449,7 +449,8 @@ cmd_run() {
   trap cleanup EXIT
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
-  echo "Relay run started at $(now)."
+  # macOS has refused one terminal app and not another, so a run says which it's in.
+  echo "Relay run started at $(now), in ${TERM_PROGRAM:-an unnamed terminal app}."
   RUN_STARTED=1
   wait_for_deliverable "$named" "$copy" || return 1
 
@@ -1975,8 +1976,11 @@ make_field_repo() {
 }
 
 clean_field_test() {
-  local f
+  local f inside=""
   if [ -f "$FIELD_REPO/.relay-field-test" ]; then
+    case "$(pwd -P 2>/dev/null)/" in "$(cd "$FIELD_REPO" 2>/dev/null && pwd -P)/"*) inside=1 ;; esac
+    # Out of it first, so nothing this command runs next is left in a folder that's gone.
+    cd "$HOME" 2>/dev/null || cd / || true
     rm -rf "$FIELD_REPO" && echo "Removed ~/relay-field-test"
   elif [ -e "$FIELD_REPO" ]; then
     echo "Left ~/relay-field-test: relay field-test didn't make it."
@@ -1988,6 +1992,7 @@ clean_field_test() {
   done
   rmdir "$COWORK/relay/field-test" 2>/dev/null
   echo "Cowork's task folders, and the reports under Documents/Cowork/relay, are left as they are."
+  [ -z "$inside" ] || echo "Your terminal was in the folder that's gone now. Before anything else, run: cd ~"
 }
 
 cmd_field_test() {
