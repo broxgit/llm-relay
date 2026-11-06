@@ -1146,6 +1146,27 @@ refuse "an MR with no clone says so" mr https://gitlab.com/team/other/-/merge_re
 out="$(mr https://gitlab.com/team/other/-/merge_requests/7 2>&1)"
 case "$out" in *"add the folder that holds it to where the relay looks: relay setup --clones '"*":FOLDER'"*) ok "and how to add the folder that holds it" ;; *) bad "and how to add the folder that holds it" "$out" ;; esac
 expect "and --repo names one" "Packed team/other !7" mr https://gitlab.com/team/other/-/merge_requests/7 --repo "$MC"
+# A clone kept outside the clones folders needed --repo on every review, so the relay now keeps
+# where each project's clone is, and a clone it finds by searching, so the search is paid once.
+MRO=https://gitlab.com/team/other/-/merge_requests/7
+KC="$RH/.config/llm-relay/clones"
+rm -f "$KC"
+out="$(mr "$MRO" --repo "$MC" 2>&1)"
+case "$out" in *"Remembered where team/other is, so --repo isn't needed for it next time."*) ok "the first --repo run says the relay remembered the clone" ;; *) bad "the first --repo run says the relay remembered the clone" "$out" ;; esac
+check "the known clones file has a line for it" grep -q "^gitlab.com/team/other	$MC\$" "$KC"
+expect "the same merge request then works with no --repo" "Packed team/other !7" mr "$MRO"
+out="$(mr "$MRO" --repo "$MC" 2>&1)"
+case "$out" in *Remembered*) bad "naming the same clone again says nothing more" "$out" ;; *) ok "naming the same clone again says nothing more" ;; esac
+check "and keeps one line for the project" bash -c "[ \"\$(grep -c '^gitlab.com/team/other	' '$KC')\" = 1 ]"
+KG="$T/clones-gone"
+git clone -q "$MO" "$KG" 2>/dev/null
+mr "$MRO" --repo "$KG" >/dev/null 2>&1
+rm -rf "$KG"
+out="$(mr "$MRO" 2>&1)"
+case "$out" in *"Name it once with --repo PATH and the relay remembers it"*) ok "a remembered clone that has gone is ignored" ;; *) bad "a remembered clone that has gone is ignored" "$out" ;; esac
+rm -f "$KC"
+mr "$MRU" >/dev/null 2>&1
+check "a clone found by the search is remembered without --repo" grep -q "^gitlab.com/team/svc	" "$KC"
 refuse "relay mr needs a URL" mr
 # A partial clone can't hand over files it never downloaded.
 git -C "$MO" config uploadpack.allowFilter true
