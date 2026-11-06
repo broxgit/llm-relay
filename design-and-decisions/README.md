@@ -9,6 +9,7 @@ Where the relay goes next, and the decisions behind it. Written 2026-11-05, agai
 | [work-mac-session.md](work-mac-session.md) | A walk through testing everything that is built, with real Cowork and OneDrive: what to run, what to expect, prompts to paste into Cowork, and what to bring back. |
 | [attempts.md](attempts.md) | Several ways of fixing something in one run, tried in order. Built. |
 | [skill-sync.md](skill-sync.md) | How your own Claude skills reach Cowork, adapted, and how the copies stay in step. Built. |
+| [guided.md](guided.md) | One command to begin with, for a team that doesn't know the relay: `relay start`, the list of what each thing needs, and how Cowork gives a step. Built, apart from the practice round. |
 | [leverage.md](leverage.md) | What Claude is used for at work, and nine steps for moving more of it to Cowork. |
 
 In short: close a way round the keypress gate (done, merged on 2026-11-05), prove the standalone relay on the work Mac, then wake Cowork without typing "done". After that, [leverage.md](leverage.md). The relay stays in Bash, OneDrive stays the only channel, and nothing is added that runs without a keypress on the Mac.

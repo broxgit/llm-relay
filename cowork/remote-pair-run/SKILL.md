@@ -7,6 +7,8 @@ description: |
 
 # Remote pair-run
 
+This skill is for relay 0.2.5.
+
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
 | | You | The user |
@@ -24,11 +26,45 @@ Keep the user's job to this: run one command, press a key, tell you "done", and 
 4. **A view of the code goes stale.** A scan is true for the commit it was taken from. Say which commit you worked against.
 5. **A credential you come across stays where it is.** If a scan or any other file holds a password, key or token, never repeat it, in a message, a review or a deliverable. Tell the user in one line which file it's in, and that they may want to remove that scan from OneDrive, with its version history.
 
+## When the user starts with `relay start`
+
+Their first message asks you to read `Documents/Cowork/relay/start/note.txt`. Do these in order.
+
+1. **Read the note,** with nothing attached. It says which relay their Mac has, what the Mac is set up for, and where their own skills stand. It holds no paths.
+2. **Check your copies.** Compare the note's `relay:` line with the version at the top of this skill. Compare its `runlib:` line with the line that sets `RUNLIB_VERSION` in your `runlib.sh`. If either differs, your copy is stale, and what you hand over could be wrong. Say so, ask them to wait five minutes and start a new session, and stop. Your copy of a skill can lag OneDrive by several minutes.
+3. **Ask one thing: "What are you working on?"** Give no list of choices, and put nothing else in that message. If the note says `runs on this Mac so far: 0`, add one line: you'll give one step at a time, and nothing runs on their Mac until they press a key there.
+4. **Give the first step,** as a block. To change or fix code, that is `relay scan`, run in the repository's folder. To review a merge request, it is `relay mr` with its address. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question.
+
+## How to give the user a step
+
+Every time the user has to do something, give it as this block:
+
+```
+---
+## 🔴 YOUR TURN
+
+**🚦 DO THIS**
+1. The one command, in its own code block.
+
+**👀 EXPECT**
+- Only when something would surprise them: a wait, a question the relay asks, a key to press.
+
+**💬 THEN TELL ME**
+- What to send back.
+---
+```
+
+- **One command to a block.** Before it, two or three lines at most, on what it's for and what it will change.
+- **Leave `EXPECT` out** unless there's a wait, a question or a key. The relay asks `Run it?` before a run, `Save it?` before it saves a review, and `Apply it, uncommitted?` before an apply. It may also ask before it sends code that looks like it holds secrets. Name each key in bold, such as **y**, and say that **v** shows the files first.
+- **`THEN TELL ME` is usually one word,** `done`. The relay's last lines say what to tell you, so ask for pasted output only when a command didn't end as you said it would.
+- **When you need nothing from them,** start your message with `✅ NOTHING FOR YOU TO DO YET`, and say what you're doing and about how long it takes.
+- **If they send "Use the YOUR TURN block format",** you have drifted from it. Go back to it.
+
 ## The loop
 
 ### 1. Get the current code
 
-The best view is a relay scan. Ask the user to run this in the repository:
+The best view is a relay scan. Ask the user to run this in the repository, and expect them to paste a line that names each scan's note, which the command puts on their clipboard:
 
 ```bash
 relay scan
@@ -147,7 +183,7 @@ Publish the whole folder, passing your tool's overwrite option if you're replaci
 
 ### 3. Hand it over
 
-Give the user one command, using the version the manifest printed and your task folder's name, and say what it will change. Tell them a wait is normal: the first publish of a new folder has taken up to two minutes to reach their Mac, and a changed file about a minute, and `relay run` waits for it. Tell them to run it in Apple's Terminal:
+Give the user one command, in a YOUR TURN block, using the version the manifest printed and your task folder's name, and say what it will change. Tell them a wait is normal: the first publish of a new folder has taken up to two minutes to reach their Mac, and a changed file about a minute, and `relay run` waits for it. Tell them to run it in Apple's Terminal:
 
 ```bash
 relay run <task-folder>/<deliverable> --expect 3

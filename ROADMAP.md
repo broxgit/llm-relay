@@ -17,6 +17,9 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
+- `relay start` and the skill's starting section, with real Cowork. Smoke tests only. Not known: whether Cowork reads the note, checks its copy and asks the one question with no menu, whether the lighter YOUR TURN block holds, and whether people run it each session.
+- A scan's line on the clipboard, at a real terminal with the real clipboard. Smoke tests only.
+- A skill copy that a terminal app can't read. The tests take the file's permission away, which isn't the refusal macOS gives. Whether that refusal was behind the wrong "made by hand" on 2026-11-06 isn't confirmed.
 - The secrets check, on ordinary code. It ran once for real, on 2026-11-06 at 0.2.4, on the deployment folder whose scan had carried credentials: it listed 52 places, the user pressed `n`, and nothing was sent. Not known: how often it flags something harmless in a repository that holds no secrets, what it misses, and whether people read the list or press `y`.
 - A scan sent under a longer name, and Cowork reading it. The same run named the deployment folder's scan with its parent folder in front, because the code repository's scan already had the plain name. It was never sent.
 - A bare `!N` that repeats a merge request linked in another project, since 0.2.4. Smoke tests only.
@@ -32,6 +35,13 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### One command to begin with (2026-11-06)
+
+- **Why:** the relay is now for a whole team. A new person had to know which command starts each thing, what to tell Cowork after it, to run setup again after an upgrade and wait, and that a review needs `glab`, which they found out when one failed.
+- **What changed:** `relay start` gets Cowork this relay's skills, replacing an older relay's, says what the Mac is set up for and what a missing tool needs, and puts a prompt on the clipboard. Cowork reads a note with no paths in it, checks its copy of the skill against it, asks "What are you working on?", and gives each step in one short block. `relay scan` puts its line on the clipboard, and scans close together add up. `relay setup` prints the same list and points at `relay start`. `relay mr` says how to get a tool it lacks. This is 0.2.5, and `design-and-decisions/guided.md` has the design.
+- **Also:** a skill copy that a terminal app can't read was reported as made by hand. It is now its own state, said plainly, and left alone.
+- **Not built:** the practice round, and a plain summary of a deliverable before `y`.
 
 ### The relay looks for secrets before it sends code (2026-11-06)
 
