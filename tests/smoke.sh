@@ -1389,9 +1389,14 @@ git -C "$AR2" checkout -q -- a.txt
 rm -f "$AR2/c.txt"
 # The report folder is in the cloud, so apply never reads it. A report changed there, or a new
 # one put there, can't choose the attempt: the Mac's own copy does.
-AREP="$(ls "$OD/Documents/Cowork/relay/t24/reports"/*-v2-*.txt | tail -n 1)"
-sed 's/^attempt passed: good$/attempt passed: bad/' "$AREP" >"$AREP.new" && mv "$AREP.new" "$AREP"
-sed 's/^attempt passed: good$/attempt passed: bad/' "$AREP" >"${AREP%.txt}9.txt"
+AREP="$(ls "$OD/Documents/Cowork/relay/t24/reports"/*-v2-*.txt 2>/dev/null | tail -n 1)"
+# With no report found, the two lines below would write ".new" and "9.txt" into the
+# folder the suite was started from. It happened once, in another repository.
+check "the run's report is in OneDrive, to change there" test -n "$AREP"
+if [ -n "$AREP" ]; then
+  sed 's/^attempt passed: good$/attempt passed: bad/' "$AREP" >"$AREP.new" && mv "$AREP.new" "$AREP"
+  sed 's/^attempt passed: good$/attempt passed: bad/' "$AREP" >"${AREP%.txt}9.txt"
+fi
 out="$(ap y t24/tries --repo "$AR2" --expect 2)"
 case "$out" in *"Attempt:     good, the one that passed"*) ok "a report changed in OneDrive can't choose the attempt" ;; *) bad "a report changed in OneDrive can't choose the attempt" "$out" ;; esac
 case "$out" in *"attempts/bad"*) bad "and the other attempt's patches stay out" "$out" ;; *) ok "and the other attempt's patches stay out" ;; esac
