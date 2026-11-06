@@ -17,8 +17,8 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
-- The secrets check, on real repositories. Smoke tests only. Not known: how often it flags something harmless, what it misses, and whether people read the list or press `y`.
-- Scan names for two repositories with one folder name, since 0.2.4. Smoke tests only.
+- The secrets check, on ordinary code. It ran once for real, on 2026-11-06 at 0.2.4, on the deployment folder whose scan had carried credentials: it listed 52 places, the user pressed `n`, and nothing was sent. Not known: how often it flags something harmless in a repository that holds no secrets, what it misses, and whether people read the list or press `y`.
+- A scan sent under a longer name, and Cowork reading it. The same run named the deployment folder's scan with its parent folder in front, because the code repository's scan already had the plain name. It was never sent.
 - A bare `!N` that repeats a merge request linked in another project, since 0.2.4. Smoke tests only.
 - The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, and the checks are for Go only, so none ran.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
