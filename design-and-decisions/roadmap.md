@@ -1,6 +1,6 @@
 # Proposed roadmap
 
-**Status: phase 1 is done, merged on 2026-11-05 as [pull request 1](https://github.com/broxgit/llm-relay/pull/1). Phases 2 and 3 are proposed.** The repository's [ROADMAP.md](../ROADMAP.md) stays the record of what's done and untested. [leverage.md](leverage.md) has what comes after these three.
+**Status: phase 1 is done, merged on 2026-11-05 as [pull request 1](https://github.com/broxgit/llm-relay/pull/1). Phases 2 and 3 are proposed. [Team use](#team-use) was added on 2026-11-06, and nothing in it is built.** The repository's [ROADMAP.md](../ROADMAP.md) stays the record of what's done and untested. [leverage.md](leverage.md) has what comes after these three.
 
 Three phases in this order, with one condition: the wake-up is built only if the work-Mac session shows Teams and Cowork allow it. No dates, because the pace is about 10 hours a week and two phases wait on time at the work Mac. [design.md](design.md) has the designs behind phases 1 and 3.
 
@@ -20,7 +20,30 @@ flowchart LR
 
 Phase 1 goes first so the real run exercises the final prompt. If phase 2 turns up a failure in something already built, fixing it comes before phase 3.
 
-Parked, with no phase yet:
+## Team use
+
+Added on 2026-11-06. The relay was built for one person who knows it well. It is now meant for the developers on Brock's team too, of varying skill levels, and they shouldn't need to know its commands or its unwritten rules.
+
+Three pieces, in this order. They come after phase 2's report is read and its failures are fixed, and before phase 3 and the steps of [leverage.md](leverage.md) that aren't built. None has a design yet.
+
+| # | Piece | What it does | Waits on |
+|---|---|---|---|
+| A | Say which tools a feature needs | `relay setup` lists each feature's tools and whether this Mac has them. A missing tool's error gives the install line and the sign-in step. One list in the code feeds every message, so a new dependency is one line | Nothing from Cowork. It can be built and tested on the personal Mac |
+| B | The guided way in, in the terminal | `relay start` is the one command to learn. It checks the install, catches a stale skill after an upgrade, and puts a prompt for Cowork on the clipboard. Every command ends with a line saying what to do next, and `relay scan` gets a clipboard prompt as `relay mr` has | Nothing from Cowork, as for A |
+| C | The guided way in, in Cowork | The everyday skill hands over each command in a short YOUR TURN block. Cowork asks what the user is working on and picks the first command. A practice round runs on the field test's throwaway repository | Phase 2's report, which says whether Cowork keeps to the block format |
+
+What holds across all three:
+
+- **Guidance goes in the terminal where it can.** The relay prints the same thing every time and can be tested without Cowork. Cowork has needed a second ask for steps it was told to give.
+- **Tools stay optional.** Someone who never reviews a merge request isn't made to install `glab`. `relay setup` reports and doesn't refuse.
+- **The keypress rule doesn't change.** The guide says which key and why. It never presses it.
+- **The commands stay.** `relay scan` and `relay mr` work as they do now for anyone who knows them.
+
+Today a user learns that `relay mr` needs `glab` when a review fails with `relay mr needs glab`, and the YOUR TURN block is only in the field-test skill.
+
+## Parked
+
+With no phase yet:
 
 - Comparing a Cowork review with a Claude review of the same merge request.
 - Sending the Go toolchain with a scan.
@@ -35,6 +58,7 @@ The first two are answered, and phase 1 was built on them. The rest can wait unt
 - [ ] **The webhook address:** whether an address for a Teams chat, kept in a settings file on the work Mac, is acceptable under the company's rules. Phase 3 depends on it.
 - [ ] **The MCP bridge:** drop it from `ROADMAP.md`, where it stands as the step after the wake-up.
 - [ ] **The Go binary test:** drop the test of a Go binary in the skill folder.
+- [ ] **The Jira tool:** `jira` or `acli`, for `relay ticket`. It waits on phase 2's report, which says whether Cowork can read Jira itself.
 
 ## Decided
 
@@ -42,3 +66,5 @@ The first two are answered, and phase 1 was built on them. The rest can wait unt
 - 2026-11-05: start phase 1. It merged the same day, as [pull request 1](https://github.com/broxgit/llm-relay/pull/1).
 - 2026-11-05: lean on Cowork far more at work, in the order in [leverage.md](leverage.md).
 - 2026-11-05: `relay mr --checks` stays, as the one exception to the keypress rule.
+- 2026-11-06: the relay is for Brock's team too, so each feature gets guided. The team-use pieces wait for phase 2's report.
+- 2026-11-06: a feature that depends on a tool tells the user so. Depending on a Jira command-line tool is fine.
