@@ -48,6 +48,7 @@ With no phase yet:
 - Comparing a Cowork review with a Claude review of the same merge request.
 - Sending the Go toolchain with a scan.
 - Letting Cowork leave notes for the wiki through `wiki capture`.
+- `relay survey`, proposed on 2026-11-06 and not to be built now. It would count a user's repositories and tools, such as languages, how tests are started and which hooks are installed, and print a report that is safe to share, so the relay can be fitted to a team's stack and not to one person's. A script that does this exists outside the repository. One thing has to be solved before it could ship: the part that lists names it finds in several repositories can print a name that belongs to the user's company.
 
 ## Decisions needed
 
