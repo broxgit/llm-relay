@@ -77,6 +77,7 @@ It waits for OneDrive, shows you what's there, and runs it when you press `y`. T
 | Command | What it does |
 |---|---|
 | `relay start` | The one command to begin with. Gets Cowork the skills, says what this Mac is set up for, and puts a prompt on your clipboard. |
+| `relay practice` | One whole round on a small repository made for it, with Cowork leading. For a first try. |
 | `relay setup` | Installs or updates the skill, and records where your clones and reviews are. With `--skills`, copies your own Claude skills to Cowork too, adapted. |
 | `relay skills` | Says whether Cowork's copy of each of your skills is still in step with yours. |
 | `relay field-test` | Starts a test that Cowork guides you through, step by step, and reports on. |

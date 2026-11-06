@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.6.
+This skill is for relay 0.2.7.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -32,8 +32,22 @@ Their first message asks you to read `Documents/Cowork/relay/start/note.txt`. Do
 
 1. **Read the note,** with nothing attached. It says which relay their Mac has, what the Mac is set up for, and where their own skills stand. It holds no paths.
 2. **Check your copies.** Compare the note's `relay:` line with the version at the top of this skill. Compare its `runlib:` line with the line that sets `RUNLIB_VERSION` in your `runlib.sh`. If either differs, your copy is stale, and what you hand over could be wrong. Say so, ask them to wait five minutes and start a new session, and stop. Your copy of a skill can lag OneDrive by several minutes.
-3. **Ask one thing: "What are you working on?"** Give no list of choices, and put nothing else in that message. If the note says `runs on this Mac so far: 0`, add one line: you'll give one step at a time, and nothing runs on their Mac until they press a key there.
+3. **Ask one thing: "What are you working on?"** Give no list of choices, and put nothing else in that message. If the note says `runs on this Mac so far: 0`, add two lines. One: you'll give one step at a time, and nothing runs on their Mac until they press a key there. Two: if they'd like to try it on code that doesn't matter first, they can run `relay practice`, which takes about ten minutes.
 4. **Give the first step,** as a block. To change or fix code, that is `relay scan`, run in the repository's folder. To review a merge request, it is `relay mr` with its address. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question.
+
+## A practice round
+
+The user ran `relay practice`, and their first message asks for a practice round. The command made a small repository at `~/relay-practice` that nothing depends on. Walk them through one whole round there, so the first time they press **y** is on code that doesn't matter. It takes about ten minutes. Give every step as a block.
+
+1. **Read the note and check your copies,** as in the section on starting, and stop if either is stale. The note's `practice:` line says the repository is there. Then say in two lines what's coming: four steps, nothing of theirs is touched, and nothing runs until they press a key.
+2. **Share it.** Their step: `cd ~/relay-practice && relay scan`. Read the scan they paste.
+3. **Change it, and run the change.** `greeting.txt` holds one line, `hello`. Write a patch that adds a second line: a short friendly line of your own. Build the deliverable as the loop says, with checks that the first line is still `hello` and that the second is yours. Their step is the `relay run` command. In `EXPECT`: it may wait a minute or two for OneDrive, then it asks `Run it?`, and they press **v** to see what you sent, then **y** to run it.
+4. **Land it.** Read the report, and say in one line what it showed. Their step is `relay apply` with `--repo ~/relay-practice`. In `EXPECT`: it asks `Apply it, uncommitted?`, and after **y** the file is changed and nothing is committed.
+5. **Look, and clean up.** Their step: `cat ~/relay-practice/greeting.txt && cd ~ && relay practice --clean`. They see your line on their own Mac, and the repository is removed.
+
+Then say what just happened in one line: they shared code, you changed it, they ran it and applied it, and nothing moved without a key. Ask "What are you working on?" and carry on as the section on starting says.
+
+Write no report for a practice round. If a step fails, say what happened in plain words, and either try it once more or stop. Don't work around the relay.
 
 ## How to give the user a step
 
@@ -74,7 +88,7 @@ Then, with no attachment, read `Documents/Cowork/relay/scans/<repository>.txt` f
 
 A scan holds one branch: the one they're on. To see another, such as the latest `master`, ask for `relay scan --branch master`. It fetches, uses origin's copy, leaves their checkout alone and leaves out uncommitted changes. The note's `source:` line says where it came from. Each scan of a repository replaces the last under the same name, so check the note's `branch:` and `taken:` lines. The command prints the name it gave the scan: when two repositories share a folder name, the second has its parent folder's name in front. So read the note the command names, not one you worked out.
 
-The relay looks for things shaped like secrets before it sends a scan, and asks the user before sending any. The note's `secrets check:` line says what it found. If the user says no, nothing is sent: take that as their answer, and work without that repository.
+The relay looks for things shaped like secrets before it sends a scan, and asks the user before sending any. It asks once for a repository, and again only when what it finds has changed. The note's `secrets check:` line says what it found. If the user says no, nothing is sent: take that as their answer, and work without that repository.
 
 The note's `wiki:` line says whether the user's knowledge wiki for this repository came too. If it did, read `repo-wiki/index.md` before you plan, then only the pages it names that bear on this work. They record how the repository is meant to work and what was already decided, so tell the user if your plan conflicts with one, and cite the page's path. The code still decides what's true now, so check a page against it. You have a read-only copy, as of the note's `taken:` time, so you can't add to it.
 

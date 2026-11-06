@@ -19,6 +19,8 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 - `relay start` over a long session, and its stop for a stale copy. It ran for real once, on 2026-11-06 at 0.2.5, and the user reported four things: Cowork read the note and asked "What are you working on?" with no menu, its steps came as the short YOUR TURN block with one command each, two scans in a row were both on the clipboard, and a second `relay start` had nothing to wait for. Not known: whether the block holds late in a long session, whether Cowork stops when its copy is stale, which that run had no reason to show, and whether people run it each session.
 - Remembered clones, since 0.2.6. Smoke tests only.
+- The practice round, with real Cowork. Smoke tests only. Not known: whether Cowork keeps it to four steps and about ten minutes, and whether it writes a sensible deliverable for a one-line change.
+- The kept answer to the secrets question, on real repositories. Smoke tests only. Not known: whether asking once is the right balance, and whether people notice the line that says the places are the same as before.
 - A skill copy that a terminal app can't read. The tests take the file's permission away, which isn't the refusal macOS gives. Whether that refusal was behind the wrong "made by hand" on 2026-11-06 isn't confirmed.
 - The secrets check, on ordinary code. It ran once for real, on 2026-11-06 at 0.2.4, on the deployment folder whose scan had carried credentials: it listed 52 places, the user pressed `n`, and nothing was sent. Not known: how often it flags something harmless in a repository that holds no secrets, what it misses, and whether people read the list or press `y`.
 - A scan sent under a longer name, and Cowork reading it. The same run named the deployment folder's scan with its parent folder in front, because the code repository's scan already had the plain name. It was never sent.
@@ -35,6 +37,13 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### A practice round, and a secrets question that isn't asked every time (2026-11-06)
+
+- **Why the practice round:** a new person's first `y` was on their own code. `relay start` had its first real run that day and held, which the practice round was waiting on.
+- **What changed:** `relay practice` makes a small repository at `~/relay-practice` and hands Cowork a prompt, as `relay start` does. The skill has a section for it: Cowork adds a line of its own to a file there, the user runs it and applies it, sees the line on their Mac, and cleans up. `relay practice --clean` removes the repository.
+- **Why the secrets question changed:** a count over the clones on two Macs put the check at about three repositories in ten, mostly for lines in deployment settings. Asked that often, people stop reading and press `y`.
+- **What changed:** a yes is kept for a repository, with a mark of what was found by file, kind and number. The question comes back only when that changes. `--ask` on `relay scan` and `relay mr` asks again. The kept answer is used only at a terminal, so with none the relay still refuses. This is 0.2.7.
 
 ### The relay remembers where a clone is (2026-11-06)
 
