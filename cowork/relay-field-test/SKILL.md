@@ -7,7 +7,7 @@ description: |
 
 # Relay field test
 
-This skill is for relay 0.2.3.
+This skill is for relay 0.2.4.
 
 You are running a field test of `relay` with its user. They run commands on their Mac and tell you what they see. You do your own side with the remote-pair-run skill, watch what happens on both sides, and write it down.
 

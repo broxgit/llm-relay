@@ -47,6 +47,12 @@ relay scan
 
 It puts the current branch and your uncommitted changes in OneDrive, at `Documents/Cowork/relay/scans`, so you don't have to attach anything. That includes the branch's whole history. Untracked files stay out.
 
+**It looks for secrets first.** Before `relay scan` or `relay mr` sends code, it looks in the files for private keys, access tokens, lines in settings files that set a password or key, and files named like keys or credentials. If it finds any, it lists where they are, without printing them, and asks before it sends. That question needs a terminal, and no flag answers it for you. Say no, and nothing is sent.
+
+It goes by shape, so it can miss a secret, and it can flag something harmless. It reads the files at the commit being sent, and your uncommitted changes to them, and not the history, which goes too. So a repository that holds credentials, or ever did, is one to think about before you scan it, whatever the check says.
+
+A scan is named after the repository's folder. When two repositories share a folder name, as a service's code and its deployment folder can, the second takes its parent folder's name in front, and the command says so. Neither replaces the other.
+
 To share a different branch without leaving yours, add `--branch`. It fetches, and sends that branch as origin has it, or your local copy if origin doesn't have it. Your checkout isn't touched, and uncommitted changes stay out:
 
 ```bash
