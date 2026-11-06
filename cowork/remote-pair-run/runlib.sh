@@ -40,7 +40,7 @@
 # A run passes only if it reaches report_end with at least one check and no failures.
 # $RUN_TMP is a scratch folder, removed at exit.
 
-RUNLIB_VERSION=5
+RUNLIB_VERSION=6
 RUNLIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNLIB_EXIT_COUNT=0
 RUNLIB_STEP=0
@@ -616,7 +616,11 @@ _runlib_on_exit() {
     # relay apply reads this line to know which attempt's patches were proven.
     [ -z "$won" ] || echo "attempt passed: $won"
   fi
-  echo "checks: $passed passed, $failed failed"
+  if [ -s "$RUNLIB_TMP/attempts" ]; then
+    echo "checks: $passed passed, $failed failed, not counting the checks inside attempts"
+  else
+    echo "checks: $passed passed, $failed failed"
+  fi
   [ -z "$first" ] || echo "first failure: $first"
   if [ -z "$RUNLIB_ENDED" ]; then
     echo "ended early, exit code $rc, before report_end"

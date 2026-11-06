@@ -10,29 +10,33 @@ What's planned for the relay, and what's still untested. When an item is finishe
 - **What the tests showed (2026-11-03, two sessions):** Cowork picks the skill unprompted, and reads OneDrive by path with no attachment, including a `git bundle` in a tar.gz, with the bytes intact. An email trigger woke the same conversation in 8 to 67 seconds, even with Cowork closed, and refused a stale report. An uploaded Go toolchain ran offline. Cowork's browser refused, with browsing not enabled for the workspace. Running from the synced folder is fragile: `bash` was killed once and refused once with `Operation not permitted`, and a stale report got sent after the refusal. AppleScript can't send the email when the user is on Outlook on the web.
 - **Sketch:** after sending a report, `relay run` posts through a Teams workflow webhook, and a Cowork trigger on that message reads the report and carries on.
 - **Open:** whether the tenant allows the webhook, and whether a bot's message fires a trigger. Whether a trigger whose own instructions say to fix a FAIL can publish the fix is still untested, and only matters once this works. Also open: does the toolchain survive an idle gap?
+- **2026-11-06:** the user's Teams had no Workflows app, in the chat menus or the apps search on the web, so the webhook couldn't be made. Whether the company hides it isn't known. The email trigger that worked on 2026-11-03 is the route to try next.
 - **After that:** a direct bridge, as an MCP connector through a dev tunnel, could replace the relay. It's a public URL into a work laptop, and Cowork also reads email and web pages, so it needs IT's approval and no general shell.
 
 ## Untested
 
-Things that have never been run for real. Treat them as unproven until crossed off.
+Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
-- The guided field test. The skill is text, and `relay field-test` has only run in smoke tests. Not known: whether Cowork keeps to one step at a time, whether it keeps the user's work out of the report, and whether the report is good enough to act on.
-
-- Installing with Homebrew ran on the work Mac on 2026-11-05, at 0.1.0, and `relay setup` ran from that install. Upgrading there to 0.2.0 has not been done yet: `brew upgrade` alone didn't find it, because the tap hadn't been refreshed.
-
-- Attempts, with real Cowork. They have only run in smoke tests. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several sets of builds take in one run on real code.
-- The skill's instruction to look in Teams, email and SharePoint. It is text only, and nobody has seen what Cowork does with it.
-
-- Skill sync, with real Cowork and real OneDrive. It has only run in smoke tests. Not known: whether Cowork follows the note on a copied skill, whether the marker lines reach it, whether it cites the stamp in a review, and how the relay reads a copy that OneDrive has made cloud-only. Parts A, D and H of `design-and-decisions/work-mac-session.md` are the test.
-
-- The prompt that reads `/dev/tty`. It has answered through a pseudo-terminal in the smoke tests, on macOS and Linux. Nobody has typed at it by hand in Apple's Terminal, and `v` hasn't opened a real pager through it.
-
-- The standalone `relay` command on the work Mac. On 2026-11-05 it was cloned and linked there, `relay setup` installed the skill into the real OneDrive folder, and it printed `reviews` and `clones` from the old settings file without asking. `relay setup --skills` also ran there once, found a skill of the same name that the relay hadn't made, and left it alone. Still untested there: the reinstalled skill with real Cowork, and every other command.
-- `relay mr` and `review` with Copilot Cowork ran once on a real merge request on 2026-11-04, and every finding was reading only. The checks, the Coverage section and the fuller skill instructions came after that, so whether Cowork follows them is untested, and its findings have never been compared with a Claude review. A second pass in that session sent real runs to the Mac, which is how a hook spoiling the tree came to light, and the fix, `safe_worktree`, has only run in smoke tests. `apply` has only run in smoke tests.
-- Copilot Cowork reading a repository's wiki from `relay scan`. It has only run in smoke tests, against a fake OneDrive folder.
-- The `remote-pair-run` skill and the relay on real code. Whole rounds passed on a throwaway repository from Apple's Terminal on 2026-11-04, with nothing attached and no Always Keep. The relay's refusal message has only run against an imitation, because iTerm wasn't refused in that test, and later read a file it had been refused an hour before. Why is unknown.
+- `relay apply` with attempts, since the fix in 0.2.2. The field test found it refusing a run that had passed. The fix has only run in smoke tests.
+- `relay mr` with a link to another project's merge request, since the fix in 0.2.2. Smoke tests only.
+- The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, and the checks are for Go only, so none ran.
+- Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
+- Waking Cowork. The user's Teams had no Workflows app, so no webhook could be made. An email trigger worked on 2026-11-03, and hasn't been tried with the relay.
+- Anything with Jira or Confluence. Cowork couldn't read a ticket or its page by any route. The Mac has `jira` and `acli`, and the relay doesn't use them yet.
+- A run from a terminal app other than Apple's Terminal. The relay's refusal message has only run against an imitation. Why iTerm was refused once, and not later, is unknown.
+- Cowork's review findings against a Claude review of the same merge request. Never compared.
+- Attempts on real code. The field test's two attempts were planted. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several builds take in one run.
+- Whether Cowork follows what a repository's wiki says. The wiki reached it with a scan and with a merge request in the field test, and the review listed it. Nothing showed a page changing what Cowork did.
+- The guided test's skill as reworded after the field test.
 
 ## Done
+
+### The field test, and what it found (2026-11-06)
+
+- **What ran:** Cowork led the guided test on the work Mac at 0.2.1, in Apple's Terminal, with nothing attached and no Always Keep. That was 7 runs, 2 applies, 1 review and 4 scans, with no refusal and no `killed`. About 30 YOUR TURN blocks worked the first time, and 3 needed a second ask.
+- **What passed:** a scan read with its hash checked, a run from a fresh publish, a planted failure and then its fix, `n` sending nothing, `relay apply`, a scan of another branch, a review saved with its Coverage shown, `safe_worktree`, your own skill copied with its stamp cited, the check that a copy has fallen behind, the prompt typed by hand with `v` opening a pager, and a 59.7 MB file. A Go module with 541 lines of vendored modules built and vetted in Cowork's sandbox, offline.
+- **Fixed in 0.2.2:** `relay apply` refused a run with attempts that had passed, because it took the last report in the task's folder by name, and a task's deliverables share that folder. `relay run` now records which report came from which files, on the Mac, and `relay apply` reads that. `relay mr` fetched this project's merge request of the same number when the description linked one in another project. It now fetches each from its own project, and the note says which file holds which. The message for a skill you made by hand says your own text goes over whatever you choose. A scan of another branch says in its note that uncommitted changes were left out. A run with attempts says its `checks:` line leaves the attempts' checks out, so `runlib.sh` is version 6. The guided test's note says where a skill stands in plain words. Both skills have the wording fixes the test's report asked for.
+- **Found, and not fixed:** the checks in `relay mr` are for Go only. Cowork's download tool keeps the first copy of a file it has read, so a second scan of a repository needed a way round, which the skill now gives. Teams had no Workflows app, so the wake-up couldn't be tried. Cowork can't reach Jira or Confluence.
 
 ### The guided test asks in a way that can't be missed (2026-11-05)
 

@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.1"
+RELAY_VERSION="0.2.2"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -404,6 +404,23 @@ send_report() {
   return 1
 }
 
+# A task's deliverables share one reports folder, and a report is named by its run.sh, not by
+# its deliverable. So relay run keeps its own record of which report came from which files, on
+# this Mac, where nothing in the cloud can change it. A line is the manifest's hash, the
+# deliverable, its version and the report's name, with tabs between.
+record_run() {
+  printf '%s\t%s\t%s\t%s\n' "$(sha256_of "$1")" "$2" "$3" "$4" >>"$REPORTS/.relay-runs" 2>/dev/null || true
+}
+
+# last_run_report <manifest>: the report this Mac kept from its last run of exactly these files.
+last_run_report() {
+  local name
+  [ -f "$REPORTS/.relay-runs" ] || return 0
+  name="$(awk -F '\t' -v h="$(sha256_of "$1")" '$1 == h { r = $4 } END { if (r != "") print r }' "$REPORTS/.relay-runs")"
+  case "$name" in '' | */*) return 0 ;; esac
+  [ ! -f "$REPORTS/$name" ] || echo "$REPORTS/$name"
+}
+
 cmd_run() {
   local named="" where="" expect="" no_install="" a rc copy version task new
   while [ $# -gt 0 ]; do
@@ -464,6 +481,7 @@ cmd_run() {
     [ "$rc" -ne 0 ] || rc=1
     return "$rc"
   fi
+  record_run "$copy/manifest.txt" "$task/$(basename "$SRC")" "$version" "$new"
   send_report "$REPORTS/$new" "$task" || { [ "$rc" -ne 0 ] || rc=1; }
   return "$rc"
 }
@@ -646,6 +664,8 @@ cmd_scan() {
     echo "wiki: $WIKI_LINE"
     if [ "$dirty" = yes ]; then
       echo "uncommitted changes: yes, in uncommitted.patch"
+    elif [ -n "$want" ]; then
+      echo "uncommitted changes: left out, because this is a scan of another branch. uncommitted.patch is empty"
     else
       echo "uncommitted changes: no, uncommitted.patch is empty"
     fi
@@ -770,16 +790,41 @@ for f in ("title", "source_branch", "description"):
 PY
 }
 
-# MRs the description links, such as "copy of !12", because a review needs their discussions too.
-related_iids() {
-  python3 - "$1" "$2" <<'PY' 2>/dev/null
+# related_refs <view.json> <host> <project> <iid>: the merge requests the description links, as
+# "project iid" lines, because a review needs their discussions too. A link can be a bare !12,
+# which is this project's, or name another project by its address or as group/project!12. The
+# text of a link, as in [!12](address), is not a reference of its own. A line that starts with
+# "host:" is a link to another GitLab, which is noted and never fetched.
+related_refs() {
+  python3 - "$@" <<'PY' 2>/dev/null
 import json, re, sys
 d = json.load(open(sys.argv[1]))
-seen = []
-for n in re.findall(r"(?<![\w/])!([0-9]+)", str(d.get("description") or "")):
-    if n != sys.argv[2] and n not in seen:
-        seen.append(n)
-print("\n".join(seen[:5]))
+host, project, iid = sys.argv[2], sys.argv[3], sys.argv[4]
+text = str(d.get("description") or "")
+seen, elsewhere = [], []
+def add(p, n):
+    if (p, n) != (project, iid) and (p, n) not in seen:
+        seen.append((p, n))
+text = re.sub(r"\[[^\]]*\]\(\s*(https?://[^)\s]+)[^)]*\)", r" \1 ", text)
+url = re.compile(r"https?://([A-Za-z0-9.:-]+)/([A-Za-z0-9._/-]+?)/-/merge_requests/([0-9]+)")
+for h, p, n in url.findall(text):
+    if h == host:
+        add(p.strip("/"), n)
+    elif (h, p, n) not in elsewhere:
+        elsewhere.append((h, p, n))
+text = url.sub(" ", text)
+short = re.compile(r"(?<![\w./-])([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)!([0-9]+)")
+for p, n in short.findall(text):
+    if "/" not in p and "/" in project:
+        p = project.rsplit("/", 1)[0] + "/" + p
+    add(p, n)
+text = short.sub(" ", text)
+for n in re.findall(r"(?<![\w/])!([0-9]+)", text):
+    add(project, n)
+for p, n in seen[:5]:
+    print(p, n)
+for h, p, n in elsewhere[:5]:
+    print("host:" + h, p + "!" + n)
 PY
 }
 
@@ -1065,14 +1110,14 @@ is_yours() {
 
 # pack_mr <url> <repo override> <no-wiki flag> <go prefixes> <also notes> <checks mode>: one MR, in OneDrive.
 pack_mr() {
-  local url="$1" repo_arg="$2" no_wiki="$3" prefixes="$4" also_notes="$5" checks_mode="$6" local_line yours clone repo name ticket source target head base start commit page out n hash size dest review existing=none
+  local url="$1" repo_arg="$2" no_wiki="$3" prefixes="$4" also_notes="$5" checks_mode="$6" local_line yours clone repo name ticket source target head base start commit page out n hash size dest review rp rf existing=none
   parse_mr "$url"
   repo="${MR_PROJECT##*/}"
   name="$(printf '%s-%s' "$repo" "$MR_IID" | tr -c 'A-Za-z0-9._-' '-')"
   if [ -n "$repo_arg" ]; then
     clone="$(git -C "$repo_arg" rev-parse --show-toplevel 2>/dev/null)" || die "--repo: not a git repository: $repo_arg"
   else
-    clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Clone it, name it with --repo PATH, or change where to look with relay setup --clones DIR"
+    clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Name it with --repo PATH, or add the folder that holds it to where the relay looks: relay setup --clones '$CLONES_DIRS:FOLDER'"
   fi
 
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
@@ -1096,12 +1141,26 @@ pack_mr() {
     fi
     page=$((page + 1))
   done
-  while IFS= read -r n; do
+  # Each one is fetched from its own project, and the note says which file holds it, so a
+  # reviewer never takes another project's merge request of the same number for it.
+  : >"$WORK/related.txt"
+  while read -r rp n; do
     [ -n "$n" ] || continue
-    glab_call api "projects/:fullpath/merge_requests/$n/discussions?per_page=100" --repo "$MR_PROJECT" >"$WORK/mr/related-$n-discussions.json" 2>/dev/null ||
-      rm -f "$WORK/mr/related-$n-discussions.json"
+    case "$rp" in
+      host:*)
+        echo "  ${rp#host:}/$n: on another GitLab, so not fetched" >>"$WORK/related.txt"
+        continue
+        ;;
+    esac
+    rf="related-$(printf '%s' "$rp" | tr '/' '-')-$n-discussions.json"
+    if glab_call api "projects/:fullpath/merge_requests/$n/discussions?per_page=100" --repo "$rp" >"$WORK/mr/$rf" 2>/dev/null; then
+      echo "  $rp!$n: mr/$rf" >>"$WORK/related.txt"
+    else
+      rm -f "$WORK/mr/$rf"
+      echo "  $rp!$n: glab couldn't read it, so it isn't here" >>"$WORK/related.txt"
+    fi
   done <<EOF
-$(related_iids "$WORK/mr/view.json" "$MR_IID")
+$(related_refs "$WORK/mr/view.json" "$MR_HOST" "$MR_PROJECT" "$MR_IID")
 EOF
 
   source="$(json_get "$WORK/mr/view.json" source_branch)"
@@ -1175,6 +1234,10 @@ EOF
     echo "wiki: $WIKI_LINE"
     echo "go modules: $MODULES_LINE"
     echo "changed files: $(grep -c '^diff --git' "$WORK/mr/diff.patch")"
+    if [ -s "$WORK/related.txt" ]; then
+      echo "merge requests the description links, each from its own project:"
+      cat "$WORK/related.txt"
+    fi
     echo "checks: $CHECKS_LINE"
     echo "earlier review: $existing"
     echo "review goes in the deliverable at: reviews/$review"
@@ -1402,7 +1465,7 @@ EOF
 # ---- apply -------------------------------------------------------------------
 
 cmd_apply() {
-  local named="" where="" expect="" repo_arg="" root copy version a task p patches="" done_list="" report key winner=""
+  local named="" where="" expect="" repo_arg="" root copy version a task p patches="" done_list="" report winner=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --expect)
@@ -1438,21 +1501,17 @@ cmd_apply() {
   version="$(_runlib_manifest_version "$copy/manifest.txt")"
   a="${SRC%/*}"
   task="$(basename "${a%/*}")"
-  report=""
-  for key in "$COWORK/relay/$task/reports"/*-v"$version"-*.txt; do
-    [ -f "$key" ] && report="$key"
-  done
+  report="$(last_run_report "$copy/manifest.txt")"
   # A deliverable with attempts carries several ways of doing it, and only the one a run proved
-  # is applied. The report says which. Its folder is in the cloud, so it has to be the same
-  # file this Mac kept when it wrote it.
+  # is applied. The report this Mac kept from its run of these files says which. The copy in
+  # OneDrive is never read for it.
   if manifest_paths "$copy" | grep -q '^attempts/.*\.patch$'; then
     [ -n "$report" ] || die "that deliverable has attempts, and no run of version $version says which passed. Run it first: relay run $where --expect $version"
-    cmp -s "$report" "$REPORTS/$(basename "$report")" || die "the report for version $version in OneDrive isn't the one this Mac wrote, so it can't say which attempt passed. Run it again: relay run $where --expect $version"
-    tail -n 1 "$report" | grep -q ' RUN: PASS$' || die "the last run of version $version didn't pass, so no attempt is proven and nothing is applied"
+    tail -n 1 "$report" | grep -q ' RUN: PASS$' || die "the last run of version $version didn't pass, so no attempt is proven and nothing is applied. Its report: $report"
     winner="$(sed -n 's/^attempt passed: //p' "$report" | tail -n 1)"
     case "$winner" in
-      '') die "no attempt passed in the last run of version $version, so there's nothing proven to apply" ;;
-      .* | *[!A-Za-z0-9._-]*) die "the report names an attempt the relay can't use" ;;
+      '') die "the last run of version $version names no attempt that passed, so there's nothing proven to apply. Its report: $report" ;;
+      .* | *[!A-Za-z0-9._-]*) die "the report names an attempt the relay can't use. Its report: $report" ;;
     esac
   fi
   patches="$(_runlib_attempt_patches "$copy" "$winner")"
@@ -1468,7 +1527,7 @@ cmd_apply() {
   printf '%s' "$patches" | sed 's/^/  /'
   # A patch that never passed a run can still be what someone wants, but they should know.
   if [ -z "$report" ]; then
-    echo "Warning: there's no report from a run of version $version."
+    echo "Warning: there's no report from a run of version $version on this Mac."
   elif ! tail -n 1 "$report" | grep -q ' RUN: PASS$'; then
     echo "Warning: the last run of version $version didn't pass."
   fi
@@ -1763,7 +1822,7 @@ sync_skills() {
           echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone." >&2
           echo "  To have the relay keep it in step with yours:" >&2
           echo "  1. See how it differs from yours: diff -r \"$SKILLS_FROM/$name\" \"$SKILLS_DIR/$name\"" >&2
-          echo "  2. Put anything in it that's only for Cowork in $SKILLS_FROM/$name/COWORK.md. The relay adds that file's text to its copy." >&2
+          echo "  2. Your own skill's text goes to Cowork whatever you do here. Only text that's in Cowork's copy and not in yours is at stake: it's gone from Cowork once you move the folder. To keep any of it, put it in $SKILLS_FROM/$name/COWORK.md, and the relay adds it to its copy. Otherwise skip this step." >&2
           echo "  3. Move that folder out of Cowork's skills folder, and run relay setup again." >&2
         else
           echo "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. relay setup says what to do." >&2
@@ -1932,7 +1991,7 @@ clean_field_test() {
 }
 
 cmd_field_test() {
-  local dest note how name prompt key
+  local dest note how name prompt key words stamp
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     --clean)
@@ -1975,7 +2034,17 @@ cmd_field_test() {
       while IFS= read -r name; do
         [ -n "$name" ] || continue
         skill_state "$name"
-        echo "  $name: $SKILL_STATE${SKILL_SHA:+ (${SKILL_SHA:0:8})}"
+        case "$SKILL_STATE" in
+          same) words="in step with the user's" ;;
+          stale) words="behind the user's, which has changed since the copy was made" ;;
+          edited) words="changed in Cowork's folder since the relay made it" ;;
+          foreign) words="in Cowork's folder, but put there by hand, not by the relay" ;;
+          absent) words="not in Cowork's folder yet" ;;
+          *) words="named, but this Mac has no skill of that name" ;;
+        esac
+        stamp=""
+        [ -z "$SKILL_SHA" ] || stamp=". The user's own is ${SKILL_SHA:0:8}"
+        echo "  $name: $words$stamp"
       done <<EOF
 $(printf '%s\n' "$SKILLS" | tr ':' '\n')
 EOF
