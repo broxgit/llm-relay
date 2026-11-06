@@ -33,7 +33,7 @@ The best view is a relay scan. Ask the user to run this in the repository:
 relay scan
 ```
 
-Then, with no attachment, read `Documents/Cowork/relay/scans/<repository>.txt` from their OneDrive. If your tools need a drive's id, list the drives and use the one named OneDrive. The note gives the path, branch, commit, status, tool versions and the archive's sha256. Get `<repository>.tar.gz` from the same folder into your sandbox and check the hash: a download can report success before the file appears, so try again for a minute or two. That goes for any file you download. If a download fails with a transient error, such as an HTTP 500, wait 20 seconds and try once more. If you read the same OneDrive file twice in a session, check that it's new, such as by the note's `taken:` time, because your download tool may keep the first copy. Extract it, `git clone repo.bundle`, and apply `uncommitted.patch` if it isn't empty. You now have real history at the real commit. Untracked files aren't included, so ask for any you need.
+Then, with no attachment, read `Documents/Cowork/relay/scans/<repository>.txt` from their OneDrive. If your tools need a drive's id, list the drives and use the one named OneDrive. If they need an item's id too, look the file up by its exact path to get it. A path passed as the id has been refused. The note gives the path, branch, commit, status, tool versions and the archive's sha256. Get `<repository>.tar.gz` from the same folder into your sandbox and check the hash: a download can report success before the file appears, so try again for a minute or two. That goes for any file you download. If a download fails with a transient error, such as an HTTP 500, wait 20 seconds and try once more. If you read the same OneDrive file twice in a session, check that it's new, such as by the note's `taken:` time, because your download tool may keep the first copy. If it does, move your earlier download out of your workspace's download folder (it has been `cloud/`) and download again, then check that the note's `taken:` time changed. Extract it, `git clone repo.bundle`, and apply `uncommitted.patch` if it isn't empty. You now have real history at the real commit. Untracked files aren't included, so ask for any you need.
 
 A scan holds one branch: the one they're on. To see another, such as the latest `master`, ask for `relay scan --branch master`. It fetches, uses origin's copy, leaves their checkout alone and leaves out uncommitted changes. The note's `source:` line says where it came from. Each scan of a repository replaces the last under the same name, so check the note's `branch:` and `taken:` lines.
 
@@ -128,7 +128,7 @@ What makes a run worth trusting:
 - **Clean up with `on_exit`, never `trap`.** Restore only what the run changed. Refuse to run over uncommitted work that the restore would destroy.
 - **No `set -e` in `run.sh`.** A failure is a result, and the later checks still tell you something.
 
-Check what you can in your sandbox first: at least `bash -n` on each script, and anything your sandbox can compile or run. See Compile before you hand over. Your sandbox may lack tools the user's machine has, such as `cmp`, and the two can word errors differently, so choose negative-test text that your own script prints, or that both print. Use `sha256sum` or `python3` rather than `cmp`, `od` or `xxd` in anything you try here. Make the manifest before a trial run, and set `RUNLIB_SYNC_WAIT=0`, or the sync check waits for files that aren't coming.
+Check what you can in your sandbox first: at least `bash -n` on each script, and anything your sandbox can compile or run. See Compile before you hand over. Your sandbox may lack tools the user's machine has, such as `cmp`, and the two can word errors differently, so choose negative-test text that your own script prints, or that both print. Use `sha256sum` or `python3` rather than `cmp`, `od` or `xxd` in anything you try here. Make the manifest before a trial run, and set `RUNLIB_SYNC_WAIT=0`, or the sync check waits for files that aren't coming. Your sandbox has refused a command whose text held a version flag such as `--version`, even inside a script you were writing. If that happens, get the version another way, such as `go version` or `python3 -c 'import sys; print(sys.version)'`.
 
 Then make the manifest, last, after every file is final:
 
@@ -148,7 +148,7 @@ Give the user one command, using the version the manifest printed and your task 
 relay run <task-folder>/<deliverable> --expect 3
 ```
 
-It waits up to 600 seconds for every file to match the manifest, reading each one, which is what makes OneDrive download it. It copies the listed files to a local folder, shows them, and runs the copy when the user presses y. It sends the report to OneDrive only if a run happened. So don't add checks of your own for stale files. Your publish result shows your task folder's name, as `Tasks/<task-folder>/output/...`. If you can't find it, `relay run --expect 3` uses the newest deliverable. They can add `--no-install` to skip the install on a second run.
+It waits up to 600 seconds for every file to match the manifest, reading each one, which is what makes OneDrive download it. It copies the listed files to a local folder, shows them, and runs the copy when the user presses y. It sends the report to OneDrive only if a run happened. So don't add checks of your own for stale files. Your publish result shows your task folder's name, as `Tasks/<task-folder>/output/...`. The deliverable is the folder right under `output`, even when the result names a subfolder of it. If you can't find it, `relay run --expect 3` uses the newest deliverable. They can add `--no-install` to skip the install on a second run.
 
 If it gives up, it prints what the Mac sees for each file: its size, its flags, and the error from reading it. Have the user paste that output, and don't guess past it. Most failures to get ready are the refusal described below, so look for it first.
 
@@ -207,7 +207,7 @@ report_end
 - **An attempt starts from a commit.** If the user's uncommitted work matters, ask them to commit it to a branch first.
 - **Make each attempt a real alternative.** Say in a line each what it tries and why it might be the one. Two or three is plenty. Don't pad a deliverable with variations you don't believe in: every attempt costs the user's machine a build.
 
-In the report, read the summary's `attempts:` lines. `attempt passed:` names the one that worked. If none did, each attempt's first failure is listed, so diagnose each of them before the next round.
+In the report, read the summary's `attempts:` lines. `attempt passed:` names the one that worked. The `checks:` line there counts only the checks outside attempts. `relay apply` goes by the user's last run of exactly these files, so if you change a deliverable after its run, have them run it again before they apply. If none did, each attempt's first failure is listed, so diagnose each of them before the next round.
 
 ## Patches
 
@@ -226,7 +226,7 @@ Use a patch for a change to existing code. Never write hunks by hand.
 
 ## Compile before you hand over
 
-A Go toolchain can run in your sandbox, even with no network, which catches compile errors before the user runs anything. This worked in one test, with a module that imports only the standard library (**validated**). Dependencies, through a vendored folder, are **not validated**.
+A Go toolchain can run in your sandbox, even with no network, which catches compile errors before the user runs anything. This worked in one test, with a module that imports only the standard library (**validated**). Dependencies, through a vendored folder, are **validated** for `go build` and `go vet`, once, on 2026-11-06: one module with 541 lines in `vendor/modules.txt`, Go 1.25.1 on linux/amd64, with `GOFLAGS=-mod=vendor`, `GOPROXY=off` and `GOTOOLCHAIN=local`. `go test` ran there too.
 
 If the work is in Go and no toolchain is attached, ask once for the Linux tarball from go.dev/dl, matching your `uname -m` and the repository's Go version. Then:
 
@@ -254,7 +254,7 @@ With no attachment, read `Documents/Cowork/relay/mrs/<repo>-<iid>.txt`, get the 
 |---|---|
 | `repo.bundle` | `git clone` it. `HEAD` is the source branch, and `origin/<target>` is the target. `git diff <base>...HEAD`, with `base:` from the note, is what the merge request shows |
 | `mr/view.json`, `mr/diff.patch`, `mr/versions.json` | What `glab` says about the merge request |
-| `mr/discussions-*.json`, `mr/related-*-discussions.json` | Every comment, including bots, on it and on merge requests its description links |
+| `mr/discussions-*.json`, `mr/related-<project>-<number>-discussions.json` | Every comment, including bots, on it and on merge requests its description links. Each linked one comes from its own project, and the note lists which file holds which, and any it couldn't read |
 | `mr/checks/` | `summary.txt` and one output file each for `go build`, `go vet`, `go test` and `go mod tidy -diff`, run on their Mac at the merge request's commit, if they agreed |
 | `mr/existing-review.md` | Their earlier review, if there is one. Keep their edits to it |
 | `go-modules/<module>@<version>/` | Their own Go libraries, at the versions `go.mod` pins. `go-modules/index.txt` lists them, and says if any couldn't be downloaded |

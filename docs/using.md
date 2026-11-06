@@ -71,7 +71,7 @@ If OneDrive never catches up, the command gives up after 10 minutes, prints what
 
 When Cowork can see two or three plausible fixes, it can put them all in one deliverable. You still read it and press `y` once. The run tries them in order, each in a fresh copy of the code with git hooks off, and stops at the first that passes. Your checkout isn't touched, and the report says which attempt passed and why the others failed.
 
-`relay apply` then applies only the attempt that passed. It takes that from the report, and only if the report in OneDrive is the same file your Mac kept in `~/pair-run-reports`. If no run has passed, it applies nothing.
+`relay apply` then applies only the attempt that passed. It takes that from the report your Mac kept in `~/pair-run-reports` when it last ran exactly those files, and never from OneDrive. If no run has passed, or the files have changed since the run, it applies nothing and says to run it first.
 
 This needs the skill from this version, so run `relay setup` after updating.
 

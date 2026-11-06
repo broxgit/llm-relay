@@ -1,6 +1,6 @@
 # Attempts: several tries in one run
 
-**Status: Brock said to build it on 2026-11-05. It has only run in smoke tests.** This is step 5 of [leverage.md](leverage.md).
+**Status: Brock said to build it on 2026-11-05. A run with two attempts passed with Cowork on 2026-11-06, and `relay apply` then refused it, which 0.2.2 fixes.** This is step 5 of [leverage.md](leverage.md).
 
 One deliverable can now carry several ways of fixing the same thing. The run tries them in order, each in its own fresh copy of the code, and stops at the first that passes. You still read the deliverable and press `y` once, so one keypress buys several iterations.
 
@@ -56,7 +56,9 @@ The report's summary has one line for it:
 attempt passed: pin-yaml
 ```
 
-`relay apply` reads that line from the report of the same version. It only trusts a report in OneDrive that is identical to the copy this Mac kept in `~/pair-run-reports`, because the report folder is in the cloud and the choice of patches hangs on it. Then it shows the attempt and its patches, and asks, as before.
+`relay apply` reads that line from the report this Mac kept in `~/pair-run-reports` from its last run of exactly these files. `relay run` records which report came from which files, by the manifest's hash, in `~/pair-run-reports/.relay-runs`. The copy of the report in OneDrive is never read for this, because that folder is in the cloud and the choice of patches hangs on it. Then it shows the attempt and its patches, and asks, as before.
+
+Until 0.2.2 it took the last report of that version in the task's OneDrive folder, by name. A task's deliverables share that folder, so after another deliverable ran it read the wrong report and refused. The field test of 2026-11-06 found it.
 
 If a deliverable has attempts and no report shows one that passed, `relay apply` stops and says to run it first. It never applies an attempt that wasn't proven.
 
@@ -65,6 +67,7 @@ If a deliverable has attempts and no report shows one that passed, `relay apply`
 - **Attempts start from a commit.** Uncommitted work in the user's checkout isn't in the worktree. If it matters, Cowork asks the user to commit it to a branch first.
 - **No `on_exit` inside an attempt.** The function runs in a subshell, and its worktree is thrown away anyway.
 - **Names are plain:** letters, digits, dots, dashes and underscores, because a name is also a folder.
+- **Changing a deliverable after its run unproves it.** `relay apply` goes by a run of the same files, so a changed deliverable has to run again first.
 - **A deliverable needs the new `runlib.sh`.** Cowork copies it from the skill's folder, so `relay setup` has to run after updating, and Cowork has to check its copy says `RUNLIB_VERSION=5` or more.
 
 ## Not known

@@ -492,6 +492,7 @@ pr_expect "the passing one says so" 0 "ATTEMPT good: PASS, 4 checks passed"
 pr_expect "the summary counts them" 0 "attempts: 2 tried"
 pr_expect "and gives each one's first failure" 0 "  bad: FAIL, first failure: it says good"
 pr_expect "and names the one that passed, for relay apply" 0 "attempt passed: good"
+pr_expect "the checks line says it leaves the attempts' checks out" 0 "failed, not counting the checks inside attempts"
 pr_expect "a failed attempt's checks don't fail the run" 0 "checks: 2 passed, 0 failed"
 pr_expect "the user's checkout is proved unchanged" 0 "RESULT your checkout unchanged: PASS"
 case "$PR_OUT" in *"RESULT apply 0-common.patch: PASS"*"RESULT apply attempts/good/1-a.patch: PASS"*) ok "the deliverable's own patches go first, then the attempt's" ;; *) bad "the deliverable's own patches go first, then the attempt's" "$PR_OUT" ;; esac
@@ -500,7 +501,7 @@ RESULT apply attempts/good"
 check "uncommitted work is still there" grep -q 'not committed' "$AT/scratch.txt"
 [ "$(cat "$AT/a.txt")" = one ] && ok "and the tracked file is as it was" || bad "and the tracked file is as it was" "$(cat "$AT/a.txt")"
 [ "$(git -C "$AT" worktree list | wc -l | tr -d ' ')" = 1 ] && ok "the worktrees are gone afterwards" || bad "the worktrees are gone afterwards" "$(git -C "$AT" worktree list)"
-pr_expect "the report says which runlib ran" 0 "runlib: 5"
+pr_expect "the report says which runlib ran" 0 "runlib: 6"
 at_new 'attempt good "$repo" "$commit" try || attempt bad "$repo" "$commit" try
 report_end'
 pr_run
@@ -686,6 +687,7 @@ sleep 1
 
 rl n t1/d1
 rl_expect "n runs nothing" 1 "Nothing ran, and no report was sent"
+case "$RL_OUT" in *"Relay run ended at "*Z.) ok "and the last line ends as it does after a run" ;; *) bad "and the last line ends as it does after a run" "$RL_OUT" ;; esac
 rl_lacks "n really runs nothing" "HERE="
 [ "$(rl_sent t1)" = 1 ] && ok "n sends no report" || bad "n sends no report" "$(rl_sent t1)"
 rl xn t1/d1
@@ -973,7 +975,7 @@ expect "--branch scans origin's copy" "main at $NEW_MAIN, from origin/main" sc -
 check "the note names the branch" grep -q '^branch: main$' "$SD/branch-me.txt"
 check "the note names the commit" grep -q "^commit: $NEW_MAIN$" "$SD/branch-me.txt"
 check "the note names the source" grep -q '^source: origin/main$' "$SD/branch-me.txt"
-check "the note says no uncommitted changes" grep -q '^uncommitted changes: no, uncommitted.patch is empty$' "$SD/branch-me.txt"
+check "the note says uncommitted changes were left out" grep -q '^uncommitted changes: left out, because this is a scan of another branch. uncommitted.patch is empty$' "$SD/branch-me.txt"
 check "the note skips the checkout's status" bash -c "! grep -q '^status' '$SD/branch-me.txt'"
 BU="$T/branch-unpacked"
 mkdir -p "$BU"
@@ -1038,7 +1040,7 @@ cat >"$FG/glab" <<FAKE
 #!/bin/sh
 echo "\$*" >>"$T/glab.log"
 case "\$*" in
-  *"mr view 7 "*) printf '{"title":"Fix the thing","source_branch":"ABC-12-work","target_branch":"master","sha":"%s","description":"Copy of !3 and see !7","author":{"name":"Some One","username":"someone"}}' "\${FAKE_MR_SHA:-$MR_HEAD}" ;;
+  *"mr view 7 "*) printf '{"title":"Fix the thing","source_branch":"ABC-12-work","target_branch":"master","sha":"%s","description":"Copy of !3 and see !7. Built on [!42](https://gitlab.com/other/lib/-/merge_requests/42), on team/tools!5 and on https://git.elsewhere.example/x/y/-/merge_requests/9","author":{"name":"Some One","username":"someone"}}' "\${FAKE_MR_SHA:-$MR_HEAD}" ;;
   *"mr diff 7 "*) echo 'diff --git a/a.txt b/a.txt' ;;
   *"api user "*) [ -z "\${FAKE_ME:-}" ] && exit 1; printf '{"username":"%s"}' "\$FAKE_ME" ;;
   *"merge_requests/7/versions"*) printf '[{"head_commit_sha":"$MR_HEAD","base_commit_sha":"$MR_BASE","start_commit_sha":"$MR_BASE"}]' ;;
@@ -1046,6 +1048,8 @@ case "\$*" in
   *"merge_requests/7/discussions"*"&page=2"*) echo '[{"id":"d2","notes":[{"body":"second page"}]}]' ;;
   *"merge_requests/7/discussions"*) echo '[]' ;;
   *"merge_requests/3/discussions"*) echo '[{"id":"r1","notes":[{"body":"on the related one"}]}]' ;;
+  *"merge_requests/42/discussions"*"--repo other/lib"*) echo '[{"id":"o1","notes":[{"body":"from the other project"}]}]' ;;
+  *"merge_requests/42/discussions"*) echo '[{"id":"w1","notes":[{"body":"the wrong 42"}]}]' ;;
   *) echo "no such merge request" >&2; exit 1 ;;
 esac
 FAKE
@@ -1088,6 +1092,10 @@ check "the clone's checkout didn't move" bash -c "[ \"\$(git -C '$MC' symbolic-r
 check "its uncommitted work is still there" grep -q uncommitted "$MC/a.txt"
 check "the note has the title" grep -q '^title: Fix the thing$' "$MD/svc-7.txt"
 check "the note has the ticket" grep -q '^ticket: ABC-12$' "$MD/svc-7.txt"
+check "the note says which file holds each linked merge request" grep -q '^  other/lib!42: mr/related-other-lib-42-discussions.json$' "$MD/svc-7.txt"
+check "and names one it couldn't read" grep -q "^  team/tools!5: glab couldn't read it, so it isn't here\$" "$MD/svc-7.txt"
+check "and one on another GitLab, which it never fetches" grep -q '^  git.elsewhere.example/x/y!9: on another GitLab, so not fetched$' "$MD/svc-7.txt"
+refuse "nothing is asked of another GitLab" grep -q 'elsewhere' "$T/glab.log"
 check "the note has the base" grep -q "^base: $MR_BASE$" "$MD/svc-7.txt"
 check "the note says where the review goes" grep -q '^review goes in the deliverable at: reviews/ABC-12/svc-7.md$' "$MD/svc-7.txt"
 check "the note's hash matches" grep -q "^archive sha256: $(rl_sha "$MD/svc-7.tar.gz")$" "$MD/svc-7.txt"
@@ -1102,8 +1110,12 @@ check "the uncommitted work stays out" bash -c "! git -C '$MU/clone' grep -q unc
 check "the discussions came" grep -q 'from a bot' "$MU/mr/discussions-1.json"
 check "all the pages of them" grep -q 'second page' "$MU/mr/discussions-2.json"
 check "with no empty page" test ! -e "$MU/mr/discussions-3.json"
-check "and the linked MR's" grep -q 'on the related one' "$MU/mr/related-3-discussions.json"
-check "but not this MR again" test ! -e "$MU/mr/related-7-discussions.json"
+check "and the linked MR's" grep -q 'on the related one' "$MU/mr/related-team-svc-3-discussions.json"
+check "but not this MR again" test ! -e "$MU/mr/related-team-svc-7-discussions.json"
+# A link to another project's merge request is read from that project. Seen in the field test
+# of 2026-11-06, where the same number in this project came back in its place.
+check "a link to another project is read from that project" grep -q 'from the other project' "$MU/mr/related-other-lib-42-discussions.json"
+refuse "and never as this project's merge request of that number" grep -rq 'the wrong 42' "$MU/mr"
 check "the diff came" grep -q 'diff --git' "$MU/mr/diff.patch"
 check "the pinned library came" grep -q RETRIES "$MU/go-modules/corp.example.com/lib/kafka@v1.2.3/kafka.go"
 check "one that can't be fetched is listed" grep -q 'corp.example.com/lib/gone v0.0.1: couldn.t be downloaded' "$MU/go-modules/index.txt"
@@ -1119,6 +1131,8 @@ tar -tzf "$MD/svc-7.tar.gz" | grep -q 'go-modules/index.txt' && ok "--go-prefix 
 refuse "a URL that isn't an MR is refused" mr https://gitlab.com/team/svc
 refuse "an MR glab can't read is refused" mr https://gitlab.com/team/svc/-/merge_requests/99
 refuse "an MR with no clone says so" mr https://gitlab.com/team/other/-/merge_requests/7
+out="$(mr https://gitlab.com/team/other/-/merge_requests/7 2>&1)"
+case "$out" in *"add the folder that holds it to where the relay looks: relay setup --clones '"*":FOLDER'"*) ok "and how to add the folder that holds it" ;; *) bad "and how to add the folder that holds it" "$out" ;; esac
 expect "and --repo names one" "Packed team/other !7" mr https://gitlab.com/team/other/-/merge_requests/7 --repo "$MC"
 refuse "relay mr needs a URL" mr
 # A partial clone can't hand over files it never downloaded.
@@ -1373,11 +1387,22 @@ refuse "and the other attempt's isn't" grep -q bad "$AR2/a.txt"
 check "nothing is committed" bash -c "[ \"\$(git -C '$AR2' rev-parse HEAD)\" = '$AH2' ]"
 git -C "$AR2" checkout -q -- a.txt
 rm -f "$AR2/c.txt"
-# The report folder is in the cloud. A report that isn't the one this Mac wrote picks nothing.
+# The report folder is in the cloud, so apply never reads it. A report changed there, or a new
+# one put there, can't choose the attempt: the Mac's own copy does.
 AREP="$(ls "$OD/Documents/Cowork/relay/t24/reports"/*-v2-*.txt | tail -n 1)"
 sed 's/^attempt passed: good$/attempt passed: bad/' "$AREP" >"$AREP.new" && mv "$AREP.new" "$AREP"
+sed 's/^attempt passed: good$/attempt passed: bad/' "$AREP" >"${AREP%.txt}9.txt"
 out="$(ap y t24/tries --repo "$AR2" --expect 2)"
-case "$out" in *"isn't the one this Mac wrote"*) ok "a report changed in OneDrive can't choose the attempt" ;; *) bad "a report changed in OneDrive can't choose the attempt" "$out" ;; esac
+case "$out" in *"Attempt:     good, the one that passed"*) ok "a report changed in OneDrive can't choose the attempt" ;; *) bad "a report changed in OneDrive can't choose the attempt" "$out" ;; esac
+case "$out" in *"attempts/bad"*) bad "and the other attempt's patches stay out" "$out" ;; *) ok "and the other attempt's patches stay out" ;; esac
+refuse "and aren't applied" grep -q bad "$AR2/a.txt"
+git -C "$AR2" checkout -q -- a.txt
+rm -f "$AR2/c.txt"
+# The same files, changed after the run, are a different deliverable: nothing proved them.
+printf '\n' >>"$RL_D/attempts/good/1-a.patch"
+bash "$LIB" manifest "$RL_D" >/dev/null
+out="$(ap y t24/tries --repo "$AR2")"
+case "$out" in *"has attempts, and no run of version"*) ok "a deliverable changed since its run has no proven attempt" ;; *) bad "a deliverable changed since its run has no proven attempt" "$out" ;; esac
 check "and nothing is applied" test -z "$(git -C "$AR2" status --short)"
 ap_tries t25 'attempt bad "$repo" "$commit" try'
 RL_WAIT=0 rl y t25/tries --expect 2
@@ -1385,6 +1410,21 @@ sleep 1
 out="$(ap y t25/tries --repo "$AR2" --expect 2)"
 case "$out" in *"didn't pass, so no attempt is proven and nothing is applied"*) ok "when no attempt passed, apply applies nothing" ;; *) bad "when no attempt passed, apply applies nothing" "$out" ;; esac
 check "really nothing" test -z "$(git -C "$AR2" status --short)"
+# A task often holds several deliverables, and their reports share a folder. apply goes by the
+# run of this deliverable, whatever ran after it. Seen in the field test of 2026-11-06.
+ap_tries t26 'attempt bad "$repo" "$commit" try || attempt good "$repo" "$commit" try'
+RL_WAIT=0 rl y t26/tries --expect 2
+sleep 1
+rl_new t26 other 'result "fine" 0
+report_end'
+bash "$LIB" manifest "$RL_D" >/dev/null
+RL_WAIT=0 rl y t26/other --expect 2
+rl_expect "another deliverable of the same task and version runs" 0 "DEMO RUN: PASS"
+sleep 1
+out="$(ap y t26/tries --repo "$AR2" --expect 2)"
+case "$out" in *"Attempt:     good, the one that passed"*"Applied, and nothing is committed"*) ok "apply reads the report of its own deliverable, not the task's newest" ;; *) bad "apply reads the report of its own deliverable, not the task's newest" "$out" ;; esac
+git -C "$AR2" checkout -q -- a.txt
+rm -f "$AR2/c.txt"
 
 # Setup writes where reviews and clones are.
 check "setup records where reviews go" env HOME="$RH" "$W" setup --dir "$OD" --reviews "$T/elsewhere" --clones "$T/c1:$T/c2"
@@ -1514,6 +1554,7 @@ case "$rc:$out" in 0:*) bad "a skill of that name the relay didn't make is left 
 check "really left alone" grep -q 'By hand, in OneDrive' "$KC/handmade/SKILL.md"
 expect "setup says how to compare it with yours" "diff -r \"$KS/handmade\" \"$KC/handmade\"" ks --skills review:plain:handmade
 expect "and where Cowork-only text goes" "COWORK.md" ks --skills review:plain:handmade
+expect "and that your own skill goes over whatever you choose" "Your own skill's text goes to Cowork whatever you do here" ks --skills review:plain:handmade
 out="$(kscan)"
 case "$out" in *"skill handmade: Cowork's folder already has a skill of that name"*"relay setup says what to do"*) ok "a scan warns in one line and points at setup" ;; *) bad "a scan warns in one line and points at setup" "$out" ;; esac
 case "$out" in *"diff -r"*) bad "a scan doesn't give the steps" "$out" ;; *) ok "a scan doesn't give the steps" ;; esac
@@ -1694,6 +1735,15 @@ check "the repository is gone" test ! -e "$FRP"
 check "and its scan" test ! -e "$FO/Documents/Cowork/relay/scans/relay-field-test.txt"
 check "the saved report stays" test -f "$T/ft-reviews/field-test/relay-field-test.md"
 expect "--clean again says there's nothing" "No test repository to remove." env HOME="$FH" "$W" --dir "$FO" field-test --clean
+# The note is all Cowork has, so it says where a skill stands in plain words, not the relay's own.
+mkdir -p "$FH/.claude/skills/byhand" "$FO/Documents/Cowork/skills/byhand"
+echo '# On the Mac' >"$FH/.claude/skills/byhand/SKILL.md"
+echo '# By hand, in OneDrive' >"$FO/Documents/Cowork/skills/byhand/SKILL.md"
+env HOME="$FH" "$W" setup --dir "$FO" --skills byhand </dev/null >/dev/null 2>&1
+ft field-test >/dev/null
+check "the note says a hand-made skill is one, in plain words" grep -q "^  byhand: in Cowork's folder, but put there by hand, not by the relay. The user's own is [0-9a-f]\{8\}\$" "$FN"
+refuse "the note still holds no path from this Mac" grep -q -e "$T" -e "$FH" -e "$HOME" -e '/Users/' -e '/home/' "$FN"
+env HOME="$FH" "$W" --dir "$FO" field-test --clean >/dev/null 2>&1
 
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.

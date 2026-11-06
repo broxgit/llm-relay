@@ -1,6 +1,6 @@
 # Proposed roadmap
 
-**Status: phase 1 is done, merged on 2026-11-05 as [pull request 1](https://github.com/broxgit/llm-relay/pull/1). Phases 2 and 3 are proposed. [Team use](#team-use) was added on 2026-11-06, and nothing in it is built.** The repository's [ROADMAP.md](../ROADMAP.md) stays the record of what's done and untested. [leverage.md](leverage.md) has what comes after these three.
+**Status: phase 1 is done, merged on 2026-11-05 as [pull request 1](https://github.com/broxgit/llm-relay/pull/1). Phase 2 ran on 2026-11-06, as the guided field test, and its fixes are release 0.2.2. Phase 3 can't be built as designed: the user's Teams had no Workflows app, so there is no webhook. [Team use](#team-use) was added on 2026-11-06, and nothing in it is built.** The repository's [ROADMAP.md](../ROADMAP.md) stays the record of what's done and untested. [leverage.md](leverage.md) has what comes after these three.
 
 Three phases in this order, with one condition: the wake-up is built only if the work-Mac session shows Teams and Cowork allow it. No dates, because the pace is about 10 hours a week and two phases wait on time at the work Mac. [design.md](design.md) has the designs behind phases 1 and 3.
 
@@ -68,3 +68,4 @@ The first two are answered, and phase 1 was built on them. The rest can wait unt
 - 2026-11-05: `relay mr --checks` stays, as the one exception to the keypress rule.
 - 2026-11-06: the relay is for Brock's team too, so each feature gets guided. The team-use pieces wait for phase 2's report.
 - 2026-11-06: a feature that depends on a tool tells the user so. Depending on a Jira command-line tool is fine.
+- 2026-11-06: phase 2's report came back. The repository's [ROADMAP.md](../ROADMAP.md) has what passed, what 0.2.2 fixed, and what is still open. Three of its answers bear on what comes next: Cowork can't read Jira or Confluence and the Mac has `jira` and `acli`, a Go module with vendored dependencies builds in Cowork's sandbox, and Teams offered no way to make a webhook.
