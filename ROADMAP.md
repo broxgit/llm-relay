@@ -28,7 +28,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, when the checks were for Go only, so none ran. Since 0.2.8 they cover pre-commit and a repository's own tests, which have only run in smoke tests against stand-ins for `pre-commit` and `go`. Not known: how long real pre-commit hooks take on a temporary copy, and whether they need the network there.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
 - Waking Cowork. The user's Teams had no Workflows app, so no webhook could be made. An email trigger worked on 2026-11-03, and hasn't been tried with the relay.
-- Anything with Jira or Confluence. Cowork couldn't read a ticket or its page by any route. The Mac has `jira` and `acli`, and the relay doesn't use them yet.
+- `relay ticket`, with real `acli`, real Jira and real Cowork. Smoke tests only, against a stand-in for `acli` built from the shapes the work Mac's `acli` printed. Not known: how a real ticket with a long description and many comments reads, what real Confluence pages lose as plain text, and whether Cowork works well from it.
 - A run from a terminal app other than Apple's Terminal. The relay's refusal message has only run against an imitation. Why iTerm was refused once, and not later, is unknown.
 - Cowork's review findings against a Claude review of the same merge request. Never compared.
 - Attempts on real code. The field test's two attempts were planted. Not known: whether Cowork writes real alternatives or pads a deliverable, and how long several builds take in one run.
@@ -37,6 +37,13 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Start from a Jira ticket (2026-11-06)
+
+- **Why:** most work starts from a ticket, and Cowork couldn't reach Jira or Confluence by any route in the field test. The Mac can.
+- **What changed:** `relay ticket KEY` fetches the ticket with `acli`, Atlassian's own tool, and puts it in OneDrive as a page to read and as JSON, with a prompt for Cowork. People's emails, account ids and picture addresses are taken out. `--page` adds a Confluence page by its address or number. A page whose address is in the ticket's text is found without it. The secrets check runs over all of it before anything is sent. `relay start` lists `acli` with the other tools, and the skill has a section on starting from a ticket. This is 0.2.9.
+- **What was learned first, on the work Mac:** `acli` signs in through the browser, so the relay touches no token. It has Confluence commands that Atlassian's reference page didn't list. It wrote its answer to the error stream as well as standard output, so the relay reads each. And a ticket's links to Confluence pages are not in what it returns. Jira keeps them as remote links, and `acli` gives those neither with the ticket nor with its list of links, which is why pages are named by hand.
+- **Not in it:** attachments, and a ticket's related merge requests.
 
 ### Checks for repositories that aren't Go (2026-11-06)
 

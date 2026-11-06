@@ -59,7 +59,7 @@ The first two are answered, and phase 1 was built on them. The rest can wait unt
 - [ ] **The webhook address:** whether an address for a Teams chat, kept in a settings file on the work Mac, is acceptable under the company's rules. Phase 3 depends on it.
 - [ ] **The MCP bridge:** drop it from `ROADMAP.md`, where it stands as the step after the wake-up.
 - [ ] **The Go binary test:** drop the test of a Go binary in the skill folder.
-- [ ] **The Jira tool:** `jira` or `acli`, for `relay ticket`. It waits on phase 2's report, which says whether Cowork can read Jira itself.
+- [x] **The Jira tool:** `acli`, decided by what the two did on the work Mac on 2026-11-06. It covers Jira and Confluence and signs in through the browser. `jira` wanted an API token kept in the shell, and has no Confluence.
 
 ## Decided
 
