@@ -18,6 +18,21 @@ From there Cowork gives you one step at a time, each in the same block: the comm
 
 It asks you nothing. Where your clones and reviews live is set with `relay setup`, below.
 
+## How a piece of work goes
+
+Cowork works through a job in stages, and says which one it's in:
+
+1. **Research.** The ticket, its linked tickets and pages, the code, what depends on that code and what it depends on, a baseline run, and the questions only a person can answer.
+2. **Plan.** The steps, what "done" means and how it'll be shown, how the work is sliced, and how it rolls out and rolls back.
+3. **Implement.** You both change the code. Scan again after your own edits.
+4. **Test.** From the "done" list, proven with a run, and compared with the baseline.
+5. **Review before pushing.** In a new Cowork session, against the code and then against the plan. Read the diff yourself too.
+6. **The merge request.** Yours. Cowork drafts the description.
+7. **Its comments.** With `relay mr`.
+8. **After the merge.** Cowork gives you the checklist to verify. It can't see staging or production.
+
+For a small change, tell Cowork which stages you want. [The design](../design-and-decisions/flow.md) has the whole flow and why each step is there.
+
 ## Practice first
 
 ```bash
