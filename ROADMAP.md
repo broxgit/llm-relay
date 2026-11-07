@@ -28,6 +28,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, when the checks were for Go only, so none ran. Since 0.2.8 they cover pre-commit and a repository's own tests, which have only run in smoke tests against stand-ins for `pre-commit` and `go`. Not known: how long real pre-commit hooks take on a temporary copy, and whether they need the network there.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
 - Waking Cowork. The user's Teams had no Workflows app, so no webhook could be made. An email trigger worked on 2026-11-03, and hasn't been tried with the relay.
+- The stages, with real Cowork. They are text in the skill. Not known: whether Cowork keeps to them or goes straight to code when a ticket looks simple, and whether saying the stage aloud helps.
 - `relay ticket`, with real `acli`, real Jira and real Cowork. Smoke tests only, against a stand-in for `acli` built from the shapes the work Mac's `acli` printed. Not known: how a real ticket with a long description and many comments reads, what real Confluence pages lose as plain text, and whether Cowork works well from it.
 - A run from a terminal app other than Apple's Terminal. The relay's refusal message has only run against an imitation. Why iTerm was refused once, and not later, is unknown.
 - Cowork's review findings against a Claude review of the same merge request. Never compared.
@@ -37,6 +38,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Cowork knows how a piece of work goes (2026-11-06)
+
+- **Why:** the relay had commands for parts of a job, and nothing that said how they fit. After a ticket, Cowork waited to be steered.
+- **What changed:** the skill has a section with eight stages, from research to after the merge: what Cowork does in each, and what the user runs. It reads dependencies in both directions, gets a baseline before anything changes, writes down what "done" means before code, plans the rollout, reviews in a new session against the plan, and gives a checklist for after the merge. It says which stage it's in, doesn't skip ahead, and lets the user cut it down. `design-and-decisions/flow.md` has the flow and the reasons. This is 0.2.10.
+- **Not built:** a command that packs a branch for review before a merge request exists, and a way for the plan to reach the Mac as a file.
 
 ### Start from a Jira ticket (2026-11-06)
 

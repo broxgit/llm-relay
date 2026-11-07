@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.9.
+This skill is for relay 0.2.10.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -33,7 +33,7 @@ Their first message asks you to read `Documents/Cowork/relay/start/note.txt`. Do
 1. **Read the note,** with nothing attached. It says which relay their Mac has, what the Mac is set up for, and where their own skills stand. It holds no paths.
 2. **Check your copies.** Compare the note's `relay:` line with the version at the top of this skill. Compare its `runlib:` line with the line that sets `RUNLIB_VERSION` in your `runlib.sh`. If either differs, your copy is stale, and what you hand over could be wrong. Say so, ask them to wait five minutes and start a new session, and stop. Your copy of a skill can lag OneDrive by several minutes.
 3. **Ask one thing: "What are you working on?"** Give no list of choices, and put nothing else in that message. If the note says `runs on this Mac so far: 0`, add two lines. One: you'll give one step at a time, and nothing runs on their Mac until they press a key there. Two: if they'd like to try it on code that doesn't matter first, they can run `relay practice`, which takes about ten minutes.
-4. **Give the first step,** as a block. To change or fix code, that is `relay scan`, run in the repository's folder. To review a merge request, it is `relay mr` with its address. To start from a Jira ticket, it is `relay ticket` with the ticket's key. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question.
+4. **Give the first step,** as a block. To change or fix code, that is `relay scan`, run in the repository's folder. To review a merge request, it is `relay mr` with its address. To start from a Jira ticket, it is `relay ticket` with the ticket's key. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question. Whatever it is, it begins at stage 1 of "How a piece of work goes", below, unless they say they're further along.
 
 ## Starting from a ticket
 
@@ -51,7 +51,7 @@ The user ran `relay ticket`, and their message names a note at `Documents/Cowork
 - **A linked ticket comes as a key, a title and a status.** For more, ask for `relay ticket` with that key.
 - **Look for the discussion too.** Search their Teams chats and email for the ticket's key, as you would before any change.
 
-Then do what their message asks: say in your own words what the ticket asks for, what you'd need to see to do it, and what isn't clear. Change nothing until they say what to work on. The next step is usually `relay scan`, in the repository the work is in.
+Then do what their message asks: say in your own words what the ticket asks for, what you'd need to see to do it, and what isn't clear. Change nothing until they say what to work on. This is stage 1 of "How a piece of work goes", below, and the next step is usually `relay scan`, in the repository the work is in.
 
 ## A practice round
 
@@ -91,6 +91,41 @@ Every time the user has to do something, give it as this block:
 - **`THEN TELL ME` is usually one word,** `done`. The relay's last lines say what to tell you, so ask for pasted output only when a command didn't end as you said it would.
 - **When you need nothing from them,** start your message with `✅ NOTHING FOR YOU TO DO YET`, and say what you're doing and about how long it takes.
 - **If they send "Use the YOUR TURN block format",** you have drifted from it. Go back to it.
+
+## How a piece of work goes
+
+Work goes through these stages, in this order. The loop further down is how each change gets made and proven. This is the order the changes come in.
+
+- **Say which stage you're in when it changes,** in a line.
+- **Don't skip ahead.** The usual mistake is writing code before the plan is agreed.
+- **The user can cut it down.** For a small change, ask which stages they want. Three things are worth keeping whatever else goes: the baseline, the "done" list, and their own read of the diff.
+
+| Stage | What the user runs |
+|---|---|
+| 1. Research | `relay ticket`, `relay scan`, and a first `relay run` for the baseline |
+| 2. Plan | Nothing |
+| 3. Implement | `relay scan` after their own edits, then `relay run` and `relay apply` |
+| 4. Test | `relay run` |
+| 5. Review before pushing | `relay scan`, in a new session |
+| 6. The merge request | Their own git. Never yours |
+| 7. Its comments | `relay mr` |
+| 8. After the merge | Nothing |
+
+**1. Research.** Read the ticket, the tickets it links and the pages that came with it. Read the code that will change. Then read in both directions: what depends on that code, and what that code depends on. That means other services and libraries, the shape of an API or a schema, limits and migrations. Ask for another repository's scan when you need to see one, with a line on why. Get a baseline: make the first deliverable a run that changes nothing, the build and the tests as they are, and for a bug, a check that shows the bug. List the questions only a person can answer, each with who that is, in product, design or another team. The user sends them. Don't guess an answer.
+
+**2. Plan.** Agree a plan with them, asking as much as you tell. It holds four things beyond the steps. What "done" means: what must be true at the end, and how each will be shown, which become your checks and tests. The slices: one merge request or several, and their order. The rollout: the order services ship in, config that changes elsewhere, how to roll it back, and what to watch afterwards. And whether it needs an ADR, an RFC or a design doc, which is their call once you've said what you think. Give the plan as one message they can copy, and call it a draft until they agree. Start nothing that waits on an unanswered question.
+
+**3. Implement.** They often say first what code they'd add and where. Then your job is the gaps, the concerns and the risks, and not a rewrite of their idea. They change the code too, so ask for a fresh `relay scan` before you patch a file they may have touched. Keep each deliverable small enough to build on its own.
+
+**4. Test.** Start from the "done" list, and add the scenarios that only became clear while building. Agree with them which are unit tests and which need more than that. Write them, and prove them with a run. Compare with the baseline: a failure that was already there isn't this change's, and a new one is.
+
+**5. Review before pushing.** A review by the session that wrote the code is a weak one. Tell them to start a new session for it, and give them the message to paste there: the scan to read and the plan's "done" list. The review has two passes, the code itself and then the code against the plan. Remind them to read the whole diff themselves before anyone else does.
+
+**6. The merge request.** Committing, pushing and creating it are theirs. Draft its description for them: what changed and why, the "done" list, and the rollout notes.
+
+**7. Its comments.** `relay mr` with its address brings the discussions. Draft replies for them to post. Post nothing yourself.
+
+**8. After the merge.** You can't see staging or production. Give them the "done" list as a checklist to verify there, and what to watch. From what they tell you, draft the ticket's update and the notes worth keeping in their wiki.
 
 ## The loop
 

@@ -2258,6 +2258,24 @@ out="$(env HOME="$TH" PATH="$NO_ACLI" "$W" --dir "$TO" ticket ABC-12 </dev/null 
 case "$out" in *"relay ticket needs acli: brew tap atlassian/homebrew-acli && brew install acli, then sign in with: acli auth login"*) ok "with no acli it says how to get it and sign in" ;; *) bad "with no acli it says how to get it and sign in" "$out" ;; esac
 refuse "nothing in the relay asks for or reads a token" grep -n -i -e 'API_TOKEN' -e 'api token' -e '--token' "$W"
 check "the skill has a section on starting from a ticket" grep -q '^## Starting from a ticket$' "$SK/SKILL.md"
+# The order a piece of work goes in. Without it, Cowork had the commands and waited to be steered.
+FLOW="$(sed -n '/^## How a piece of work goes$/,/^## The loop$/p' "$SK/SKILL.md")"
+[ -n "$FLOW" ] && ok "the skill says how a piece of work goes" || bad "the skill says how a piece of work goes"
+for stage in '1. Research' '2. Plan' '3. Implement' '4. Test' '5. Review before pushing' '6. The merge request' '7. Its comments' '8. After the merge'; do
+  case "$FLOW" in *"**$stage.**"*) ok "it has stage: $stage" ;; *) bad "it has stage: $stage" ;; esac
+done
+for must in 'what depends on that code, and what that code depends on' 'Get a baseline' 'What "done" means' 'The rollout' "Don't skip ahead" 'start a new session' 'Committing, pushing and creating it are theirs' "You can't see staging or production"; do
+  case "$FLOW" in *"$must"*) ok "the stages say: $must" ;; *) bad "the stages say: $must" ;; esac
+done
+# Every command the stages name is one the relay has.
+unknown=""
+while IFS= read -r cmd; do
+  [ -n "$cmd" ] || continue
+  "$W" __complete 1 "" | grep -qx -- "$cmd" || unknown="$unknown $cmd"
+done <<EOF
+$(printf '%s\n' "$FLOW" | grep -o '`relay [a-z-]*' | sed 's/^`relay //' | LC_ALL=C sort -u)
+EOF
+[ -z "$unknown" ] && ok "every relay command the stages name exists" || bad "every relay command the stages name exists" "$unknown"
 # What the skill says is in the archive has to be what the relay puts there.
 for f in 'ticket/ticket.md' 'ticket/ticket.json' 'ticket/pages/'; do
   if grep -qF -- "\`$f" "$SK/SKILL.md" && [ -e "$T/ticket-unpack/${f%/}" ] || [ "$f" = 'ticket/pages/' ]; then ok "the skill names a file the archive has: $f"; else bad "the skill names a file the archive has: $f"; fi
