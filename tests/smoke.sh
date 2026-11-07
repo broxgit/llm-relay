@@ -505,7 +505,7 @@ RESULT apply attempts/good"
 check "uncommitted work is still there" grep -q 'not committed' "$AT/scratch.txt"
 [ "$(cat "$AT/a.txt")" = one ] && ok "and the tracked file is as it was" || bad "and the tracked file is as it was" "$(cat "$AT/a.txt")"
 [ "$(git -C "$AT" worktree list | wc -l | tr -d ' ')" = 1 ] && ok "the worktrees are gone afterwards" || bad "the worktrees are gone afterwards" "$(git -C "$AT" worktree list)"
-pr_expect "the report says which runlib ran" 0 "runlib: 6"
+pr_expect "the report says which runlib ran" 0 "runlib: 7"
 at_new 'attempt good "$repo" "$commit" try || attempt bad "$repo" "$commit" try
 report_end'
 pr_run
@@ -1401,6 +1401,31 @@ out="$(rv y t21/noreview)"
 case "$out" in *"nothing under reviews/"*) ok "an empty review is refused" ;; *) bad "an empty review is refused" "$out" ;; esac
 out="$(env HOME="$RH" "$W" review t20/rev </dev/null 2>&1)" && bad "review needs a terminal" "$out" || case "$out" in *"Agents: tell the user to run it"*) ok "review needs a terminal" ;; *) bad "review needs a terminal" "$out" ;; esac
 
+# A plan comes home the same way, to where plans are kept.
+PD="$OD/Documents/Cowork/Tasks/t31/output/plan"
+mkdir -p "$PD/plans/ABC-12"
+printf '# Plan for ABC-12\n\n- done: a.txt has two lines\n- rollout: nothing to deploy\n' >"$PD/plans/ABC-12/plan.md"
+bash "$LIB" manifest "$PD" >/dev/null
+out="$(rv y t31/plan --expect 1)"
+case "$out" in *"Plans go to: $RH/plans"*"ABC-12/plan.md ("*"bytes, new)"*"What plan.md starts with:"*"# Plan for ABC-12"*"Saved: $RH/plans/ABC-12/plan.md"*) ok "relay review saves a plan where plans are kept" ;; *) bad "relay review saves a plan where plans are kept" "$out" ;; esac
+check "the plan is there" grep -q 'a.txt has two lines' "$RH/plans/ABC-12/plan.md"
+case "$out" in *"Coverage"*) bad "a plan isn't asked for a Coverage section" "$out" ;; *) ok "a plan isn't asked for a Coverage section" ;; esac
+mkdir -p "$PD/reviews/ABC-12"
+printf '# A review\n\n## Coverage\n\n- all of it\n' >"$PD/reviews/ABC-12/svc-7.md"
+bash "$LIB" manifest "$PD" >/dev/null
+out="$(rv y t31/plan --expect 2)"
+case "$out" in *"Saving to:   $RV"*"Plans go to: $RH/plans"*) ok "one deliverable can carry a review and a plan" ;; *) bad "one deliverable can carry a review and a plan" "$out" ;; esac
+case "$out" in *"Saved: $RV/ABC-12/svc-7.md"*) ok "and the review is saved" ;; *) bad "and the review is saved" "$out" ;; esac
+case "$out" in *"Saved: $RH/plans/ABC-12/plan.md"*) ok "and so is the plan" ;; *) bad "and so is the plan" "$out" ;; esac
+echo x >"$PD/plans/ABC-12/notes.txt"
+bash "$LIB" manifest "$PD" >/dev/null
+out="$(rv y t31/plan --expect 3)"
+case "$out" in *"a plan can't go at plans/ABC-12/notes.txt"*) ok "a plan is markdown too" ;; *) bad "a plan is markdown too" "$out" ;; esac
+rm -f "$PD/plans/ABC-12/notes.txt"
+check "setup --plans moves where plans go" env HOME="$RH" "$W" setup --dir "$OD" --plans "$T/my-plans"
+check "and records it" grep -qx "plans=$T/my-plans" "$RH/.config/llm-relay/settings"
+env HOME="$RH" "$W" setup --dir "$OD" --plans "$RH/plans" </dev/null >/dev/null 2>&1
+
 # relay apply: a proven patch stays in the working tree, uncommitted.
 ap() { local keys="$1"; shift; env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" "$keys" "$W" apply "$@" 2>&1; }
 AR="$T/apply-me"
@@ -1988,6 +2013,89 @@ check "the note says a hand-made skill is one, in plain words" grep -q "^  byhan
 refuse "the note still holds no path from this Mac" grep -q -e "$T" -e "$FH" -e "$HOME" -e '/Users/' -e '/home/' "$FN"
 env HOME="$FH" "$W" --dir "$FO" field-test --clean >/dev/null 2>&1
 
+section "Reviewing a branch before the merge request"
+# Stage 5 of how a piece of work goes. The branch, against the one it's meant to merge into, as
+# relay mr does without GitLab, with the plan kept for its ticket.
+BC="$T/branch-clone"
+git clone -q "$MO" "$BC" 2>/dev/null
+git -C "$BC" checkout -q ABC-12-work 2>/dev/null
+# Named on origin as the real project is, so the review file is the project's and not the folder's.
+git -C "$BC" config "url.$MO.insteadOf" https://gitlab.com/team/svc.git
+git -C "$BC" remote set-url origin https://gitlab.com/team/svc.git
+brh() { env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$@" </dev/null 2>&1; }
+BD="$OD/Documents/Cowork/relay/branches"
+rm -f "$T/clipboard"
+out="$(brh "$BC" --no-checks)"; rc=$?
+case "$rc:$out" in 0:*"Packed branch ABC-12-work of svc against master: 1 commits, 1 changed files"*"Sent to OneDrive: Documents/Cowork/relay/branches/svc-ABC-12-work.txt and svc-ABC-12-work.tar.gz"*) ok "relay branch packs the branch against origin's default branch" ;; *) bad "relay branch packs the branch against origin's default branch" "$out" ;; esac
+check "the prompt asks for a review before the merge request" grep -q 'review my branch before I open a merge request' "$T/clipboard"
+check "the note names the branch" grep -qx 'branch: ABC-12-work' "$BD/svc-ABC-12-work.txt"
+check "and the target, at its tip" grep -qx "against: master, at $MR_TIP" "$BD/svc-ABC-12-work.txt"
+check "and the merge base" grep -qx "merge base: $MR_BASE" "$BD/svc-ABC-12-work.txt"
+check "and the ticket, read from the branch's name" grep -qx 'ticket: ABC-12' "$BD/svc-ABC-12-work.txt"
+check "and where the review goes" grep -qx 'review goes in the deliverable at: reviews/ABC-12/svc-ABC-12-work.md' "$BD/svc-ABC-12-work.txt"
+check "the note's hash matches the archive" grep -q "^archive sha256: $(rl_sha "$BD/svc-ABC-12-work.tar.gz")\$" "$BD/svc-ABC-12-work.txt"
+rm -rf "$T/branch-unpack" && mkdir -p "$T/branch-unpack" && tar -xzf "$BD/svc-ABC-12-work.tar.gz" -C "$T/branch-unpack"
+check "the diff is the branch's own change" grep -q '^+change$' "$T/branch-unpack/branch/diff.patch"
+check "the commits are listed" bash -c "[ \"\$(grep -c . '$T/branch-unpack/branch/commits.txt')\" = 1 ]"
+git clone -q "$T/branch-unpack/repo.bundle" "$T/branch-unpack/clone" 2>/dev/null
+check "the bundle holds the branch and its target" bash -c "git -C '$T/branch-unpack/clone' rev-parse --verify -q origin/ABC-12-work >/dev/null && git -C '$T/branch-unpack/clone' rev-parse --verify -q origin/master >/dev/null"
+check "uncommitted changes went as such" grep -qx 'uncommitted changes: no, uncommitted.patch is empty' "$BD/svc-ABC-12-work.txt"
+echo wip >>"$BC/a.txt"
+brh "$BC" --no-checks >/dev/null
+check "and are marked when there are some" grep -q "^uncommitted changes: yes, in uncommitted.patch. They aren't in the diff or the commits\$" "$BD/svc-ABC-12-work.txt"
+git -C "$BC" checkout -q -- a.txt
+out="$(brh "$BC" --checks)"
+case "$out" in *"go test: passed"*"Checks: "*" run, 0 failed"*) ok "--checks runs the repository's checks on the branch" ;; *) bad "--checks runs the repository's checks on the branch" "$out" ;; esac
+rm -rf "$T/branch-unpack" && mkdir -p "$T/branch-unpack" && tar -xzf "$BD/svc-ABC-12-work.tar.gz" -C "$T/branch-unpack"
+check "and their output goes in the archive, under branch/" test -f "$T/branch-unpack/branch/checks/summary.txt"
+out="$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" n "$W" --dir "$OD" branch "$BC" 2>&1)"
+case "$out" in *"on a temporary copy of your branch ABC-12-work at $MR_HEAD, by you?"*) ok "at a terminal the question names the branch" ;; *) bad "at a terminal the question names the branch" "$out" ;; esac
+# The plan kept for the ticket goes with it.
+out="$(brh "$BC" --no-checks)"
+case "$out" in *"Included the plan, ~/plans/ABC-12/plan.md"*) ok "the plan kept for the branch's ticket goes with it" ;; *) bad "the plan kept for the branch's ticket goes with it" "$out" ;; esac
+check "and the note says where it came from, with ~ for home" grep -qx "plan: branch/plan.md, from ~/plans/ABC-12/plan.md" "$BD/svc-ABC-12-work.txt"
+rm -rf "$T/branch-unpack" && mkdir -p "$T/branch-unpack" && tar -xzf "$BD/svc-ABC-12-work.tar.gz" -C "$T/branch-unpack"
+check "the plan is in the archive" grep -q 'a.txt has two lines' "$T/branch-unpack/branch/plan.md"
+brh "$BC" --no-checks --no-plan >/dev/null
+check "--no-plan leaves it out" grep -q '^plan: none sent' "$BD/svc-ABC-12-work.txt"
+printf '# Another plan\n' >"$T/other-plan.md"
+brh "$BC" --no-checks --plan "$T/other-plan.md" >/dev/null
+check "--plan names one" grep -qx "plan: branch/plan.md, from $T/other-plan.md" "$BD/svc-ABC-12-work.txt"
+refuse "--plan needs a file that exists" brh "$BC" --no-checks --plan "$T/no-such-plan.md"
+mkdir -p "$RV/ABC-12"
+echo '# earlier' >"$RV/ABC-12/svc-ABC-12-work.md"
+out="$(brh "$BC" --no-checks)"
+case "$out" in *"Included your earlier review, $RV/ABC-12/svc-ABC-12-work.md"*) ok "an earlier review of the branch goes with it" ;; *) bad "an earlier review of the branch goes with it" "$out" ;; esac
+check "the note says so" grep -q '^earlier review: yes, in branch/existing-review.md' "$BD/svc-ABC-12-work.txt"
+rm -f "$RV/ABC-12/svc-ABC-12-work.md"
+out="$(brh "$BC" --no-checks --against nowhere)"; rc=$?
+case "$rc:$out" in 0:*) bad "a target that doesn't exist is refused" "$out" ;; *"there's no branch called nowhere here"*) ok "a target that doesn't exist is refused" ;; *) bad "a target that doesn't exist is refused" "$out" ;; esac
+git -C "$BC" checkout -q master 2>/dev/null
+out="$(brh "$BC" --no-checks)"; rc=$?
+case "$rc:$out" in 0:*) bad "the target branch itself is refused" "$out" ;; *"that's the branch you're on"*) ok "the target branch itself is refused" ;; *) bad "the target branch itself is refused" "$out" ;; esac
+git -C "$BC" checkout -q --detach 2>/dev/null
+out="$(brh "$BC" --no-checks)"; rc=$?
+case "$rc:$out" in 0:*) bad "a detached HEAD is refused" "$out" ;; *"you're not on a branch"*) ok "a detached HEAD is refused" ;; *) bad "a detached HEAD is refused" "$out" ;; esac
+git -C "$BC" checkout -q -b same-as-master master 2>/dev/null
+out="$(brh "$BC" --no-checks)"; rc=$?
+case "$rc:$out" in 0:*) bad "a branch with nothing of its own is refused" "$out" ;; *"has nothing that master doesn't"*) ok "a branch with nothing of its own is refused" ;; *) bad "a branch with nothing of its own is refused" "$out" ;; esac
+git -C "$BC" checkout -q ABC-12-work 2>/dev/null
+# Code goes to the cloud here too, so the secrets check runs first.
+git -C "$XR" checkout -q -b ABC-9-x 2>/dev/null
+echo more >>"$XR/src/app.py"
+git -C "$XR" add -A
+git -C "$XR" commit -qm more
+out="$(brh "$XR" --no-checks --against "$XB")"; rc=$?
+case "$rc:$out" in 0:*) bad "a branch that looks like it holds secrets isn't sent with no terminal" "$out" ;; *"secret-repo-ABC-9-x has places that look like they hold secrets"*"needs a terminal"*) ok "a branch that looks like it holds secrets isn't sent with no terminal" ;; *) bad "a branch that looks like it holds secrets isn't sent with no terminal" "$out" ;; esac
+check "nothing reached OneDrive" test ! -e "$BD/secret-repo-ABC-9-x.txt"
+git -C "$XR" checkout -q "$XB" 2>/dev/null
+check "the skill tells Cowork what a branch's archive holds" grep -q 'Its note starts `LLM-RELAY BRANCH`' "$SK/SKILL.md"
+check "and asks for two passes" grep -q 'in two passes: the code, and then the code against the plan' "$SK/SKILL.md"
+check "and knows where a plan goes" grep -q 'put it in a deliverable at `plans/<ticket>/<name>.md`' "$SK/SKILL.md"
+for f in 'branch/diff.patch' 'branch/commits.txt' 'branch/plan.md' 'uncommitted.patch'; do
+  if grep -qF -- "\`$f\`" "$SK/SKILL.md" && [ -e "$T/branch-unpack/$f" ]; then ok "the skill names a file the archive has: $f"; else bad "the skill names a file the archive has: $f"; fi
+done
+
 section "Starting with relay start"
 # One command to begin with: it gets Cowork the skills, says what the Mac is set up for, and
 # hands over a prompt. A teammate shouldn't need to know any other command to begin.
@@ -2046,7 +2154,7 @@ case "$out" in *"relay mr needs glab: brew install glab, then sign in with: glab
 out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clones "$T/start-clones" </dev/null 2>&1)"
 case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
-case "$out" in *"Clones are looked for under $T/start-clones, and reviews are saved under $T/start-reviews."*) ok "start says where clones and reviews are" ;; *) bad "start says where clones and reviews are" "$out" ;; esac
+case "$out" in *"Clones are looked for under $T/start-clones, reviews are saved under $T/start-reviews, and plans under "*"/plans. relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
 # A practice round: the same beginning, with a repository made for it.
 gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
 rm -f "$T/clipboard"
@@ -2264,7 +2372,7 @@ FLOW="$(sed -n '/^## How a piece of work goes$/,/^## The loop$/p' "$SK/SKILL.md"
 for stage in '1. Research' '2. Plan' '3. Implement' '4. Test' '5. Review before pushing' '6. The merge request' '7. Its comments' '8. After the merge'; do
   case "$FLOW" in *"**$stage.**"*) ok "it has stage: $stage" ;; *) bad "it has stage: $stage" ;; esac
 done
-for must in 'what depends on that code, and what that code depends on' 'Get a baseline' 'What "done" means' 'The rollout' "Don't skip ahead" 'start a new session' 'Committing, pushing and creating it are theirs' "You can't see staging or production"; do
+for must in 'what depends on that code, and what that code depends on' 'Get a baseline' 'What "done" means' 'The rollout' "Don't skip ahead" 'into a new session' 'Committing, pushing and creating it are theirs' "You can't see staging or production"; do
   case "$FLOW" in *"$must"*) ok "the stages say: $must" ;; *) bad "the stages say: $must" ;; esac
 done
 # Every command the stages name is one the relay has.
@@ -2370,6 +2478,9 @@ expect "completion knows skills" "skills" "$W" __complete 1 ""
 expect "and start" "start" "$W" __complete 1 ""
 expect "and practice" "practice" "$W" __complete 1 ""
 expect "and ticket" "ticket" "$W" __complete 1 ""
+expect "and branch" "branch" "$W" __complete 1 ""
+expect "branch completes --against" "--against" "$W" __complete 2 branch ""
+expect "setup completes --plans" "--plans" "$W" __complete 2 setup ""
 expect "ticket completes --page" "--page" "$W" __complete 2 ticket ""
 expect "practice completes --clean" "--clean" "$W" __complete 2 practice ""
 expect "scan completes --ask" "--ask" "$W" __complete 2 scan ""

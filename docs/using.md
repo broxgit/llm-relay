@@ -140,6 +140,16 @@ relay ticket ABC-123
 
 Cowork then says what the ticket asks for, what it would need to see, and what isn't clear, and changes nothing until you say what to work on.
 
+## Review a branch before the merge request
+
+```bash
+relay branch
+```
+
+Run it in the repository, on the branch you're about to push. It packs the branch against the one it's meant to merge into, which is origin's default branch unless you add `--against NAME`: the commits, the diff, your uncommitted changes marked as such, the checks if you say yes, the repository's wiki, your earlier review of the branch if there is one, and the plan for its ticket if `relay review` saved one. It puts a prompt on your clipboard for a new Cowork session, which reviews the code and then the code against the plan, and says whether it's ready to push. The review comes back through `relay review`, as a merge request's does.
+
+`--plan FILE` names a plan to send, and `--no-plan` sends none. `--checks`, `--no-checks` and `--test` work as they do for `relay mr`.
+
 ## Review a merge request
 
 If you keep a review skill, Cowork can follow it, using what this command sends in place of `glab` and your clones. Your skill only needs to add the rules Cowork can't otherwise see, such as ones in your agent's memory. Run it in any terminal:
@@ -154,7 +164,7 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 - The relay finds your clone in the folder you're in, or under the folders `relay setup --clones` names. If it's somewhere else, name it once with `--repo` and the relay remembers it.
 - It asks whether to run the repository's checks first, and sends the results. That is `go build`, `go vet`, `go test` and `go mod tidy -diff` where there's a `go.mod`. It is the repository's pre-commit hooks, on the files the merge request changes, where it has a `.pre-commit-config.yaml` and you have `pre-commit`. And it is the tests, by a `runtests.sh` or a `make test` target, in a repository that isn't Go. For a repository with none of those, name the test command once with `--test 'COMMAND'`, and the relay remembers it for that repository. `--test none` forgets it. They run on a temporary copy of the branch with git hooks off, so your clone and uncommitted work stay out of it, but the branch's code does run on your Mac. Each check stops after 10 minutes. `--checks` and `--no-checks` answer for you. `--checks` is the one place the relay runs code without asking, so it's yours to add. Cowork is told never to give you a command with it, so don't run one that has it.
 - It reviews what's pushed, and warns if your local branch has commits the merge request doesn't.
-- Cowork publishes the review, and gives you `relay review`. It shows you the file and its Coverage section, which says what Cowork read and skipped, and saves it where you keep your reviews when you press `y`. Your earlier copy is kept beside it as `.previous`. Run that one in Apple's Terminal.
+- Cowork publishes the review, and gives you `relay review`. The same command saves a plan Cowork wrote, when the deliverable has it under `plans/`, to `~/plans/<ticket>/`. `relay setup --plans FOLDER` moves that. It shows you the file and its Coverage section, which says what Cowork read and skipped, and saves it where you keep your reviews when you press `y`. Your earlier copy is kept beside it as `.previous`. Run that one in Apple's Terminal.
 - For a fix you've proven, `relay apply` leaves its patches in your working tree when you press `y`, and never commits.
 
 It's built for GitLab and Go. Cowork still can't see production data, and it reads other services only if it asks or you add `--also`.

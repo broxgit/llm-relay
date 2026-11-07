@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.10.
+This skill is for relay 0.2.11.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -33,7 +33,7 @@ Their first message asks you to read `Documents/Cowork/relay/start/note.txt`. Do
 1. **Read the note,** with nothing attached. It says which relay their Mac has, what the Mac is set up for, and where their own skills stand. It holds no paths.
 2. **Check your copies.** Compare the note's `relay:` line with the version at the top of this skill. Compare its `runlib:` line with the line that sets `RUNLIB_VERSION` in your `runlib.sh`. If either differs, your copy is stale, and what you hand over could be wrong. Say so, ask them to wait five minutes and start a new session, and stop. Your copy of a skill can lag OneDrive by several minutes.
 3. **Ask one thing: "What are you working on?"** Give no list of choices, and put nothing else in that message. If the note says `runs on this Mac so far: 0`, add two lines. One: you'll give one step at a time, and nothing runs on their Mac until they press a key there. Two: if they'd like to try it on code that doesn't matter first, they can run `relay practice`, which takes about ten minutes.
-4. **Give the first step,** as a block. To change or fix code, that is `relay scan`, run in the repository's folder. To review a merge request, it is `relay mr` with its address. To start from a Jira ticket, it is `relay ticket` with the ticket's key. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question. Whatever it is, it begins at stage 1 of "How a piece of work goes", below, unless they say they're further along.
+4. **Give the first step,** as a block. To change or fix code, that is `relay scan`, run in the repository's folder. To review a merge request, it is `relay mr` with its address. To review a branch before there's a merge request, it is `relay branch`, run in the repository. To start from a Jira ticket, it is `relay ticket` with the ticket's key. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question. Whatever it is, it begins at stage 1 of "How a piece of work goes", below, unless they say they're further along.
 
 ## Starting from a ticket
 
@@ -103,23 +103,23 @@ Work goes through these stages, in this order. The loop further down is how each
 | Stage | What the user runs |
 |---|---|
 | 1. Research | `relay ticket`, `relay scan`, and a first `relay run` for the baseline |
-| 2. Plan | Nothing |
+| 2. Plan | `relay review`, to save the plan |
 | 3. Implement | `relay scan` after their own edits, then `relay run` and `relay apply` |
 | 4. Test | `relay run` |
-| 5. Review before pushing | `relay scan`, in a new session |
+| 5. Review before pushing | `relay branch`, and a new session |
 | 6. The merge request | Their own git. Never yours |
 | 7. Its comments | `relay mr` |
 | 8. After the merge | Nothing |
 
 **1. Research.** Read the ticket, the tickets it links and the pages that came with it. Read the code that will change. Then read in both directions: what depends on that code, and what that code depends on. That means other services and libraries, the shape of an API or a schema, limits and migrations. Ask for another repository's scan when you need to see one, with a line on why. Get a baseline: make the first deliverable a run that changes nothing, the build and the tests as they are, and for a bug, a check that shows the bug. List the questions only a person can answer, each with who that is, in product, design or another team. The user sends them. Don't guess an answer.
 
-**2. Plan.** Agree a plan with them, asking as much as you tell. It holds four things beyond the steps. What "done" means: what must be true at the end, and how each will be shown, which become your checks and tests. The slices: one merge request or several, and their order. The rollout: the order services ship in, config that changes elsewhere, how to roll it back, and what to watch afterwards. And whether it needs an ADR, an RFC or a design doc, which is their call once you've said what you think. Give the plan as one message they can copy, and call it a draft until they agree. Start nothing that waits on an unanswered question.
+**2. Plan.** Agree a plan with them, asking as much as you tell. It holds four things beyond the steps. What "done" means: what must be true at the end, and how each will be shown, which become your checks and tests. The slices: one merge request or several, and their order. The rollout: the order services ship in, config that changes elsewhere, how to roll it back, and what to watch afterwards. And whether it needs an ADR, an RFC or a design doc, which is their call once you've said what you think. Give the plan as one message, and call it a draft until they agree. Once they do, put it in a deliverable at `plans/<ticket>/<name>.md` and hand over `relay review`, which saves it where they keep plans and lets `relay branch` send it with the review later. If they'd rather have it in the repository, make it a patch that adds the file, and hand over `relay apply`. Start nothing that waits on an unanswered question.
 
 **3. Implement.** They often say first what code they'd add and where. Then your job is the gaps, the concerns and the risks, and not a rewrite of their idea. They change the code too, so ask for a fresh `relay scan` before you patch a file they may have touched. Keep each deliverable small enough to build on its own.
 
 **4. Test.** Start from the "done" list, and add the scenarios that only became clear while building. Agree with them which are unit tests and which need more than that. Write them, and prove them with a run. Compare with the baseline: a failure that was already there isn't this change's, and a new one is.
 
-**5. Review before pushing.** A review by the session that wrote the code is a weak one. Tell them to start a new session for it, and give them the message to paste there: the scan to read and the plan's "done" list. The review has two passes, the code itself and then the code against the plan. Remind them to read the whole diff themselves before anyone else does.
+**5. Review before pushing.** A review by the session that wrote the code is a weak one. Tell them to run `relay branch` in the repository, which packs the branch against its target with the checks, the wiki and the plan, and to paste the prompt it prints into a new session. There, the review has two passes: the code itself, and then the code against the plan. Remind them to read the whole diff themselves before anyone else does.
 
 **6. The merge request.** Committing, pushing and creating it are theirs. Draft its description for them: what changed and why, the "done" list, and the rollout notes.
 
@@ -409,7 +409,9 @@ check "go test" bash -c "cd '$WORKTREE' && go test ./..."
 
 It turns git hooks off, sets `$WORKTREE`, and removes it at exit. It records whether the worktree matches the commit, whether the run changed its tracked files, and whether their checkout stayed the same. In a real run, a post-checkout hook rewrote `go.mod` in a plain worktree, which made every result useless. If your own commands use git in it, pass `-c core.hooksPath=/dev/null`.
 
-To hand over the review, put it in a deliverable at the path the note gives, `reviews/<ticket>/<repo>-<iid>.md`. It doesn't need `run.sh`. Run `bash runlib.sh manifest <deliverable>`, publish it, read it back as usual, and give them:
+**A branch before there's a merge request** comes the same way, from `relay branch`. Its note starts `LLM-RELAY BRANCH`, and the archive holds `repo.bundle` with the branch and its target, `branch/diff.patch` from their merge base to the branch's tip, `branch/commits.txt`, `branch/checks/` if they ran, `branch/plan.md` if a plan was kept for the ticket, `branch/existing-review.md` if you reviewed it before, and `uncommitted.patch`, which the diff and the commits don't include. There are no discussions. Review it as you would a merge request, in two passes: the code, and then the code against the plan, or against what they say done means if no plan came. End with whether it's ready to push, and what has to change first.
+
+To hand over the review, put it in a deliverable at the path the note gives, `reviews/<ticket>/<repo>-<iid>.md`, or `reviews/<ticket>/<repo>-<branch>.md` for a branch. It doesn't need `run.sh`. Run `bash runlib.sh manifest <deliverable>`, publish it, read it back as usual, and give them:
 
 ```bash
 relay review <task-folder>/<deliverable> --expect 1

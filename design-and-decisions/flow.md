@@ -1,6 +1,6 @@
 # How a piece of work goes
 
-**Status: Brock adopted this flow on 2026-11-06. The relay's everyday skill teaches it to Cowork, as 0.2.10. That teaching has not been tried with real Cowork. Two commands the flow wants are not built.**
+**Status: Brock adopted this flow on 2026-11-06. The relay's everyday skill teaches it to Cowork, as 0.2.10, and the two commands it wanted came as 0.2.11. None of it has been tried with real Cowork.**
 
 The relay had commands for parts of a job, and nothing that said how the parts fit. After a ticket, Cowork waited to be steered. This is the order work goes in, so Cowork knows where it is and what comes next.
 
@@ -77,10 +77,10 @@ For a small ticket, three of the additions are worth keeping whatever else is dr
 | Stage | With Cowork | What's missing |
 |---|---|---|
 | 1. Research | `relay ticket`, with `--page` for Confluence. `relay scan` for each repository, with its wiki. A first `relay run` that changes nothing is the baseline | Linked tickets come as a key, a title and a status. Figma has no route |
-| 2. Plan | Conversation, with the skill saying what a plan holds | The plan stays in Cowork. Nothing saves it to the Mac |
+| 2. Plan | Conversation, with the skill saying what a plan holds. `relay review` saves the plan to the Mac | Nothing |
 | 3. Implement | The person's edits go up with the next `relay scan`. Cowork's come down through `relay run` and `relay apply` | Each exchange costs minutes, so it isn't pairing |
 | 4. Test | `relay run`, which is what the relay is best at | Nothing |
-| 5. Review | A new Cowork session, a scan, and the plan's "done" list | No command packs a branch for review before a merge request exists |
+| 5. Review | `relay branch`, and a new Cowork session | Nothing |
 | 6. Merge request | The person's. Cowork drafts the description | Nothing. The relay never commits or pushes, on purpose |
 | 7. Comments | `relay mr` | Nothing |
 | 8. After the merge | Cowork gives the checklist and drafts the ticket update | Cowork can't see staging or production |
@@ -93,10 +93,13 @@ For a small ticket, three of the additions are worth keeping whatever else is dr
 - **Don't skip ahead.** The usual mistake is code before the plan is agreed.
 - **The user can cut it down.** For a small change, ask which stages they want.
 
+## Built since
+
+- **`relay branch`,** on 2026-11-07, as 0.2.11: the branch against its target, the checks, the user's review skill, the wiki, and the plan kept for its ticket. Stage 5 has its command.
+- **The plan as a file,** the same day: `relay review` saves `plans/<ticket>/<name>.md` from a deliverable to where plans are kept, and `relay branch` sends it with the review.
+
 ## Not built
 
-- **A review of a branch before a merge request exists.** Stage 5 has no command. It would be `relay mr` without GitLab: the branch against its target, the checks, the user's review skill and the wiki.
-- **The plan as a file on the Mac.** `relay review` already saves a file Cowork wrote, after a keypress. The same route could carry a plan.
 - **Linked tickets fetched with the ticket,** and **a repository's wiki sent with a ticket.**
 
 ## Not known
