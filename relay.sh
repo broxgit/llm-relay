@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.10"
+RELAY_VERSION="0.2.11"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -71,6 +71,7 @@ setting() {
   printf '%s' "${v:-$2}"
 }
 REVIEWS_DIR="$(setting reviews "$HOME/mr-reviews")"
+PLANS_DIR="$(setting plans "$HOME/plans")"
 CLONES_DIRS="$(setting clones "$HOME/dev")"
 # The user's own skills that Cowork gets a copy of, by name, and where they live.
 SKILLS="$(setting skills "")"
@@ -102,6 +103,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] ticket KEY [--page NUMBER_OR_ADDRESS]... [--ask]
+       relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
 
@@ -154,6 +156,11 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          and its tests by a runtests.sh or a make test target. --test COMMAND names the
          test command for a repository that has neither, and is remembered for it.
          --checks and --no-checks answer for you.
+  branch Puts your current branch in OneDrive for Cowork to review before there's a merge
+         request: the branch against the one it's meant to merge into, its commits and diff,
+         the checks, your earlier review, the wiki, and the plan for its ticket if relay review
+         saved one. --against names the target, if it isn't origin's default branch. The review
+         comes back through relay review. Run it from the repository, or name its path.
   review Waits for the review Cowork published, shows it and what it says it covered, and when
          you press y saves it under $REVIEWS_DIR. A copy you already have is kept as
          <name>.previous.
@@ -1289,6 +1296,11 @@ plan_checks() {
   fi
 }
 
+# The checks' output folder, and what the question calls the thing being checked. relay mr and
+# relay branch each set them before asking.
+CHECKS_DIR=""
+CHECK_SUBJECT=""
+
 # want_checks <mode> <clone> <commit> <author>: whether to run this MR's checks. Sets CHECKS_LINE
 # when they won't run.
 want_checks() {
@@ -1315,9 +1327,9 @@ want_checks() {
   fi
   {
     if [ -n "$PLAN_GO" ] && [ -z "$PLAN_TEST" ] && [ -z "$PLAN_PRECOMMIT" ]; then
-      echo "Run go build, vet, test and mod tidy on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}?"
+      echo "Run go build, vet, test and mod tidy on a temporary copy of ${CHECK_SUBJECT:-!$MR_IID} at $commit, by ${author:-an unknown author}?"
     else
-      echo "Run these on a temporary copy of !$MR_IID at $commit, by ${author:-an unknown author}, with git hooks off?"
+      echo "Run these on a temporary copy of ${CHECK_SUBJECT:-!$MR_IID} at $commit, by ${author:-an unknown author}, with git hooks off?"
       printf '%s\n' "$PLAN_LIST"
     fi
     echo "This runs that branch's code on this Mac, and sends the output to OneDrive."
@@ -1363,7 +1375,7 @@ run_check() {
     mv "$out.end" "$out"
   fi
   echo "$result ($((SECONDS - start))s)"
-  echo "$label: $result ($((SECONDS - start))s)" >>"$WORK/mr/checks/summary.txt"
+  echo "$label: $result ($((SECONDS - start))s)" >>"$CHECKS_DIR/summary.txt"
 }
 
 # run_checks <commit> <target branch>: what plan_checks found, on a clone of the bundle, so the
@@ -1388,7 +1400,7 @@ run_checks() {
     echo "Checks $CHECKS_LINE."
     return 0
   fi
-  mkdir -p "$WORK/mr/checks"
+  mkdir -p "$CHECKS_DIR"
   {
     echo "commit: $commit"
     if [ -n "$PLAN_GO" ]; then
@@ -1396,7 +1408,7 @@ run_checks() {
     else
       echo "ran on: $(uname -sm)"
     fi
-  } >"$WORK/mr/checks/summary.txt"
+  } >"$CHECKS_DIR/summary.txt"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     d="$(dirname "$f")"
@@ -1404,14 +1416,14 @@ run_checks() {
     [ "$d" != . ] || slug=root
     label=""
     [ "$d" = . ] || label="$d: "
-    run_check "$tree/$d" "${label}go build" "$WORK/mr/checks/$slug-go-build.txt" go build ./...
-    run_check "$tree/$d" "${label}go vet" "$WORK/mr/checks/$slug-go-vet.txt" go vet ./...
-    run_check "$tree/$d" "${label}go test" "$WORK/mr/checks/$slug-go-test.txt" go test ./...
-    run_check "$tree/$d" "${label}go mod tidy -diff" "$WORK/mr/checks/$slug-go-mod-tidy.txt" go mod tidy -diff
+    run_check "$tree/$d" "${label}go build" "$CHECKS_DIR/$slug-go-build.txt" go build ./...
+    run_check "$tree/$d" "${label}go vet" "$CHECKS_DIR/$slug-go-vet.txt" go vet ./...
+    run_check "$tree/$d" "${label}go test" "$CHECKS_DIR/$slug-go-test.txt" go test ./...
+    run_check "$tree/$d" "${label}go mod tidy -diff" "$CHECKS_DIR/$slug-go-mod-tidy.txt" go mod tidy -diff
   done <<EOF
 $([ -z "$PLAN_GO" ] || git -C "$tree" ls-files | grep -E '(^|/)go\.mod$' | grep -vE '(^|/)(vendor|testdata)/')
 EOF
-  [ -z "$PLAN_TEST" ] || run_check "$tree" "tests, with $PLAN_TEST" "$WORK/mr/checks/tests.txt" sh -c "$PLAN_TEST"
+  [ -z "$PLAN_TEST" ] || run_check "$tree" "tests, with $PLAN_TEST" "$CHECKS_DIR/tests.txt" sh -c "$PLAN_TEST"
   changed="$(git -C "$tree" status --porcelain --untracked-files=no)"
   if [ -n "$changed" ]; then
     CHECKS_BAD=$((CHECKS_BAD + 1))
@@ -1420,7 +1432,7 @@ EOF
     {
       echo "the checks changed tracked files, so later results may not be of this commit:"
       printf '%s\n' "$changed"
-    } >>"$WORK/mr/checks/summary.txt"
+    } >>"$CHECKS_DIR/summary.txt"
   fi
   if [ -n "$PLAN_PRECOMMIT" ]; then
     # The hooks see the commit as it is, whatever a build or a test left behind.
@@ -1433,16 +1445,16 @@ $(git -C "$tree" diff --name-only --diff-filter=ACMR "origin/$target...$commit" 
 EOF
     if [ "${#files[@]}" -eq 0 ]; then
       echo "pre-commit: not run, because the relay couldn't list the files the merge request changes"
-      echo "pre-commit: not run, because the relay couldn't list the files the merge request changes" >>"$WORK/mr/checks/summary.txt"
+      echo "pre-commit: not run, because the relay couldn't list the files the merge request changes" >>"$CHECKS_DIR/summary.txt"
     else
-      run_check "$tree" "pre-commit, on ${#files[@]} changed files" "$WORK/mr/checks/pre-commit.txt" pre-commit run --files "${files[@]}"
+      run_check "$tree" "pre-commit, on ${#files[@]} changed files" "$CHECKS_DIR/pre-commit.txt" pre-commit run --files "${files[@]}"
       changed="$(git -C "$tree" status --porcelain --untracked-files=no)"
       if [ -n "$changed" ]; then
         {
           echo
           echo "pre-commit changed these files, which is how a formatting hook says a file needs it:"
           printf '%s\n' "$changed"
-        } >>"$WORK/mr/checks/pre-commit.txt"
+        } >>"$CHECKS_DIR/pre-commit.txt"
       fi
     fi
   fi
@@ -1593,6 +1605,8 @@ EOF
   fi
   collect_modules "$clone" "$commit" "$prefixes"
   collect_wiki "$clone" "$repo" "$no_wiki"
+  CHECKS_DIR="$WORK/mr/checks"
+  CHECK_SUBJECT="!$MR_IID"
   if want_checks "$checks_mode" "$clone" "$commit" "$(json_get "$WORK/mr/view.json" author.name)"; then
     run_checks "$commit" "$target"
   fi
@@ -1749,22 +1763,33 @@ If I have a skill for reviewing merge requests, follow all of it for the review 
 # ---- review ------------------------------------------------------------------
 
 # Cowork names the files, so each has to be reviews/<ticket>/<name>.md, and nothing else.
+# review_files <deliverable>: the files it has to save, as "reviews/<ticket>/<name>.md" or
+# "plans/<ticket>/<name>.md". A review goes where reviews are kept, and a plan where plans are.
 review_files() {
-  local p t f
+  local p kind t f
   while IFS= read -r p; do
     case "$p" in
-      reviews/*)
-        t="${p#reviews/}"
+      reviews/* | plans/*)
+        kind="${p%%/*}"
+        t="${p#*/}"
         f="${t#*/}"
         t="${t%%/*}"
-        case "$t" in '' | .* | *[!A-Za-z0-9._-]*) die "a review can't go at $p" ;; esac
-        case "$f" in '' | .* | */* | *[!A-Za-z0-9._-]*) die "a review can't go at $p" ;; *.md) ;; *) die "a review can't go at $p" ;; esac
-        echo "$t/$f"
+        case "$t" in '' | .* | *[!A-Za-z0-9._-]*) die "a ${kind%s} can't go at $p" ;; esac
+        case "$f" in '' | .* | */* | *[!A-Za-z0-9._-]*) die "a ${kind%s} can't go at $p" ;; *.md) ;; *) die "a ${kind%s} can't go at $p" ;; esac
+        echo "$kind/$t/$f"
         ;;
     esac
   done <<EOF
 $(manifest_paths "$1")
 EOF
+}
+
+# saved_at <reviews/t/f or plans/t/f>: where it goes on this Mac.
+saved_at() {
+  case "$1" in
+    plans/*) echo "$PLANS_DIR/${1#plans/}" ;;
+    *) echo "$REVIEWS_DIR/${1#reviews/}" ;;
+  esac
 }
 
 # A review of an old head can still be worth keeping, so this warns and goes on.
@@ -1824,20 +1849,30 @@ cmd_review() {
   a="${SRC%/*}"
   task="$(basename "${a%/*}")"
   files="$(review_files "$copy")" || exit 1
-  [ -n "$files" ] || die "that deliverable has nothing under reviews/"
+  [ -n "$files" ] || die "that deliverable has nothing under reviews/ or plans/"
   echo
   echo "Deliverable: $task/$(basename "$SRC")"
   echo "Version:     $version"
-  echo "Saving to:   $REVIEWS_DIR"
+  ! printf '%s\n' "$files" | grep -q '^reviews/' || echo "Saving to:   $REVIEWS_DIR"
+  ! printf '%s\n' "$files" | grep -q '^plans/' || echo "Plans go to: $PLANS_DIR"
   while IFS= read -r f; do
-    if [ -f "$REVIEWS_DIR/$f" ]; then
-      echo "  $f ($(wc -c <"$copy/reviews/$f" | tr -d ' ') bytes, replaces yours, which is kept as ${f##*/}.previous)"
+    dest="$(saved_at "$f")"
+    if [ -f "$dest" ]; then
+      echo "  ${f#*/} ($(wc -c <"$copy/$f" | tr -d ' ') bytes, replaces yours, which is kept as ${f##*/}.previous)"
     else
-      echo "  $f ($(wc -c <"$copy/reviews/$f" | tr -d ' ') bytes, new)"
+      echo "  ${f#*/} ($(wc -c <"$copy/$f" | tr -d ' ') bytes, new)"
     fi
-    warn_if_moved "$f"
-    show_coverage "$copy/reviews/$f" "${f##*/}"
-    check_skill_stamps "$copy/reviews/$f"
+    case "$f" in
+      plans/*)
+        echo "What ${f##*/} starts with:"
+        head -n 8 "$copy/$f" | LC_ALL=C tr -d '\000-\010\013-\037\177' | sed 's/^/  /'
+        ;;
+      *)
+        warn_if_moved "${f#reviews/}"
+        show_coverage "$copy/$f" "${f##*/}"
+        check_skill_stamps "$copy/$f"
+        ;;
+    esac
   done <<EOF
 $files
 EOF
@@ -1847,12 +1882,12 @@ EOF
     return 1
   fi
   while IFS= read -r f; do
-    dest="$REVIEWS_DIR/$f"
+    dest="$(saved_at "$f")"
     mkdir -p "$(dirname "$dest")" || die "can't create $(dirname "$dest")"
-    if [ -f "$dest" ] && ! cmp -s "$dest" "$copy/reviews/$f"; then
+    if [ -f "$dest" ] && ! cmp -s "$dest" "$copy/$f"; then
       cp "$dest" "$dest.previous" || die "couldn't keep your copy of $dest, so nothing replaced it"
     fi
-    cp "$copy/reviews/$f" "$dest" || die "couldn't save $dest"
+    cp "$copy/$f" "$dest" || die "couldn't save $dest"
     echo "Saved: $dest"
     [ ! -f "$dest.previous" ] || echo "Your earlier copy: $dest.previous"
   done <<EOF
@@ -2261,6 +2296,199 @@ EOF
     echo "Paste this into Cowork. It's on your clipboard:"
   else
     echo "Paste this into Cowork:"
+  fi
+  echo
+  printf '%s\n' "$prompt"
+}
+
+# ---- branch ------------------------------------------------------------------
+
+# relay branch: a review before there's a merge request, which is stage 5 of how a piece of
+# work goes. It packs the branch against its target as relay mr does, without GitLab: the
+# bundle, the diff, the commits, the checks, the wiki, and the plan if there is one. The review
+# comes back through relay review, like any other.
+
+# ticket_in <text>: the first thing shaped like a ticket's key in it, or no-ticket.
+ticket_in() {
+  local t
+  t="$(printf '%s' "$1" | grep -oE '[A-Z][A-Z0-9_]+-[0-9]+' | head -n 1)"
+  printf '%s' "${t:-no-ticket}"
+}
+
+# plan_for <ticket>: the newest plan kept for a ticket under the plans folder, or nothing.
+plan_for() {
+  [ "$1" != no-ticket ] && [ -d "$PLANS_DIR/$1" ] || return 0
+  ls -t "$PLANS_DIR/$1"/*.md 2>/dev/null | head -n 1
+}
+
+cmd_branch() {
+  local dir="." against="" plan="" no_plan="" no_wiki="" checks="" test_cmd="" root repo branch commit target target_ref target_commit base
+  local name ticket review existing=none dirty=no commits changed hash size dest note prompt plan_line
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --against)
+        [ -n "${2:-}" ] || die "--against needs the branch this one is meant to merge into"
+        against="$2"
+        shift 2
+        ;;
+      --plan)
+        [ -n "${2:-}" ] || die "--plan needs the plan's file"
+        plan="$2"
+        shift 2
+        ;;
+      --no-plan) no_plan=1; shift ;;
+      --checks) checks=yes; shift ;;
+      --no-checks) checks=no; shift ;;
+      --test)
+        [ -n "${2:-}" ] || die "--test needs the command that runs this repository's tests, or none to forget it"
+        test_cmd="$2"
+        shift 2
+        ;;
+      --no-wiki) no_wiki=1; shift ;;
+      --ask) SECRETS_ASK=1; shift ;;
+      -h | --help) usage; return 0 ;;
+      -*) die "relay branch: unknown option $1. Try relay --help" ;;
+      *) dir="$1"; shift ;;
+    esac
+  done
+  root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "not a git repository: $dir"
+  # Named for the project on origin, as a merge request's review is, and for the folder otherwise.
+  repo="$(git -C "$root" config --get remote.origin.url 2>/dev/null)"
+  repo="${repo%/}"
+  repo="${repo%.git}"
+  repo="${repo##*/}"
+  repo="${repo##*:}"
+  [ -n "$repo" ] || repo="$(basename "$root")"
+  repo="$(printf '%s' "$repo" | tr -c 'A-Za-z0-9._-' '-')"
+  branch="$(git -C "$root" symbolic-ref -q --short HEAD)" || die "you're not on a branch. Check one out, and run this again."
+  commit="$(git -C "$root" rev-parse --verify -q HEAD)" || die "$root has no commits yet"
+  [ -n "$against" ] || against="$(default_branch "$root")"
+  [ "$against" != "$branch" ] || die "that's the branch you're on. Name the one it's meant to merge into: relay branch --against NAME"
+  if git -C "$root" rev-parse --verify -q "refs/remotes/origin/$against" >/dev/null; then
+    target_ref="refs/remotes/origin/$against"
+  elif git -C "$root" rev-parse --verify -q "refs/heads/$against" >/dev/null; then
+    target_ref="refs/heads/$against"
+  else
+    die "there's no branch called $against here, on origin or locally. Name the one this branch is meant to merge into: relay branch --against NAME"
+  fi
+  target_commit="$(git -C "$root" rev-parse --verify -q "$target_ref")"
+  base="$(git -C "$root" merge-base "$commit" "$target_commit" 2>/dev/null)" || die "$branch and $against have no common history"
+  [ "$commit" != "$base" ] || die "$branch has nothing that $against doesn't. There's nothing to review yet."
+  if [ -z "$SKILLS_CHECKED" ]; then
+    SKILLS_CHECKED=1
+    check_own_skill
+    sync_skills quiet
+  fi
+  # A test command named here is kept under the repository's folder name, since there's no project path.
+  MR_HOST=local
+  MR_PROJECT="$repo"
+  MR_IID="$branch"
+  if [ -n "$test_cmd" ]; then
+    remember_test "$test_cmd"
+    if [ "$test_cmd" = none ]; then
+      echo "Forgot how to test $repo."
+    else
+      echo "Remembered how to test $repo, so --test isn't needed for it next time: $test_cmd"
+    fi
+  fi
+  ticket="$(ticket_in "$branch")"
+  name="$(printf '%s-%s' "$repo" "$branch" | tr -c 'A-Za-z0-9._-' '-')"
+  review="$ticket/$name.md"
+
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  trap cleanup EXIT
+  mkdir -p "$WORK/branch"
+  git -C "$root" diff HEAD --binary >"$WORK/uncommitted.patch" || die "git couldn't read the uncommitted changes"
+  [ -s "$WORK/uncommitted.patch" ] && dirty=yes
+  secret_places "$root" "$commit" >"$WORK/secrets.txt"
+  if [ "$dirty" = yes ]; then
+    secret_places_uncommitted "$root" "$WORK/secrets.txt" >"$WORK/secrets-now.txt"
+    cat "$WORK/secrets-now.txt" >>"$WORK/secrets.txt"
+  fi
+  secrets_gate "$name" "$WORK/secrets.txt" "$root" || return 1
+
+  git init -q --bare "$WORK/branch.git" || die "git couldn't make a scratch repository"
+  scratch_fetch "$root" "$WORK/branch.git" "refs/heads/$branch" "refs/heads/$branch" || die "git couldn't read $branch from $root"
+  scratch_fetch "$root" "$WORK/branch.git" "$target_ref" "refs/heads/$against" || die "git couldn't read $against from $root"
+  git -C "$WORK/branch.git" symbolic-ref HEAD "refs/heads/$branch"
+  git -C "$WORK/branch.git" bundle create -q "$WORK/repo.bundle" HEAD "refs/heads/$branch" "refs/heads/$against" || die "git couldn't bundle $branch and $against"
+  rm -rf "$WORK/branch.git"
+  git -C "$root" diff --binary "$base" "$commit" >"$WORK/branch/diff.patch" || die "git couldn't make the diff"
+  git -C "$root" log --no-decorate --format='%h %ad %s' --date=short "$base..$commit" >"$WORK/branch/commits.txt"
+  commits="$(grep -c . "$WORK/branch/commits.txt" || true)"
+  changed="$(git -C "$root" diff --name-only "$base" "$commit" | grep -c . || true)"
+
+  if [ -n "$plan" ]; then
+    [ -f "$plan" ] || die "--plan: no such file: $plan"
+    cp "$plan" "$WORK/branch/plan.md" || die "couldn't read $plan"
+    plan_line="branch/plan.md, from $(tilde "$plan")"
+  elif [ -z "$no_plan" ] && plan="$(plan_for "$ticket")" && [ -n "$plan" ]; then
+    cp "$plan" "$WORK/branch/plan.md" || die "couldn't read $plan"
+    plan_line="branch/plan.md, from $(tilde "$plan")"
+  else
+    plan="" plan_line="none sent. Ask the user for what done means, or for the plan's file"
+  fi
+
+  if [ -f "$REVIEWS_DIR/$review" ]; then
+    cp "$REVIEWS_DIR/$review" "$WORK/branch/existing-review.md" || die "couldn't read $REVIEWS_DIR/$review"
+    existing="yes, in branch/existing-review.md. Keep the user's edits to it"
+  fi
+  CHECKS_DIR="$WORK/branch/checks"
+  CHECK_SUBJECT="your branch $branch"
+  if want_checks "$checks" "$root" "$commit" "you"; then
+    run_checks "$commit" "$against"
+  fi
+  collect_wiki "$root" "" "$no_wiki"
+  make_archive "$WORK/$name.tar.gz" -C "$WORK" repo.bundle uncommitted.patch branch ${WIKI_PART:+"$WIKI_PART"} || die "tar couldn't make the archive"
+  hash="$(sha256_of "$WORK/$name.tar.gz")"
+  size="$(wc -c <"$WORK/$name.tar.gz" | tr -d ' ')"
+  note="$WORK/$name.txt"
+  {
+    echo "LLM-RELAY BRANCH"
+    echo "repository: $repo"
+    echo "path: $root"
+    echo "branch: $branch"
+    echo "against: $against, at $target_commit"
+    echo "commit: $commit"
+    echo "merge base: $base"
+    echo "commits: $commits, in branch/commits.txt"
+    echo "changed files: $changed, in branch/diff.patch"
+    echo "taken: $(now)"
+    echo "ticket: $ticket"
+    if [ "$dirty" = yes ]; then
+      echo "uncommitted changes: yes, in uncommitted.patch. They aren't in the diff or the commits"
+    else
+      echo "uncommitted changes: no, uncommitted.patch is empty"
+    fi
+    echo "plan: $plan_line"
+    echo "wiki: $WIKI_LINE"
+    echo "secrets check: $SECRETS_LINE"
+    echo "checks: $CHECKS_LINE"
+    echo "earlier review: $existing"
+    echo "review goes in the deliverable at: reviews/$review"
+    echo "tools on this machine:"
+    list_tools
+    echo "archive: $name.tar.gz"
+    echo "archive sha256: $hash"
+    echo "archive bytes: $size"
+  } >"$note"
+  dest="$COWORK/relay/branches"
+  mkdir -p "$dest" || die "can't create $dest"
+  cp "$WORK/$name.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
+  cp "$note" "$dest/" || die "couldn't copy the note to $dest"
+  echo "Packed branch $branch of $repo against $against: $commits commits, $changed changed files, $size bytes"
+  [ -z "$WIKI_PART" ] || echo "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
+  [ -z "$plan" ] || echo "Included the plan, $(tilde "$plan")"
+  echo "Checks: $CHECKS_LINE"
+  [ "$existing" = none ] || echo "Included your earlier review, $REVIEWS_DIR/$review"
+  size_warning "$size"
+  echo "Sent to OneDrive: Documents/Cowork/relay/branches/$name.txt and $name.tar.gz"
+  prompt="Use remote-pair-run to review my branch before I open a merge request, following its section on merge requests, with the two passes stage 5 asks for: the code, and then the code against the plan. With no attachment, read Documents/Cowork/relay/branches/$name.txt from my OneDrive, and get the archive it names. If I have a skill for reviewing merge requests, follow all of it for the review and the file it writes. Finish with a verdict: is this ready to push, and what has to change first? Say what you didn't cover."
+  echo
+  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
+    echo "Paste this into a new Cowork session. It's on your clipboard:"
+  else
+    echo "Paste this into a new Cowork session:"
   fi
   echo
   printf '%s\n' "$prompt"
@@ -2764,6 +2992,7 @@ EOF
 FEATURES="Try a practice round first|git|practice
 Change code with Cowork|git|scan
 Review a merge request|glab python3|mr
+Review a branch before the merge request|git|branch
 Start from a Jira ticket|acli python3|ticket
 Run Go checks in a review|go|mr
 Lint a review with the repository's pre-commit|pre-commit|mr
@@ -2793,7 +3022,7 @@ feature_lines() {
     for t in $tools; do
       command -v "$t" >/dev/null 2>&1 || missing="${missing:+$missing. }needs $t: $(tool_hint "$t")"
     done
-    printf '  %-34s%s\n' "$what" "${missing:-ready}"
+    printf '  %-42s%s\n' "$what" "${missing:-ready}"
   done <<EOF
 $FEATURES
 EOF
@@ -2916,7 +3145,7 @@ begin_session() {
   echo
   echo "What you can do on this Mac:"
   feature_lines
-  echo "Clones are looked for under $(tilde "$CLONES_DIRS"), and reviews are saved under $(tilde "$REVIEWS_DIR"). relay setup changes either."
+  echo "Clones are looked for under $(tilde "$CLONES_DIRS"), reviews are saved under $(tilde "$REVIEWS_DIR"), and plans under $(tilde "$PLANS_DIR"). relay setup changes any of them."
   case "${TERM_PROGRAM:-}" in
     Apple_Terminal) ;;
     *)
@@ -3077,7 +3306,7 @@ relay_setting() {
 
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" reviews="" clones="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0
+  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -3096,6 +3325,11 @@ cmd_setup() {
         clones="$2"
         shift 2
         ;;
+      --plans)
+        [ -n "${2:-}" ] || die "--plans needs a folder"
+        plans="$2"
+        shift 2
+        ;;
       --skills)
         [ -n "${2:-}" ] || die "--skills needs the names of your skills, separated by colons, or none"
         skills="$(printf '%s' "$2" | tr ',' ':')"
@@ -3110,7 +3344,7 @@ cmd_setup() {
       -h | --help)
         cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
-                   [--skills NAMES] [--skills-from FOLDER]
+                   [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
 Microsoft Copilot Cowork. It finds OneDrive under ~/Library/CloudStorage. --dir names the
@@ -3118,7 +3352,8 @@ folder if there are several, or it syncs elsewhere. Run it again to update the s
 
 --reviews is where relay review saves merge request reviews. --clones is where relay mr
 looks for your clones, with several folders separated by colons. At a terminal, it asks
-for each the first time.
+for each the first time. --plans is where relay review saves a plan Cowork wrote, and
+where relay branch looks for one. It's ~/plans unless you say otherwise.
 
 --skills names your own Claude skills to copy to Cowork too, separated by colons, such as
 mr-review:simple-english. Each copy is your skill with a note on top saying what to do
@@ -3136,7 +3371,8 @@ EOF
   install_own_skills "$dir"
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
-  for key in reviews clones; do
+  [ -z "$plans" ] || relay_setting plans "$plans" "$HOME/plans" ""
+  for key in reviews clones plans; do
     value="$(setting "$key" "")"
     [ -z "$value" ] || echo "relay setting: $key=$value"
   done
@@ -3170,23 +3406,24 @@ cmd_complete() {
   shift
   [ "$i" -le 1 ] || prev="$(eval "printf '%s' \"\${$((i - 1)):-}\"")"
   case "$prev" in
-    --repo | --dir | --also | --clones | --reviews | --skills-from) echo __dirs__; return 0 ;;
+    --repo | --dir | --also | --clones | --reviews | --plans | --skills-from) echo __dirs__; return 0 ;;
   esac
   # --dir FOLDER can come first.
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nreview\napply\nskills\nfield-test\ncompletion\n'
+    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nbranch\nreview\napply\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
   case "$sub" in
-    setup) printf -- '--dir\n--reviews\n--clones\n--skills\n--skills-from\n' ;;
+    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     review) echo --expect ;;
     ticket) printf -- '--page\n--ask\n' ;;
+    branch) printf -- '--against\n--plan\n--no-plan\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     field-test | practice) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
     completion) printf 'zsh\nbash\n' ;;
@@ -3243,7 +3480,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  start | practice | run | scan | mr | ticket | review | apply | skills | field-test)
+  start | practice | run | scan | mr | ticket | branch | review | apply | skills | field-test)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -3258,6 +3495,7 @@ case "${1:-}" in
   scan) shift; cmd_scan "$@"; exit $? ;;
   mr) shift; cmd_mr "$@"; exit $? ;;
   ticket) shift; cmd_ticket "$@"; exit $? ;;
+  branch) shift; cmd_branch "$@"; exit $? ;;
   review) shift; cmd_review "$@"; exit $? ;;
   apply) shift; cmd_apply "$@"; exit $? ;;
   skills) shift; cmd_skills "$@"; exit $? ;;

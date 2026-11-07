@@ -28,6 +28,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The checks in `relay mr`, with real Cowork. The field test's merge request was in a Python repository, when the checks were for Go only, so none ran. Since 0.2.8 they cover pre-commit and a repository's own tests, which have only run in smoke tests against stand-ins for `pre-commit` and `go`. Not known: how long real pre-commit hooks take on a temporary copy, and whether they need the network there.
 - Proving a review's finding with a run. Two runs in the field test never reached the code, because the Mac had no way to run that repository's tests outside a Docker image that wasn't built. `safe_worktree` left the checkout alone both times.
 - Waking Cowork. The user's Teams had no Workflows app, so no webhook could be made. An email trigger worked on 2026-11-03, and hasn't been tried with the relay.
+- `relay branch` and a plan saved through `relay review`, with real Cowork. Smoke tests only. Not known: whether Cowork does the second pass against the plan, and whether a plan written in a chat makes a good file.
 - The stages, with real Cowork. They are text in the skill. Not known: whether Cowork keeps to them or goes straight to code when a ticket looks simple, and whether saying the stage aloud helps.
 - `relay ticket`, with real `acli`, real Jira and real Cowork. Smoke tests only, against a stand-in for `acli` built from the shapes the work Mac's `acli` printed. Not known: how a real ticket with a long description and many comments reads, what real Confluence pages lose as plain text, and whether Cowork works well from it.
 - A run from a terminal app other than Apple's Terminal. The relay's refusal message has only run against an imitation. Why iTerm was refused once, and not later, is unknown.
@@ -38,6 +39,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### A review before the merge request, and a plan that comes home (2026-11-07)
+
+- **Why:** stage 5 of how a piece of work goes had no command, so a review before pushing meant a scan and a hand-written prompt. And a plan Cowork wrote stayed in Cowork.
+- **What changed:** `relay branch` packs the current branch against the one it's meant to merge into: the bundle, the commits and the diff from their merge base, uncommitted changes marked as such, the checks, the wiki, an earlier review, and the plan kept for the branch's ticket. Its prompt asks for the two passes stage 5 wants. `relay review` now saves a plan too, from `plans/<ticket>/<name>.md` in a deliverable to `~/plans/<ticket>/`, and `relay setup --plans` moves that. `relay branch` finds the newest plan there for its ticket. This is 0.2.11.
+- **Not in it:** a review of a branch with no commits of its own. Uncommitted work alone isn't reviewed.
 
 ### Cowork knows how a piece of work goes (2026-11-06)
 

@@ -5,7 +5,7 @@
 #
 # On the assistant's side, after the files are final:
 #   bash runlib.sh manifest DIR [VERSION]    Hash the folder into DIR/manifest.txt. DIR needs
-#                                            run.sh and runlib.sh, or a reviews/ folder.
+#                                            run.sh and runlib.sh, or a reviews/ or plans/ folder.
 #
 # In run.sh, with no `set -e` and no `trap ... EXIT` (use on_exit):
 #   . "$(dirname "${BASH_SOURCE[0]}")/runlib.sh"
@@ -40,7 +40,7 @@
 # A run passes only if it reaches report_end with at least one check and no failures.
 # $RUN_TMP is a scratch folder, removed at exit.
 
-RUNLIB_VERSION=6
+RUNLIB_VERSION=7
 RUNLIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNLIB_EXIT_COUNT=0
 RUNLIB_STEP=0
@@ -73,8 +73,8 @@ _runlib_manifest_version() {
 runlib_manifest() {
   local dir="${1:-}" version="${2:-}" old f tmp
   [ -d "$dir" ] || { echo "manifest: no folder: $dir" >&2; return 2; }
-  # A review has nothing to run, so it needs only the review.
-  if [ ! -d "$dir/reviews" ]; then
+  # A review or a plan has nothing to run, so it needs only the file.
+  if [ ! -d "$dir/reviews" ] && [ ! -d "$dir/plans" ]; then
     for f in run.sh runlib.sh; do
       [ -f "$dir/$f" ] || { echo "manifest: $dir has no $f" >&2; return 2; }
     done

@@ -84,8 +84,9 @@ It waits for OneDrive, shows you what's there, and runs it when you press `y`. T
 | `relay run` | Runs a deliverable from Cowork, from a checked local copy, when you press `y`. |
 | `relay scan` | Puts a branch and your uncommitted changes in OneDrive. |
 | `relay mr <url>` | Puts a GitLab merge request and what it takes to review it in OneDrive. |
+| `relay branch` | Puts your branch in OneDrive for a review before there's a merge request, with the plan if one was kept. |
 | `relay ticket <key>` | Puts a Jira ticket in OneDrive for Cowork to start from, with any Confluence pages you name. |
-| `relay review` | Saves the review Cowork wrote, when you press `y`. |
+| `relay review` | Saves the review or the plan Cowork wrote, when you press `y`. |
 | `relay apply` | Leaves a proven patch in your working tree, when you press `y`. It never commits. |
 
 [Using relay](docs/using.md) has how each one works.
