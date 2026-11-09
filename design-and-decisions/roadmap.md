@@ -50,6 +50,26 @@ With no phase yet:
 - Letting Cowork leave notes for the wiki through `wiki capture`.
 - `relay survey`, proposed on 2026-11-06 and not to be built now. It would count a user's repositories and tools, such as languages, how tests are started and which hooks are installed, and print a report that is safe to share, so the relay can be fitted to a team's stack and not to one person's. A script that does this exists outside the repository. One thing has to be solved before it could ship: the part that lists names it finds in several repositories can print a name that belongs to the user's company.
 
+## If Copilot went away
+
+Added on 2026-11-08. Nobody expects it to. The question was how much of the relay would be wasted if it did, and the answer is less than it looks: the keypress before anything runs or lands, the packs made from a ticket, a branch, a merge request or a repository, the run harness, the secrets check and the flow don't depend on Copilot. They depend on OneDrive, and on a skills folder Cowork happens to read. What would be lost is Cowork's reach into Teams and email, and its tokens.
+
+Two changes would turn that dependency into a setting. Neither is urgent, and neither is built.
+
+- **Name the sync folder and the skills folder as settings,** with OneDrive and Cowork's folder as the defaults. Another agent that reads a synced folder could then take Cowork's part, with `relay setup` and no fork. Git could be a transport too: a deliverable pushed to a branch, and `relay run` fetching it, with no synced folder at all.
+- **Let the packers write to a local folder,** with something like `--to DIR` on `relay ticket`, `scan`, `mr` and `branch`. The packs would then feed an assistant that runs on the Mac, a colleague, or a different agent in the cloud. `relay ticket` this way gives a local assistant a Jira ticket and its pages, which it can't reach either.
+
+Smaller, from the same question: the secrets check as a command of its own, for anything about to leave the Mac.
+
+## Slack
+
+Proposed on 2026-11-08, and not built. Cowork reads Teams and email, and not Slack. Slack's own assistant, Slackbot, has no documented way to be asked a question from outside Slack. What Slack does offer is search: its MCP server at `mcp.slack.com` and its Real-time Search API, generally available since February 2026, which search messages, files and channels and read threads as the signed-in user.
+
+- **The catch is who may connect.** Only an app published in Slack's directory, or an internal app the workspace's admins approve, may use either. So this starts with the company's Slack admins, not with code.
+- **What the relay would do,** if an approved app existed: a pack like `relay ticket`'s, with the threads that mention a ticket's key or a merge request's address, run past the secrets check and sent to Cowork. It would keep the relay's rule on tokens: sign-in through the browser, by a tool that keeps the token to itself.
+- **A route with no code:** a Microsoft 365 admin can add an MCP server as a connector for Copilot. If Slack's were added, Cowork could search Slack itself and the relay would have nothing to do.
+- **Not known:** whether the company's Slack plan includes these, whether its admins would approve an app, and whether a command-line tool exists that signs in for a user the way `acli` does.
+
 ## Decisions needed
 
 The first two are answered, and phase 1 was built on them. The rest can wait until phase 2 is back. When one is made, write the answer and its date under it.
