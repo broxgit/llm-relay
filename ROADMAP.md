@@ -42,6 +42,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### A running check says so (2026-11-09)
+
+- **Why:** After the checks question, `relay mr` printed `go build: ` and nothing more until the check ended. The user took it for a question and waited to be asked something.
+- **What changed:** At a terminal a check prints `go build: running...`, and its result takes that line's place. One line before the first check says there is nothing more to answer until they finish. Released as 0.2.14.
+
 ### Notes from a real ticket run (2026-11-09)
 
 - **Why:** The user took notes during a real ticket run, and the same few things got in the way: one repository per scan, a scan that could be of stale code with nothing saying so, a start with no hint of what to answer, and sessions that all looked alike.

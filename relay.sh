@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.13"
+RELAY_VERSION="0.2.14"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
