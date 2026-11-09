@@ -1448,11 +1448,13 @@ want_checks() {
   done
 }
 
-# run_check <folder> <label> <output file> <command...>: one check, under a time limit.
+# run_check <folder> <label> <output file> <command...>: one check, under a time limit. A bare
+# "go build: " with the cursor after it read as a question to a real user, so at a terminal a
+# check says it is running, and its result takes that line's place.
 run_check() {
   local dir="$1" label="$2" out="$3" start="$SECONDS" rc result
   shift 3
-  printf '%s: ' "$label"
+  [ ! -t 1 ] || printf '%s: running...' "$label"
   (cd "$dir" && limited "$CHECK_LIMIT" "$@") >"$out" 2>&1
   rc=$?
   CHECKS_RUN=$((CHECKS_RUN + 1))
@@ -1476,7 +1478,8 @@ run_check() {
     tail -c 1000000 "$out" >"$out.end"
     mv "$out.end" "$out"
   fi
-  echo "$result ($((SECONDS - start))s)"
+  [ ! -t 1 ] || printf '\r\033[K'
+  echo "$label: $result ($((SECONDS - start))s)"
   echo "$label: $result ($((SECONDS - start))s)" >>"$CHECKS_DIR/summary.txt"
 }
 
@@ -1511,6 +1514,7 @@ run_checks() {
       echo "ran on: $(uname -sm)"
     fi
   } >"$CHECKS_DIR/summary.txt"
+  echo "Running them now. There is nothing more to answer until they finish."
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     d="$(dirname "$f")"

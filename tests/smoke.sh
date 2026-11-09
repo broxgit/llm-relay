@@ -1231,6 +1231,8 @@ check "and n runs nothing" test ! -e "$T/go.log"
 check "and the note says so" grep -q '^checks: not run, because the user chose not to$' "$MD/svc-7.txt"
 out="$(mr_key y "$MRU")"
 case "$out" in *"go test: passed"*) ok "y runs them" ;; *) bad "y runs them" "$out" ;; esac
+# A real user took a bare "go build: " for a question, and waited to be asked something.
+case "$out" in *"Running them now. There is nothing more to answer until they finish."*"go build: running..."*"go build: passed"*) ok "and a check that is running says so, with nothing left to answer" ;; *) bad "and a check that is running says so, with nothing left to answer" "$out" ;; esac
 rm -f "$T/go.log"
 out="$(mr_key y "$MRU" --no-checks)"
 case "$out" in *"Run go build"*) bad "--no-checks doesn't ask" "$out" ;; *) ok "--no-checks doesn't ask" ;; esac
