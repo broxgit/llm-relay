@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.11"
+RELAY_VERSION="0.2.12"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -1575,6 +1575,10 @@ EOF
   ticket="$(ticket_of "$WORK/mr/view.json")"
   [ -n "$ticket" ] || ticket=no-ticket
   review="$ticket/$name.md"
+  # The first merge request's title and ticket go to the file cmd_mr named, since this runs in a subshell.
+  if [ -n "${MR_SLACK_FILE:-}" ] && [ ! -s "$MR_SLACK_FILE" ]; then
+    printf '%s\n%s\n' "$(json_get "$WORK/mr/view.json" title)" "$ticket" >"$MR_SLACK_FILE"
+  fi
 
   # Only fetches in the clone, which can hold uncommitted work. The merge request's own ref
   # works for forks too, where origin has no branch of that name.
@@ -1673,7 +1677,7 @@ EOF
 }
 
 cmd_mr() {
-  local urls="" also="" also_notes="" repo_arg="" no_wiki="" prefixes="" checks="" test_cmd="" url spec note prompt names=""
+  local urls="" also="" also_notes="" repo_arg="" no_wiki="" prefixes="" checks="" test_cmd="" url spec note prompt names="" first_url first_title first_ticket slack_file
   while [ $# -gt 0 ]; do
     case "$1" in
       --also)
@@ -1734,9 +1738,13 @@ $also
 EOF
   also_notes="${also_notes%
 }"
+  # pack_mr runs in a subshell, so it leaves the first merge request's title and ticket in a file.
+  slack_file="$(mktemp "${TMPDIR:-/tmp}/llm-relay-slack.XXXXXX")" || die "can't make a scratch file"
+  MR_SLACK_FILE="$slack_file"
+  export MR_SLACK_FILE
   while IFS= read -r url; do
     [ -n "$url" ] || continue
-    (pack_mr "$url" "$repo_arg" "$no_wiki" "$prefixes" "$also_notes" "$checks" "$test_cmd") || exit 1
+    (pack_mr "$url" "$repo_arg" "$no_wiki" "$prefixes" "$also_notes" "$checks" "$test_cmd") || { rm -f "$slack_file"; exit 1; }
   done <<EOF
 $urls
 EOF
@@ -1758,6 +1766,15 @@ If I have a skill for reviewing merge requests, follow all of it for the review 
   fi
   echo
   printf '%s\n' "$prompt"
+  first_url="$(printf '%s' "$urls" | head -n 1)"
+  first_title="$(sed -n 1p "$slack_file")"
+  first_ticket="$(sed -n 2p "$slack_file")"
+  rm -f "$slack_file"
+  [ "$first_ticket" != no-ticket ] || first_ticket=""
+  echo
+  echo "$SLACK_INTRO"
+  echo
+  slack_prompt "$first_url" "$first_title" "$first_ticket"
 }
 
 # ---- review ------------------------------------------------------------------
@@ -2111,6 +2128,16 @@ os.makedirs(out, exist_ok=True)
 open(os.path.join(out, "ticket.md"), "w").write(md)
 json.dump(slim(d), open(os.path.join(out, "ticket.json"), "w"), indent=1, sort_keys=True)
 print("comments %d, linked tickets %d, attachments %d" % (len(comments), len(links), len(att)))
+keys = []
+for l in links:
+    for side in ("outwardIssue", "inwardIssue"):
+        k = (l.get(side) or {}).get("key")
+        if k and k not in keys:
+            keys.append(k)
+if p.get("key") and p["key"] not in keys:
+    keys.append(p["key"])
+for k in keys:
+    print("linked", k)
 seen = []
 for i in re.findall(r"/wiki/[^\s)\"']*?/pages/(\d+)", md) + re.findall(r"[?&]pageId=(\d+)", md):
     if i not in seen:
@@ -2181,8 +2208,21 @@ secret_places_in() {
   )
 }
 
+# slack_prompt <key> <title> <linked keys>: a prompt for the user to paste into Slackbot, Slack's
+# own assistant, for what the team said about this work. Cowork can't read Slack, so the user
+# carries the answer back. The relay never talks to Slack itself.
+SLACK_INTRO="And this one is for Slackbot, if your team talks in Slack. Paste its answer into Cowork with the prompt above:"
+slack_prompt() {
+  local key="$1" title="$2" linked="$3" p
+  title="$(printf '%s' "$title" | tr -d '"')"
+  p="Find the discussions that mention $key"
+  [ -z "$title" ] || p="$p or \"$title\""
+  [ -z "$linked" ] || p="$p, and the tickets $linked"
+  printf '%s\n' "$p. Summarise what was decided, what is still open, and who was involved. Link each thread you used. If you find nothing, say so."
+}
+
 cmd_ticket() {
-  local key="" pages="" p id counts="" line title got=0 missed=0 short=0 hash size dest note prompt
+  local key="" pages="" p id counts="" line title got=0 missed=0 short=0 hash size dest note prompt linked="" ttl
   while [ $# -gt 0 ]; do
     case "$1" in
       --page)
@@ -2226,6 +2266,7 @@ cmd_ticket() {
       "page "*) pages="$pages${line#page }
 " ;;
       short) short=$((short + 1)) ;;
+      "linked "*) linked="${linked:+$linked, }${line#linked }" ;;
     esac
   done <<EOF
 $(printf '%s\n' "$counts" | tail -n +2)
@@ -2299,6 +2340,11 @@ EOF
   fi
   echo
   printf '%s\n' "$prompt"
+  ttl="$(sed -n "1s/^# $key: //p" "$WORK/ticket/ticket.md")"
+  echo
+  echo "$SLACK_INTRO"
+  echo
+  slack_prompt "$key" "$ttl" "$linked"
 }
 
 # ---- branch ------------------------------------------------------------------
