@@ -34,7 +34,7 @@ OWN_SKILLS="remote-pair-run relay-field-test"
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.12"
+RELAY_VERSION="0.2.13"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -100,7 +100,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay completion zsh|bash
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
-       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY] [--branch NAME] [--no-wiki] [--ask]
+       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] ticket KEY [--page NUMBER_OR_ADDRESS]... [--ask]
        relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
@@ -131,7 +131,9 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          happened. Then tell Cowork "done". With no deliverable named, it uses the newest.
   scan   Puts the repository's current branch and uncommitted changes in OneDrive, at
          Documents/Cowork/relay/scans, with a note of the commit and tool versions. Untracked
-         files stay out. Defaults to the repository you're in. If you use llm-wiki, the compiled
+         files stay out. Defaults to the repository you're in, and takes several folders at
+         once. It fetches from origin first, moves no branch, and says if what it sent is
+         behind origin or isn't origin's default branch. If you use llm-wiki, the compiled
          pages of the wiki that covers it go too, unless you add --no-wiki. Its raw notes and
          other wikis stay out.
          --branch NAME scans that branch instead, as origin has it after a fetch, or your
@@ -140,7 +142,8 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
   ticket Fetches a Jira ticket with acli, Atlassian's own tool, and puts it in OneDrive for
          Cowork to start from: its description, comments, linked tickets and the names of
          its attachments, as a page to read and as JSON. --page adds a Confluence page, by
-         the number in its address or the address itself, as many times as you like. A
+         the number in its address, the address itself, or the short address the Share
+         button gives, as many times as you like. A
          ticket's links to pages don't come with it, so name the ones that matter. It asks
          before sending anything that looks like a secret, and puts a prompt on the clipboard.
   mr     Fetches a GitLab merge request with glab, and puts it in OneDrive for Cowork to review:
@@ -795,6 +798,75 @@ clip_scan() {
   } | pbcopy 2>/dev/null
 }
 
+# behind_origin <repository> <branch> <commit>: fetches from origin, and sets ORIGIN_DEFAULT to
+# origin's default branch and ORIGIN_BEHIND to how what is being scanned stands against origin,
+# so Cowork isn't handed old code without anyone knowing. Both are empty with no origin. It
+# never changes a branch or the working tree. The fetch is given 20 seconds, for a Mac that is
+# off its network.
+behind_origin() {
+  local root="$1" branch="$2" commit="$3" pid watch n ref fresh="" where
+  ORIGIN_DEFAULT=""
+  ORIGIN_BEHIND=""
+  git -C "$root" config --get remote.origin.url >/dev/null 2>&1 || return 0
+  GIT_TERMINAL_PROMPT=0 git -C "$root" fetch -q origin >/dev/null 2>&1 </dev/null &
+  pid=$!
+  (sleep 20; kill "$pid" 2>/dev/null) >/dev/null 2>&1 </dev/null &
+  watch=$!
+  if wait "$pid" 2>/dev/null; then fresh=yes; fi
+  kill "$watch" 2>/dev/null
+  wait "$watch" 2>/dev/null
+  ORIGIN_DEFAULT="$(default_branch "$root")"
+  if [ -n "$branch" ] && git -C "$root" rev-parse --verify -q "refs/remotes/origin/$branch" >/dev/null; then
+    ref="origin/$branch"
+  elif git -C "$root" rev-parse --verify -q "refs/remotes/origin/$ORIGIN_DEFAULT" >/dev/null; then
+    ref="origin/$ORIGIN_DEFAULT"
+  else
+    return 0
+  fi
+  n="$(git -C "$root" rev-list --count "$commit..refs/remotes/$ref" 2>/dev/null)" || return 0
+  where="${branch:-a detached HEAD}"
+  if [ "$n" = 0 ]; then
+    ORIGIN_BEHIND="level with $ref"
+    [ "$ref" = "origin/$branch" ] || ORIGIN_BEHIND="$where isn't on origin, and has everything $ref has"
+  elif [ "$ref" = "origin/$branch" ]; then
+    ORIGIN_BEHIND="$where is $n commits behind $ref"
+  else
+    ORIGIN_BEHIND="$where isn't on origin, and $ref has $n commits it doesn't"
+  fi
+  if [ -n "$branch" ] && [ "$branch" != "$ORIGIN_DEFAULT" ] && [ "$ref" = "origin/$branch" ]; then
+    ORIGIN_BEHIND="$ORIGIN_BEHIND. It is not origin's default branch, $ORIGIN_DEFAULT"
+  fi
+  [ -n "$fresh" ] || ORIGIN_BEHIND="$ORIGIN_BEHIND, as of your last fetch, because origin couldn't be reached"
+}
+
+# remember_scan <repository>: keeps where this repository's clone is, under its origin, so
+# relay start can tell Cowork and Cowork can hand over commands with the folder in them.
+remember_scan() {
+  local u MR_HOST MR_PROJECT
+  u="$(git -C "$1" config --get remote.origin.url 2>/dev/null)" || return 0
+  u="${u%.git}"
+  u="${u%/}"
+  case "$u" in
+    *://*) u="${u#*://}"; u="${u#*@}" ;;
+    *@*:*) u="${u#*@}"; u="${u%%:*}/${u#*:}" ;;
+    *) return 0 ;;
+  esac
+  MR_HOST="${u%%/*}"
+  MR_PROJECT="${u#*/}"
+  case "$MR_HOST/$MR_PROJECT" in *[!A-Za-z0-9._/:-]* | /* | */) return 0 ;; esac
+  remember_clone "$1"
+}
+
+# clone_lines: the clones the relay remembers that are still there, for the start note.
+clone_lines() {
+  local key path
+  [ -f "$KNOWN_CLONES" ] || return 0
+  while IFS="$(printf '\t')" read -r key path; do
+    [ -n "$path" ] && [ -d "$path/.git" ] || continue
+    echo "  ${key#*/}: $(tilde "$path")"
+  done <"$KNOWN_CLONES"
+}
+
 # scan_name <repository>: the name its scan gets in OneDrive. A scan is named after its folder,
 # and two repositories can share a folder name, as a service's code and its deployment folder
 # do. The one that comes second takes its parent folder's name in front, and keeps it, so
@@ -813,7 +885,7 @@ scan_name() {
 }
 
 cmd_scan() {
-  local dir="." root name plain branch commit size hash dest dirty=no no_wiki="" want=""
+  local dir="." dirs="" many=0 failed=0 d root name plain branch commit size hash dest dirty=no no_wiki="" want="" def="" behind=""
   while [ $# -gt 0 ]; do
     case "$1" in
       -h | --help) usage; return 0 ;;
@@ -825,9 +897,29 @@ cmd_scan() {
         shift 2
         ;;
       -*) die "relay scan: unknown option $1. Try relay --help" ;;
-      *) dir="$1"; shift ;;
+      *)
+        dir="$1"
+        dirs="$dirs$1
+"
+        many=$((many + 1))
+        shift
+        ;;
     esac
   done
+  # Several repositories: each is its own scan, with its own secrets check, and one that is
+  # refused or fails doesn't stop the rest. The clipboard ends up naming all that were sent.
+  if [ "$many" -gt 1 ]; then
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      echo "== $d"
+      (cmd_scan "$d" ${want:+--branch "$want"} ${no_wiki:+--no-wiki} ${SECRETS_ASK:+--ask}) || failed=$((failed + 1))
+      echo
+    done <<EOF
+$dirs
+EOF
+    [ "$failed" -eq 0 ] || { echo "$failed of $many were not scanned. The rest are in OneDrive." >&2; return 1; }
+    return 0
+  fi
   root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "not a git repository: $dir"
   plain="$(basename "$root" | tr -c 'A-Za-z0-9._\n-' '-')"
   name="$(scan_name "$root")"
@@ -845,7 +937,11 @@ cmd_scan() {
   else
     commit="$(git -C "$root" rev-parse --verify -q HEAD)" || die "$root has no commits yet"
     branch="$(git -C "$root" symbolic-ref -q --short HEAD)" || branch=""
+    behind_origin "$root" "$branch" "$commit"
+    def="$ORIGIN_DEFAULT"
+    behind="$ORIGIN_BEHIND"
   fi
+  remember_scan "$root"
 
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
@@ -882,6 +978,8 @@ cmd_scan() {
     echo "branch: ${branch:-detached}"
     [ -z "$want" ] || echo "source: $SCAN_SOURCE"
     echo "commit: $commit"
+    [ -z "$def" ] || echo "origin's default branch: $def"
+    [ -z "$behind" ] || echo "against origin: $behind"
     echo "taken: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "wiki: $WIKI_LINE"
     echo "secrets check: $SECRETS_LINE"
@@ -921,6 +1019,10 @@ cmd_scan() {
     echo "Scanned $name: $want at $commit, from $SCAN_SOURCE, $size bytes, uncommitted changes left out"
   else
     echo "Scanned $name: ${branch:-detached HEAD} at $commit, $size bytes, uncommitted changes: $dirty"
+    case "$behind" in
+      "" | "level with"*) ;;
+      *) echo "Check this is what you mean to send: $behind. To send origin's $def without switching branch: relay scan $(tilde "$root") --branch $def" ;;
+    esac
   fi
   [ -z "$WIKI_PART" ] || echo "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
   size_warning "$size"
@@ -2143,8 +2245,26 @@ for i in re.findall(r"/wiki/[^\s)\"']*?/pages/(\d+)", md) + re.findall(r"[?&]pag
     if i not in seen:
         seen.append(i)
         print("page", i)
-for _ in set(re.findall(r"/wiki/x/[\w-]+", md)):
-    print("short")
+for t in sorted(set(re.findall(r"/wiki/x/([\w-]+)", md))):
+    print("tiny", t)
+PY
+}
+
+# tiny_page <address or code>: the page number inside a short Confluence address, the kind that
+# ends /x/AbCd. The code is the number itself, written another way, so nothing is asked of
+# Confluence. Prints nothing if it isn't one.
+tiny_page() {
+  python3 - "$1" <<'PY'
+import base64, re, sys
+m = re.search(r"(?:^|/x/)([A-Za-z0-9_-]{1,11})/?(?:[?#].*)?$", sys.argv[1])
+if m:
+    s = m.group(1).replace("-", "/").replace("_", "+")
+    try:
+        n = int.from_bytes(base64.b64decode(s.ljust(11, "A") + "="), "little")
+    except Exception:
+        n = 0
+    if 0 < n < 10 ** 15:
+        print(n)
 PY
 }
 
@@ -2212,13 +2332,14 @@ secret_places_in() {
 # own assistant, for what the team said about this work. Cowork can't read Slack, so the user
 # carries the answer back. The relay never talks to Slack itself.
 SLACK_INTRO="And this one is for Slackbot, if your team talks in Slack. Paste its answer into Cowork with the prompt above:"
+SLACK_LAYOUT="Answer under these headings, so I can hand it to another assistant: THREADS, one line each with its link, channel and date. DECISIONS, each with the thread it came from. OPEN QUESTIONS. PEOPLE, with what each knows about. NOT FOUND, for anything you searched for and found nothing on. Quote the exact words where a decision turns on them."
 slack_prompt() {
   local key="$1" title="$2" linked="$3" p
   title="$(printf '%s' "$title" | tr -d '"')"
   p="Find the discussions that mention $key"
   [ -z "$title" ] || p="$p or \"$title\""
   [ -z "$linked" ] || p="$p, and the tickets $linked"
-  printf '%s\n' "$p. Summarise what was decided, what is still open, and who was involved. Link each thread you used. If you find nothing, say so."
+  printf '%s\n' "$p. $SLACK_LAYOUT"
 }
 
 cmd_ticket() {
@@ -2265,7 +2386,15 @@ cmd_ticket() {
     case "$line" in
       "page "*) pages="$pages${line#page }
 " ;;
-      short) short=$((short + 1)) ;;
+      "tiny "*)
+        id="$(tiny_page "${line#tiny }")"
+        if [ -n "$id" ]; then
+          pages="$pages$id
+"
+        else
+          short=$((short + 1))
+        fi
+        ;;
       "linked "*) linked="${linked:+$linked, }${line#linked }" ;;
     esac
   done <<EOF
@@ -2276,11 +2405,12 @@ EOF
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     case "$p" in
+      */x/*) id="$(tiny_page "$p")" ;;
       *[!0-9]*) id="$(printf '%s\n' "$p" | sed -n 's|.*/pages/\([0-9][0-9]*\).*|\1|p; s|.*[?&]pageId=\([0-9][0-9]*\).*|\1|p' | head -n 1)" ;;
       *) id="$p" ;;
     esac
     if [ -z "$id" ]; then
-      echo "  one page couldn't be told from what was given for it. Name it by the number after /pages/ in its address" >>"$WORK/pages.txt"
+      echo "  one page couldn't be told from what was given for it. Give its address as the browser shows it, or the number after /pages/ in it" >>"$WORK/pages.txt"
       missed=$((missed + 1))
       continue
     fi
@@ -2295,7 +2425,7 @@ EOF
   done <<EOF
 $pages
 EOF
-  [ "$short" -eq 0 ] || echo "  the ticket has $short short Confluence addresses, which can't be turned into pages from here. Ask the user for --page with the page's full address" >>"$WORK/pages.txt"
+  [ "$short" -eq 0 ] || echo "  the ticket has $short short Confluence addresses that couldn't be read as a page's number. Ask the user for --page with the page's full address" >>"$WORK/pages.txt"
   rmdir "$WORK/ticket/pages" 2>/dev/null
   secret_places_in "$WORK/ticket" >"$WORK/secrets.txt"
   secrets_gate "ticket $key" "$WORK/secrets.txt" "ticket:$key" "It reads the ticket and its pages as they are now." || return 1
@@ -3218,6 +3348,17 @@ begin_session() {
     echo "what this Mac is set up for:"
     feature_lines
     named_skill_lines
+    # A practice round has one repository, which the note already names.
+    if [ "$mode" = practice ]; then
+      :
+    elif [ -n "$(clone_lines)" ]; then
+      echo "clones are looked for under: $(tilde "$CLONES_DIRS")"
+      echo "clones the relay has used, to put in a command in place of a folder to change to:"
+      clone_lines
+    else
+      echo "clones are looked for under: $(tilde "$CLONES_DIRS")"
+      echo "clones the relay has used: none yet"
+    fi
   } >"$note"
   mkdir -p "$dest" && cp "$note" "$dest/note.txt" || die "couldn't write to $dest"
   SKILL_TMP=""

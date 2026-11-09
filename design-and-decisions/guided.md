@@ -89,6 +89,10 @@ The guided test's block has six parts, which suit a test where the user is a tes
 
 The skill also says which relay it is for, as the test's skill does, so a stale copy can be told from the note. That makes three lines to change at a release, and a smoke test fails if they differ.
 
+## Reversed after a real run (2026-11-09)
+
+The start step said to ask "What are you working on?" and give no list of choices. After a real ticket run that was reversed: the open question stays, and four short starters go under it (a ticket's key, a merge request's address, a repository to change or fix, a branch to review), because a bare question left the user guessing what Cowork could take. The start note now also lists the clones the relay has used, so the first scan command can carry a folder and the user never changes folder first. Scan notes already carried a path. The note's old line, that it holds no paths, is no longer true.
+
 ## Keeping it current
 
 Brock's rule, from 2026-11-06: as features are added, the guided way in is updated to reflect them. A guide that lists last month's features is worse than none, because people trust it.
