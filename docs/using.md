@@ -135,6 +135,7 @@ relay ticket ABC-123
 - It fetches the ticket: description, comments, linked tickets and the names of its attachments. It writes them as a page to read and as JSON, with people's emails and account ids taken out, and puts both in OneDrive with a prompt for Cowork on your clipboard.
 - **Confluence pages are named by you.** Jira lists a ticket's linked pages under "Confluence content", but `acli` doesn't return them, so they don't come with the ticket. Copy a page's address from there. Add `--page` with the page's address, or the number after `/pages/` in it, as many times as you like. A page whose address is written in the ticket's description or a comment is found for you.
 - **Attachments aren't sent.** Attach one in Cowork if it matters.
+- **It also prints a prompt for Slackbot,** built from the ticket's key, title and linked tickets. If your team talks in Slack, paste it there and bring the answer to Cowork. The relay never talks to Slack itself. Later, Cowork writes more pointed ones for you to paste.
 - **It looks for secrets first,** as a scan does, and asks before sending. Tickets and pages can hold credentials.
 - A ticket can also hold customer names and incident details. Check what your company allows in OneDrive and through its tenant.
 

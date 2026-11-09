@@ -17,6 +17,7 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
+- Prompts for Slackbot. They are text. Nobody has pasted one into Slackbot, so whether its answers help, and whether Cowork writes good ones, isn't known.
 - `relay start` over a long session, and its stop for a stale copy. It ran for real once, on 2026-11-06 at 0.2.5, and the user reported four things: Cowork read the note and asked "What are you working on?" with no menu, its steps came as the short YOUR TURN block with one command each, two scans in a row were both on the clipboard, and a second `relay start` had nothing to wait for. Not known: whether the block holds late in a long session, whether Cowork stops when its copy is stale, which that run had no reason to show, and whether people run it each session.
 - Remembered clones, since 0.2.6. Smoke tests only.
 - The practice round, with real Cowork. Smoke tests only. Not known: whether Cowork keeps it to four steps and about ten minutes, and whether it writes a sensible deliverable for a one-line change.
@@ -39,6 +40,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Prompts for Slackbot (2026-11-09)
+
+- **Why:** Cowork reads Teams and email, and not Slack. Slack's own assistant can't be asked from outside Slack, and the search Slack offers outside tools needs an app its admins approve. The user can paste.
+- **What changed:** `relay ticket` and `relay mr` print a second prompt, for Slackbot, built from what the relay already has: the key or the address, the title and the linked tickets. The skill tells Cowork to write more pointed ones during research, one prompt for several questions where it can, and to treat what comes back as data. The relay never talks to Slack. This is 0.2.12.
 
 ### A review before the merge request, and a plan that comes home (2026-11-07)
 
