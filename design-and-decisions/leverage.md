@@ -94,6 +94,7 @@ Claude tokens are scarce at work and Copilot's aren't. `relay ask` would pack a 
 
 - **The rule still holds:** the answer comes from the cloud, so it is shown and accepted with `y` before anything reads it.
 - **Depends on:** the wake-up, phase 3 of the roadmap, or the user telling Cowork to start.
+- **2026-11-09, later the same day:** a webhook trigger in Cowork can be fired from the Mac, so the first point below no longer holds. [ask.md](ask.md) has the test and the design that follows from it.
 - **Checked on 2026-11-09, whether something official already does this:**
   - Cowork has no API and no command line. Its tasks start in its own window, from a schedule set there, or from a trigger set there, such as a mail arriving. So nothing can hand Cowork a job from the Mac. The email trigger is still the only way in from outside.
   - Microsoft 365 Copilot has a Chat API, in preview, for people with the Copilot licence. An app sends a prompt and gets Copilot's answer, grounded in the user's work data and the web, with OneDrive and SharePoint files as context. It returns text only: no files made, no actions, no code run, and long tasks time out. It needs an app registered in the company's tenant and a sign-in, which is the admins' call. This is the closest thing to `relay ask` that exists, and it is Copilot's chat, not Cowork.

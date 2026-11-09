@@ -92,3 +92,4 @@ The first two are answered, and phase 1 was built on them. The rest can wait unt
 - 2026-11-06: the order a piece of work goes in is [flow.md](flow.md). Brock adopted it, with his own addition that dependencies are read in both directions.
 - 2026-11-06: design and build the guided way in. [guided.md](guided.md) has what was built and why.
 - 2026-11-06: phase 2's report came back. The repository's [ROADMAP.md](../ROADMAP.md) has what passed, what 0.2.2 fixed, and what is still open. Three of its answers bear on what comes next: Cowork can't read Jira or Confluence and the Mac has `jira` and `acli`, a Go module with vendored dependencies builds in Cowork's sandbox, and Teams offered no way to make a webhook.
+- 2026-11-09: OneDrive event triggers can't be relied on to wake Cowork, and a webhook trigger can. The relay may read that webhook's secret from the macOS Keychain, and only from there, as the one exception to its rule on secrets. [ask.md](ask.md) has both.
