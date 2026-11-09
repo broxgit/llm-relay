@@ -17,6 +17,7 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
+- Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
 - Prompts for Slackbot. They are text. Nobody has pasted one into Slackbot, so whether its answers help, and whether Cowork writes good ones, isn't known.
 - `relay start` over a long session, and its stop for a stale copy. It ran for real once, on 2026-11-06 at 0.2.5, and the user reported four things: Cowork read the note and asked "What are you working on?" with no menu, its steps came as the short YOUR TURN block with one command each, two scans in a row were both on the clipboard, and a second `relay start` had nothing to wait for. Not known: whether the block holds late in a long session, whether Cowork stops when its copy is stale, which that run had no reason to show, and whether people run it each session.
 - Remembered clones, since 0.2.6. Smoke tests only.
@@ -40,6 +41,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Notes from a real ticket run (2026-11-09)
+
+- **Why:** The user took notes during a real ticket run, and the same few things got in the way: one repository per scan, a scan that could be of stale code with nothing saying so, a start with no hint of what to answer, and sessions that all looked alike.
+- **What changed:** `relay scan` takes several folders, and fetches from origin first. Its note says origin's default branch and how the scan stands against origin, and Cowork says so when it isn't level. The start note lists the clones the relay has used, so Cowork gives `relay scan ~/code/thing` and never a folder to change to. Cowork offers four starters under its first question, begins its first reply with a short title, and offers a prompt for Slackbot however the work started. Those prompts end by asking for THREADS, DECISIONS, OPEN QUESTIONS, PEOPLE and NOT FOUND. `relay ticket --page` takes a short Confluence address. This is 0.2.13.
 
 ### Prompts for Slackbot (2026-11-09)
 

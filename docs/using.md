@@ -12,7 +12,9 @@ It's the only command you need to know to begin, and it's worth running at the s
 
 - **It gets Cowork the relay's skills.** If Cowork has none, or an older relay's after an upgrade, it installs them and tells you when to start, by the clock, because Cowork can take 10 minutes to see a new skill.
 - **It says what this Mac is set up for.** Each thing the relay does is listed as ready, or with the tool it needs and how to get it. A review needs `glab`, for one.
-- **It puts a prompt for Cowork on your clipboard.** Paste it into a new Cowork session. Cowork reads a short note about your setup, with no paths in it, checks that its copy of the skill is current, and asks what you're working on.
+- **It puts a prompt for Cowork on your clipboard.** Paste it into a new Cowork session. Cowork reads a short note about your setup, which lists the clones the relay has used, checks that its copy of the skill is current, and asks what you're working on.
+
+Cowork asks what you're working on, with four starters to answer with: a ticket's key, a merge request's address, a repository to change or fix, or a branch to review before pushing. If it knows your clone, it puts its folder in the scan command. It begins its first reply with a short title, such as `ABC-123: add retry to the uploader`, so your sessions are easy to tell apart. However the work started, it also offers a prompt for Slackbot, written for this work, once it has read what it was given. That is optional, and you can skip it for something small. Paste Slackbot's answer back, and Cowork reads it as what people said, not as fact about the code.
 
 From there Cowork gives you one step at a time, each in the same block: the command, what to expect if anything would surprise you, and what to tell it afterwards. If its steps drift from that, send it: `Use the YOUR TURN block format.`
 
@@ -80,17 +82,22 @@ A skill can hold rules you wouldn't want in the company's cloud, so check what y
 
 ## Share your code
 
-Run this in the repository, then tell Cowork what it prints. At a terminal that line is also put on your clipboard, and scans within two minutes of each other add up there, so you can paste once for several:
+Run this, then tell Cowork what it prints. At a terminal that line is also put on your clipboard, and scans within two minutes of each other add up there, so you can paste once for several. Give the folder as an argument, so you don't have to change folder first. Give several folders to scan several repositories at once:
 
 ```bash
-relay scan
+relay scan ~/code/thing
+relay scan ~/code/thing ~/code/other
 ```
+
+With no folder, it scans the one you are in. Each repository is its own scan with its own secrets question, and one you refuse doesn't stop the rest. The prompt on your clipboard names every scan that was sent.
 
 It puts the current branch and your uncommitted changes in OneDrive, at `Documents/Cowork/relay/scans`, so you don't have to attach anything. That includes the branch's whole history. Untracked files stay out.
 
 **It looks for secrets first.** Before `relay scan` or `relay mr` sends code, it looks in the files for private keys, access tokens, lines in settings files that set a password or key, and files named like keys or credentials. If it finds any, it lists where they are, without printing them, and asks before it sends. That question needs a terminal, and no flag answers it for you. Say no, and nothing is sent.
 
 It asks once for a repository. A yes is kept with a mark of what was found, and you're asked again only when that changes: a new file, a new kind of thing, or more of them. A line that only moved doesn't count. Until then a scan says how many places it found and that they're the same as before, and sends. Add `--ask` to `relay scan` or `relay mr` to be asked again. The kept answer is only used when you're at a terminal, so a script or an agent on your Mac is still refused.
+
+**It fetches first.** When the repository has an origin, the scan fetches from it before it sends, which changes no branch and no file of yours. The scan's note then says `origin's default branch:` and `against origin:`, for example `level with origin/master` or `work is 3 commits behind origin/work`. If origin couldn't be reached, the line says it is as of your last fetch. Cowork tells you when you are not level with origin, or not on its default branch, and asks if that's the code to work from.
 
 It goes by shape, so it can miss a secret, and it can flag something harmless. It reads the files at the commit being sent, and your uncommitted changes to them, and not the history, which goes too. So a repository that holds credentials, or ever did, is one to think about before you scan it, whatever the check says.
 
@@ -133,9 +140,9 @@ relay ticket ABC-123
 ```
 
 - It fetches the ticket: description, comments, linked tickets and the names of its attachments. It writes them as a page to read and as JSON, with people's emails and account ids taken out, and puts both in OneDrive with a prompt for Cowork on your clipboard.
-- **Confluence pages are named by you.** Jira lists a ticket's linked pages under "Confluence content", but `acli` doesn't return them, so they don't come with the ticket. Copy a page's address from there. Add `--page` with the page's address, or the number after `/pages/` in it, as many times as you like. A page whose address is written in the ticket's description or a comment is found for you.
+- **Confluence pages are named by you.** Jira lists a ticket's linked pages under "Confluence content", but `acli` doesn't return them, so they don't come with the ticket. Copy a page's address from there. Add `--page` with the page's address as your browser shows it, short (ending `/x/AbCd`) or full, or the page's number, as many times as you like. A page whose address, short or full, is written in the ticket's description or a comment is found for you.
 - **Attachments aren't sent.** Attach one in Cowork if it matters.
-- **It also prints a prompt for Slackbot,** built from the ticket's key, title and linked tickets. If your team talks in Slack, paste it there and bring the answer to Cowork. The relay never talks to Slack itself. Later, Cowork writes more pointed ones for you to paste.
+- **It also prints a prompt for Slackbot,** built from the ticket's key, title and linked tickets. If your team talks in Slack, paste it there and bring the answer to Cowork. The relay never talks to Slack itself. It asks Slackbot to answer under the headings THREADS, DECISIONS, OPEN QUESTIONS, PEOPLE and NOT FOUND. Cowork writes its own, more pointed one for you to paste.
 - **It looks for secrets first,** as a scan does, and asks before sending. Tickets and pages can hold credentials.
 - A ticket can also hold customer names and incident details. Check what your company allows in OneDrive and through its tenant.
 
