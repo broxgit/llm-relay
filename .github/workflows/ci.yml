@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -S warning relay.sh cowork/remote-pair-run/runlib.sh tests/smoke.sh tests/play-cowork.sh
+        run: shellcheck -S warning relay.sh cowork/remote-pair-run/runlib.sh tests/smoke.sh tests/play-cowork.sh tests/ask-haiku.sh
 
   smoke:
     strategy:

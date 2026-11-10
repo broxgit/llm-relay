@@ -270,6 +270,18 @@ security add-generic-password -U -s llm-relay-wake-secret -a "$USER" -w
 
 To test it, `relay field-test` has a part for asks, which Cowork guides you through. [testing-ask.md](testing-ask.md) tests the Claude Code side on its own, with a script playing Cowork.
 
+Most of that part is waiting, and the waiting needs nobody:
+
+```bash
+relay field-test --asks
+```
+
+It sends six asks, one after another, waits for each answer, and takes about 8 minutes. You can work on something else while it runs. Then it prints a report, and puts it on your clipboard:
+
+- **What it holds:** how long each answer took, whether each has the parts an answer should have, whether a question about a scan was answered rightly, and whether an instruction planted in a file was obeyed.
+- **What it leaves out:** every word of the answers. It reads each one only to check its shape, and saves none. An answer is kept only by `relay answer`, on your keypress.
+- **What it needs:** the webhook, set up as above. If this Mac has never had an answer, Cowork's first run stops to ask for the write, so look at Cowork once, a minute in.
+
 This is the one place the relay reads a secret. It reads the two Keychain items at the moment it wakes Cowork, and nowhere else. It never prints them, never writes them to a file, and takes them from no flag or variable. The request it sends holds no question: it only says "go", so someone who had the address and the secret could start a run and couldn't tell Cowork what to do.
 
 Every ask starts a new Cowork conversation, and they stay until you clear them.
