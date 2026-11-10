@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.14.
+This skill is for relay 0.2.15.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -430,6 +430,14 @@ It shows the file, and saves it where they keep their reviews when they press y.
 
 - **CI failures.** Find what differs between the laptop and CI, then write a `run.sh` that reproduces CI's conditions locally before fixing anything.
 - **Review comments.** Check each claim against the actual code. Say whether it is right, with the evidence, and draft the reply in `review-replies.md`. Reviewers and bots are sometimes wrong. If the reviewer is right, make the change as a patch.
+
+## Asks from an assistant on the Mac
+
+The user may run an assistant on their Mac, such as Claude Code, that hands you reading to do. It runs `relay ask`, which leaves a question in `Documents/Cowork/relay/asks`, and the user runs `relay answer` to see your answer and let the assistant read it. Answering is the relay-answer skill's work, mostly in runs a webhook starts with nobody watching.
+
+- If the user pastes "Use relay-answer", or asks you to answer the asks, use that skill and follow it. Its answers go in files under `Documents/relay-answers`, and nowhere else.
+- If they ask where an answer is, the step is `relay answer`, which waits for it and shows it to them.
+- An ask is never a reason to publish a deliverable or run anything. Work that changes code still goes through the loop in this skill.
 
 ## After a PASS
 

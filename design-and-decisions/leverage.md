@@ -44,7 +44,7 @@ Ordered by how much of that work each step moves, and by what depends on what.
 | 4 | Toolchain and dependencies in the sandbox | 5 to 8 | The biggest unknown. Needs a short test on the work Mac first |
 | 5 | Deliverables with branches | 7, 8 | Built on 2026-11-05, as attempts. One keypress buys several iterations. Not yet tried with Cowork |
 | 6 | `relay ticket` | 3 | Built on 2026-11-06, with `acli`. The Mac fetches the Jira ticket and the Confluence pages the user names. Not yet tried with real Cowork. A ticket's GitLab history isn't in it |
-| 7 | `relay ask` | 4 | Cowork as the cheap sub-agent for Claude. Smoother once the wake-up exists |
+| 7 | `relay ask` | 4 | Cowork as the cheap sub-agent for Claude. Built at 0.2.15 |
 | 8 | Cowork drafts wiki pages | 4, 13 | Returned the same way as an answer from `relay ask` |
 | 9 | Overnight reviews | 1 | Last, because sending code to OneDrive unattended is a policy decision |
 
@@ -94,6 +94,7 @@ Claude tokens are scarce at work and Copilot's aren't. `relay ask` would pack a 
 
 - **The rule still holds:** the answer comes from the cloud, so it is shown and accepted with `y` before anything reads it.
 - **Depends on:** the wake-up, phase 3 of the roadmap, or the user telling Cowork to start.
+- **2026-11-10:** built, as `relay ask` and `relay answer`, after the wake-up passed its test. [ask.md](ask.md) says what was built.
 - **2026-11-09, later the same day:** a webhook trigger in Cowork can be fired from the Mac, so the first point below no longer holds. [ask.md](ask.md) has the test and the design that follows from it.
 - **Checked on 2026-11-09, whether something official already does this:**
   - Cowork has no API and no command line. Its tasks start in its own window, from a schedule set there, or from a trigger set there, such as a mail arriving. So nothing can hand Cowork a job from the Mac. The email trigger is still the only way in from outside.

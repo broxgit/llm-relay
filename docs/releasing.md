@@ -6,7 +6,7 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
 ## Make a release
 
-1. On a branch, change `RELAY_VERSION` in `relay.sh` to the new version, and the "This skill is for relay" line in `cowork/relay-field-test/SKILL.md` and in `cowork/remote-pair-run/SKILL.md` to match. A smoke test fails if any of the three differ. Move what changed into `ROADMAP.md`'s Done section if it isn't there. Merge it when CI is green.
+1. On a branch, change `RELAY_VERSION` in `relay.sh` to the new version, and the "This skill is for relay" line in each skill to match: `cowork/relay-field-test/SKILL.md`, `cowork/remote-pair-run/SKILL.md`, `cowork/relay-answer/SKILL.md` and `claude/relay-ask/SKILL.md`. A smoke test fails if any of the five differ. Move what changed into `ROADMAP.md`'s Done section if it isn't there. Merge it when CI is green.
 
 2. On `main`, with that merged, tag it and make the release. Use the same number, with a `v` in front.
 

@@ -27,14 +27,14 @@ REPO="$(cd "$(dirname "$src")" && pwd)"
 SKILL_DIR="$REPO/cowork/remote-pair-run"
 RUNLIB="$SKILL_DIR/runlib.sh"
 # The skills that are the relay's own. relay setup copies them to Cowork as they are.
-OWN_SKILLS="remote-pair-run relay-field-test"
+OWN_SKILLS="remote-pair-run relay-field-test relay-answer"
 # shellcheck source=/dev/null
 . "$RUNLIB"
 
 die() { echo "error: $*" >&2; exit 1; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.14"
+RELAY_VERSION="0.2.15"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -71,6 +71,7 @@ setting() {
   printf '%s' "${v:-$2}"
 }
 REVIEWS_DIR="$(setting reviews "$HOME/mr-reviews")"
+ANSWERS_DIR="$(setting answers "$HOME/relay-answers")"
 PLANS_DIR="$(setting plans "$HOME/plans")"
 CLONES_DIRS="$(setting clones "$HOME/dev")"
 # The user's own skills that Cowork gets a copy of, by name, and where they live.
@@ -106,6 +107,9 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
+       relay [--dir ONEDRIVE_FOLDER] ask QUESTION... [--from FILE] [--scan REPOSITORY]... [--file FILE]... [--ask]
+       relay [--dir ONEDRIVE_FOLDER] answer [ID]
+       relay ask --skill
 
   start  The one command to begin with. Checks that Cowork has this relay's skills, and
          installs them if not. Says what this Mac is set up for, and what a missing tool
@@ -169,6 +173,14 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          <name>.previous.
   apply  Waits for a deliverable, and when you press y applies its patches to the repository's
          working tree. It never commits. Use it once a run has passed.
+  ask    Hands Cowork a question, for an assistant on this Mac that wants the bulk reading
+         done elsewhere. The question goes to OneDrive with any file you name with --file,
+         after the check for secrets, and --scan sends a repository for Cowork to read. Then
+         it wakes Cowork, if this Mac has a webhook for that, or gives a line to paste. At a
+         terminal it goes on to wait for the answer, as relay answer does. --skill puts the
+         skill that tells Claude Code how to ask in ~/.claude/skills.
+  answer Waits for Cowork's answer to an ask, the newest if you name none, shows it, and when
+         you press y saves it under $ANSWERS_DIR, where the assistant reads it.
 EOF
 }
 
@@ -2882,7 +2894,7 @@ remove_dropped_skills() {
   [ -n "$SKILLS_DIR" ] || return 0
   while IFS= read -r name; do
     [ -n "$name" ] || continue
-    case "$name" in remote-pair-run | relay-field-test | .* | *[!A-Za-z0-9._-]*) continue ;; esac
+    case "$name" in remote-pair-run | relay-field-test | relay-answer | .* | *[!A-Za-z0-9._-]*) continue ;; esac
     case ":$SKILLS:" in *":$name:"*) continue ;; esac
     d="$SKILLS_DIR/$name"
     [ -d "$d" ] || continue
@@ -2933,7 +2945,7 @@ sync_skills() {
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     case "$name" in
-      remote-pair-run | relay-field-test | .* | *[!A-Za-z0-9._-]*)
+      remote-pair-run | relay-field-test | relay-answer | .* | *[!A-Za-z0-9._-]*)
         echo "skill $name: not a name the relay can copy" >&2
         rc=1
         continue
@@ -3187,6 +3199,7 @@ tool_hint() {
     go) echo "brew install go" ;;
     pre-commit) echo "brew install pre-commit" ;;
     wiki) echo "optional, from github.com/broxgit/llm-wiki" ;;
+    curl) echo "it comes with macOS" ;;
   esac
 }
 
@@ -3597,13 +3610,13 @@ cmd_complete() {
   shift
   [ "$i" -le 1 ] || prev="$(eval "printf '%s' \"\${$((i - 1)):-}\"")"
   case "$prev" in
-    --repo | --dir | --also | --clones | --reviews | --plans | --skills-from) echo __dirs__; return 0 ;;
+    --repo | --dir | --also | --clones | --reviews | --plans | --skills-from | --scan) echo __dirs__; return 0 ;;
   esac
   # --dir FOLDER can come first.
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nbranch\nreview\napply\nskills\nfield-test\ncompletion\n'
+    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nbranch\nreview\napply\nask\nanswer\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
@@ -3614,6 +3627,7 @@ cmd_complete() {
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     review) echo --expect ;;
     ticket) printf -- '--page\n--ask\n' ;;
+    ask) printf -- '--scan\n--file\n--from\n--skill\n--ask\n' ;;
     branch) printf -- '--against\n--plan\n--no-plan\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     field-test | practice) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
@@ -3655,6 +3669,291 @@ EOF
   esac
 }
 
+# ---- ask ---------------------------------------------------------------------
+
+# An assistant on this Mac hands Cowork a question, and the answer comes back as a file.
+# design-and-decisions/ask.md has why each part is the way it is.
+ASK_AGAIN="${RELAY_ASK_AGAIN:-180}"
+ANSWER_END="end of answer"
+WAKE_PASTE="Use relay-answer. Answer the asks in Documents/Cowork/relay/asks in my OneDrive."
+# The two Keychain items the user makes with security. They are the one exception to the rule
+# that the relay reads no secret: it reads them here, at the moment it wakes Cowork, and
+# nowhere else. It never prints them, never writes them to a file, and takes them from no flag
+# and no variable.
+WAKE_ADDRESS_ITEM="llm-relay-wake-address"
+WAKE_SECRET_ITEM="llm-relay-wake-secret"
+WAKE_CODE=""
+
+# wake_cowork: tells Cowork to look at the asks folder. The request says "go" and nothing else:
+# a run gets only its saved prompt, so whoever holds the address can't tell Cowork what to do.
+# Returns 1 when this Mac has no webhook set up, and 2 when the request wasn't taken. The two
+# values go to curl on its standard input, so they are never in a command's arguments, and
+# curl's own errors are dropped, because they can hold the address.
+wake_cowork() {
+  WAKE_CODE=""
+  command -v security >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 || return 1
+  security find-generic-password -s "$WAKE_ADDRESS_ITEM" >/dev/null 2>&1 || return 1
+  security find-generic-password -s "$WAKE_SECRET_ITEM" >/dev/null 2>&1 || return 1
+  WAKE_CODE="$({
+    printf 'url = "'
+    security find-generic-password -s "$WAKE_ADDRESS_ITEM" -w 2>/dev/null | sed 's/[\\"]/\\&/g' | tr -d '\n'
+    printf '"\nheader = "X-Trigger-Secret: '
+    security find-generic-password -s "$WAKE_SECRET_ITEM" -w 2>/dev/null | sed 's/[\\"]/\\&/g' | tr -d '\n'
+    printf '"\n'
+  } | curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST -H 'Content-Type: application/json' -d '{}' -K - 2>/dev/null)"
+  case "$WAKE_CODE" in
+    2[0-9][0-9]) return 0 ;;
+    *) return 2 ;;
+  esac
+}
+
+# say_wake: wakes Cowork and says what happened, with the line to paste when it couldn't.
+say_wake() {
+  wake_cowork
+  case "$?" in
+    0) echo "Woke Cowork. An answer takes about a minute." ;;
+    1)
+      echo "This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"
+      echo "  $WAKE_PASTE"
+      ;;
+    *)
+      echo "Cowork's webhook didn't take the request${WAKE_CODE:+ (HTTP $WAKE_CODE)}. Paste this into a Cowork session:"
+      echo "  $WAKE_PASTE"
+      ;;
+  esac
+}
+
+# install_claude_skill: the skill that tells an assistant on this Mac how to ask.
+install_claude_skill() {
+  local to="$HOME/.claude/skills/relay-ask"
+  [ -f "$REPO/claude/relay-ask/SKILL.md" ] || die "this relay came without the relay-ask skill"
+  mkdir -p "$to" || die "can't create $to"
+  cp "$REPO/claude/relay-ask/SKILL.md" "$to/SKILL.md" || die "can't copy the skill to $to"
+  echo "installed: $(tilde "$to")/SKILL.md"
+  echo "A new Claude Code session will have it."
+}
+
+# wait_for_answer <id>: waits until the answer is on this Mac and whole, in $WORK/answer.md. It
+# reads the file by its name and never lists the folder: a listing of a new folder has come
+# back empty while the files in it could be read. An answer can be on the Mac before OneDrive
+# has written all of it, so it isn't whole until its last line says so.
+wait_for_answer() {
+  local id="$1" src="$ONEDRIVE/Documents/relay-answers/$1.md" start="$SECONDS" waited=0 said=0 woke=0 state last=""
+  while :; do
+    if read_file "$src" "$WORK/answer.md" "the answer" >"$WORK/problems"; then
+      if [ "$(tr -d '\r' <"$WORK/answer.md" | awk 'NF { l = $0 } END { sub(/[ \t]+$/, "", l); print l }')" = "$ANSWER_END" ]; then
+        [ -z "$last" ] || echo "Ready after $((SECONDS - start))s."
+        return 0
+      fi
+      state="the answer is arriving, and isn't all here yet"
+    else
+      state="$(head -n 1 "$WORK/problems")"
+      [ "$state" != "the answer is missing" ] || state="no answer yet"
+    fi
+    waited=$((SECONDS - start))
+    if [ "$state" != "$last" ]; then
+      echo "Waiting for Cowork (${waited}s of ${WAIT}s): $state"
+      last="$state"
+      said="$waited"
+    elif [ $((waited - said)) -ge 60 ]; then
+      echo "Still waiting (${waited}s of ${WAIT}s)."
+      said="$waited"
+    fi
+    if [ "$waited" -ge "$WAIT" ]; then
+      {
+        echo "No answer after ${waited}s, at $(now), so nothing was saved."
+        echo "In Cowork, look at the newest conversation: a run that is waiting for an approval says so there. Or paste this into a session:"
+        echo "  $WAKE_PASTE"
+        echo "Then run: relay answer $id"
+      } >&2
+      return 1
+    fi
+    # The first request can go out before OneDrive has uploaded the ask. A second finds it.
+    if [ $((waited - woke)) -ge "$ASK_AGAIN" ] && [ "$state" = "no answer yet" ]; then
+      woke="$waited"
+      if wake_cowork; then echo "No answer after ${waited}s, so Cowork was woken again."; fi
+    fi
+    sleep "$POLL"
+  done
+}
+
+# take_answer <id>: waits for the answer, shows it, and saves it when the user says so. The
+# answer came from the cloud, so nothing on this Mac reads it until someone has seen it.
+take_answer() {
+  local id="$1" size
+  wait_for_answer "$id" || return 1
+  # What is shown and saved has no control characters in it, so an answer can't drive the
+  # terminal it is shown in.
+  LC_ALL=C tr -d '\000-\010\013-\037\177' <"$WORK/answer.md" >"$WORK/answer.clean"
+  size="$(wc -c <"$WORK/answer.clean" | tr -d ' ')"
+  echo
+  echo "Cowork's answer to $id ($size bytes):"
+  echo "-----"
+  cat "$WORK/answer.clean"
+  echo "-----"
+  [ "$(awk 'NF { print; exit }' "$WORK/answer.clean")" = "answer to: $id" ] || echo "Check it is the right one: its first line doesn't say it answers $id."
+  echo "This came from the cloud, and nothing in it runs. Saving it lets an assistant on this Mac read it."
+  ask_key "Save it to $(tilde "$ANSWERS_DIR")/$id.md? [y]es, [n]o: " || KEY=n
+  case "$KEY" in
+    y | Y) ;;
+    *)
+      echo "Nothing was saved. relay answer $id asks again."
+      return 1
+      ;;
+  esac
+  mkdir -p "$ANSWERS_DIR" || die "can't create $ANSWERS_DIR"
+  cp "$WORK/answer.clean" "$ANSWERS_DIR/$id.md" || die "couldn't save the answer to $ANSWERS_DIR"
+  echo "Saved: $(tilde "$ANSWERS_DIR")/$id.md"
+}
+
+cmd_ask() {
+  local question="" from="" files="" scans="" names="" f id dest skill="" n=0 t
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h | --help) usage; return 0 ;;
+      --ask) SECRETS_ASK=1; shift ;;
+      --skill) skill=1; shift ;;
+      --from)
+        [ -n "${2:-}" ] || die "--from needs a file that holds the question"
+        from="$2"
+        shift 2
+        ;;
+      --file)
+        [ -n "${2:-}" ] || die "--file needs a file to send with the question"
+        files="$files$2
+"
+        shift 2
+        ;;
+      --scan)
+        [ -n "${2:-}" ] || die "--scan needs a repository for Cowork to read"
+        scans="$scans$2
+"
+        shift 2
+        ;;
+      -*) die "relay ask: unknown option $1. Try relay --help" ;;
+      *)
+        question="$question${question:+ }$1"
+        shift
+        ;;
+    esac
+  done
+  if [ -n "$skill" ]; then
+    install_claude_skill
+    return $?
+  fi
+  if [ -n "$from" ]; then
+    [ -z "$question" ] || die "give the question in words or with --from, not both"
+    [ -f "$from" ] || die "--from: no such file: $from"
+    question="$(cat "$from")" || die "--from: can't read $from"
+  fi
+  [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || die "relay ask needs a question: relay ask \"what does the uploader retry on?\" --scan ~/code/thing"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  trap cleanup EXIT
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    # shellcheck disable=SC2088
+    case "$f" in "~/"*) f="$HOME/${f#"~/"}" ;; esac
+    [ -f "$f" ] || die "--file: no such file: $f"
+    [ ! -s "$f" ] || grep -qI . "$f" || die "--file: $f isn't text, and an ask holds only text. Send its repository with --scan."
+    n=$((n + 1))
+  done <<EOF
+$files
+EOF
+  # Each repository goes as a scan of its own, with a scan's own checks, before the ask that
+  # names it.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    # shellcheck disable=SC2088
+    case "$f" in "~/"*) f="$HOME/${f#"~/"}" ;; esac
+    t="$WORK/scan-name"
+    (RELAY_SCAN_NAME_OUT="$t" && cmd_scan "$f" ${SECRETS_ASK:+--ask}) >"$WORK/scan.out"
+    if [ "$?" -ne 0 ] || [ ! -s "$t" ]; then
+      cat "$WORK/scan.out"
+      die "--scan: didn't send $f, so nothing was asked"
+    fi
+    grep -v -e '^Now tell Cowork: ' -e '^Sent to OneDrive: ' "$WORK/scan.out"
+    names="${names}Documents/Cowork/relay/scans/$(cat "$t").txt
+"
+    rm -f "$t"
+  done <<EOF
+$scans
+EOF
+  dest="$COWORK/relay/asks"
+  id="$(date -u +%Y%m%d-%H%M%S)"
+  while [ -e "$dest/$id.md" ]; do id="$id-1"; done
+  mkdir -p "$WORK/ask" || die "can't make a scratch folder"
+  {
+    echo "LLM-RELAY ASK"
+    echo "id: $id"
+    echo "asked: $(now)"
+    echo "relay: $RELAY_VERSION"
+    echo "write the answer to: Documents/relay-answers/$id.md"
+    if [ -n "$names" ]; then
+      echo "scans to read, each a note that names its archive:"
+      printf '%s' "$names" | sed 's/^/  /'
+    else
+      echo "scans to read: none"
+    fi
+    echo "files in this ask: $n"
+    echo
+    echo "QUESTION"
+    printf '%s\n' "$question"
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      # shellcheck disable=SC2088
+      case "$f" in "~/"*) f="$HOME/${f#"~/"}" ;; esac
+      printf '\n===== file: %s =====\n' "$(basename "$f")"
+      cat "$f"
+      printf '\n===== end of file =====\n'
+    done <<EOF
+$files
+EOF
+  } >"$WORK/ask/$id.md"
+  secret_places_in "$WORK/ask" >"$WORK/found"
+  secrets_gate "this ask" "$WORK/found" "" "It reads the question and the files in it." || return 1
+  mkdir -p "$dest" || die "can't create $dest"
+  # The answers folder is outside Documents/Cowork, where a run nobody started may not write.
+  mkdir -p "$ONEDRIVE/Documents/relay-answers" 2>/dev/null || true
+  cp "$WORK/ask/$id.md" "$dest/$id.md" || die "couldn't write the ask to $dest"
+  echo "Asked: $id ($(wc -c <"$dest/$id.md" | tr -d ' ') bytes, in Documents/Cowork/relay/asks)"
+  say_wake
+  if [ "$AT_TERMINAL" = yes ]; then
+    take_answer "$id"
+    return $?
+  fi
+  echo "The answer has to be seen by the user before anything reads it. Tell them to run this in a terminal, and wait for them:"
+  echo "  relay answer $id"
+  echo "Once they accept it, it is at $(tilde "$ANSWERS_DIR")/$id.md"
+}
+
+cmd_answer() {
+  local id=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h | --help) usage; return 0 ;;
+      -*) die "relay answer: unknown option $1. Try relay --help" ;;
+      *)
+        [ -z "$id" ] || die "relay answer takes one ask at a time"
+        id="$1"
+        shift
+        ;;
+    esac
+  done
+  needs_terminal answer
+  # The asks are this Mac's own files, so their folder can be listed. The newest is the default.
+  [ -n "$id" ] || id="$(ls "$COWORK/relay/asks" 2>/dev/null | sed -n 's/\.md$//p' | LC_ALL=C sort | tail -n 1)"
+  [ -n "$id" ] || die "nothing has been asked yet. An ask is made with: relay ask \"a question\""
+  case "$id" in *[!A-Za-z0-9._-]* | .*) die "that doesn't look like an ask's id: $id" ;; esac
+  [ -f "$COWORK/relay/asks/$id.md" ] || die "no ask called $id in Documents/Cowork/relay/asks"
+  if [ -f "$ANSWERS_DIR/$id.md" ]; then
+    echo "Already saved: $(tilde "$ANSWERS_DIR")/$id.md"
+    return 0
+  fi
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  trap cleanup EXIT
+  take_answer "$id"
+}
+
 # ---- dispatch ----------------------------------------------------------------
 
 case "${1:-}" in
@@ -3671,7 +3970,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  start | practice | run | scan | mr | ticket | branch | review | apply | skills | field-test)
+  start | practice | run | scan | mr | ticket | branch | review | apply | skills | field-test | ask | answer)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -3691,6 +3990,8 @@ case "${1:-}" in
   apply) shift; cmd_apply "$@"; exit $? ;;
   skills) shift; cmd_skills "$@"; exit $? ;;
   field-test) shift; cmd_field_test "$@"; exit $? ;;
+  ask) shift; cmd_ask "$@"; exit $? ;;
+  answer) shift; cmd_answer "$@"; exit $? ;;
   "" | -h | --help) usage ;;
   *) usage >&2; exit 2 ;;
 esac
