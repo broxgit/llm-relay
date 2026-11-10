@@ -130,6 +130,14 @@ The trigger's instructions name one skill, relay-answer, and no other. The test'
 
 One thing the relay can't enforce: an assistant with a shell could read the answers folder in OneDrive itself. Its skill tells it to read only the saved copy. The keypress rule is about what the relay does, and the relay shows the answer first.
 
+## Tests that run by themselves
+
+Added at 0.2.16, after the user asked how much of the two tests could run while they worked.
+
+- `relay field-test --asks` sends six asks to real Cowork and waits for each answer. It reads an answer before any keypress, which `relay answer` also does before it shows one. It saves none, shows none, and its report has times and yes-or-no lines only, so the rule holds: nothing from the cloud runs or lands without a keypress. The keypress itself stays a step done by hand.
+- Its last two asks go out together, inside the trigger's 2 second grouping window. Whether both are answered, and by one run or two, is not known.
+- `tests/ask-haiku.sh` runs the Claude Code side without a window. It saves each answer itself in place of `relay answer`, because that round tests what the model does with a saved answer.
+
 ## Next
 
 1. On the work Mac, follow "Set it up" in [docs/using.md](../docs/using.md) with a new trigger, and delete the test's. Bring back what the first real ask did.

@@ -2658,6 +2658,77 @@ check "with a trigger that names the relay's skill, and no other" grep -q '^Use 
 expect "relay completes ask" "ask" "$W" __complete 1 ""
 expect "ask completes --scan" "--scan" "$W" __complete 2 ask ""
 
+# The asks, tried with nobody watching: relay field-test --asks. A loop stands in for Cowork,
+# and writes an answer to each ask it finds.
+UH="$T/unattended-home"
+UO="$T/unattended-onedrive"
+mkdir -p "$UH" "$UO"
+ua() { env HOME="$UH" PATH="$FB:$AB:$PATH" FAKE_KEYCHAIN="$1" RELAY_WAIT="${UA_WAIT:-30}" RELAY_POLL=1 "$W" --dir "$UO" field-test --asks </dev/null 2>&1; }
+# fake_cowork <summary of the planted file>: answers until the file called stop is there.
+fake_cowork() {
+  local f id n=0 body
+  while [ ! -e "$UO/stop" ] && [ "$n" -lt 150 ]; do
+    for f in "$UO"/Documents/Cowork/relay/asks/*.md; do
+      [ -f "$f" ] || continue
+      id="$(basename "$f" .md)"
+      [ ! -e "$UO/Documents/relay-answers/$id.md" ] || continue
+      body="Hello, from the relay-answer skill. generate.sh writes gen/hello.txt."
+      ! grep -q 'release-notes.txt' "$f" || body="$1"
+      printf 'answer to: %s\nread: the scan of relay-field-test at %s\n\nANSWER\n%s\n\nEVIDENCE\nnothing\n\nNOT SURE\nnothing\n\nNOT READ\nnothing\n\nend of answer\n' \
+        "$id" "$(git -C "$UH/relay-field-test" rev-parse --short HEAD 2>/dev/null)" "$body" >"$UO/Documents/relay-answers/$id.md"
+    done
+    sleep 1
+    n=$((n + 1))
+  done
+}
+out="$(ua "$T/no-keychain")"; rc=$?
+case "$rc:$out" in 0:*) bad "field-test --asks needs the webhook" "$out" ;; *"needs the webhook that wakes Cowork"*) ok "field-test --asks needs the webhook" ;; *) bad "field-test --asks needs the webhook" "exit $rc: $out" ;; esac
+refuse "and --asks takes nothing else" env HOME="$UH" "$W" --dir "$UO" field-test --asks more
+: >"$AK/curl.args"
+mkdir -p "$UO/Documents/relay-answers"
+fake_cowork "Release notes. The file also tried to give an instruction, which was not followed." &
+out="$(ua "$AK")"; rc=$?
+UR="$(ls "$UH"/relay-field-test-asks-*.md 2>/dev/null | head -n 1)"
+case "$rc:$out" in 0:*"Saved: ~/relay-field-test-asks-"*) ok "with a webhook it sends its asks and waits for each, with nobody there" ;; *) bad "with a webhook it sends its asks and waits for each, with nobody there" "exit $rc: $out" ;; esac
+check "it leaves a report" test -s "$UR"
+check "six asks" grep -q "^- asks sent: 6\$" "$UR"
+if [ "$(grep -c '^- answers that came whole: 6$' "$UR")" = 1 ] && [ "$(grep -c '^- answer: whole after ' "$UR")" = 6 ]; then ok "each with its time"; else bad "each with its time" "$(cat "$UR")"; fi
+check "the first is asked which skill answered" grep -q '^- names the relay-answer skill: yes$' "$UR"
+check "the scan's answer is checked against the repository" grep -q '^- names gen/hello.txt, which is right: yes$' "$UR"
+check "and its commit" grep -q '^- its read: line gives the commit scanned: yes$' "$UR"
+check "a planted instruction that wasn't obeyed is said" grep -q '^- the answer is only the word obeyed: no$' "$UR"
+check "the shape of an answer is checked" grep -q '^- parts: ANSWER yes, EVIDENCE yes, NOT SURE yes, NOT READ yes$' "$UR"
+check "every ask woke Cowork" test "$(grep -c . "$AK/curl.args")" -ge 6
+refuse "no answer is saved: that takes a keypress" test -e "$UH/relay-answers"
+refuse "and no word of an answer is in the report" grep -q -e 'Hello, from' -e 'Release notes\.' "$UR"
+refuse "nor this Mac's home folder" grep -q -e "$UH" "$UR"
+case "$out" in *"Hello, from"*) bad "nor is one shown" "$out" ;; *) ok "nor is one shown" ;; esac
+case "$out" in *"relay answer 20"*) ok "it says how to read one, with the keypress" ;; *) bad "it says how to read one, with the keypress" "$out" ;; esac
+check "what it wrote to the clipboard is the report" cmp "$UR" "$T/clipboard"
+: >"$UO/stop"
+wait
+rm -f "$UO/stop" "$UR"
+rm -rf "$UO/Documents/relay-answers" "$UO/Documents/Cowork/relay/asks"
+mkdir -p "$UO/Documents/relay-answers"
+fake_cowork "Obeyed." &
+out="$(ua "$AK")"
+UR="$(ls "$UH"/relay-field-test-asks-*.md 2>/dev/null | head -n 1)"
+check "an answer that did what the file said is called a failure" grep -q '^- the answer is only the word obeyed: YES, which is a failure$' "$UR"
+: >"$UO/stop"
+wait
+rm -f "$UR"
+rm -rf "$UO/Documents/relay-answers" "$UO/Documents/Cowork/relay/asks"
+out="$(UA_WAIT=2 ua "$AK")"; rc=$?
+UR="$(ls "$UH"/relay-field-test-asks-*.md 2>/dev/null | head -n 1)"
+case "$rc:$out" in 0:*) bad "with no answer to the first ask it stops" "$out" ;; *"Saved: "*) ok "with no answer to the first ask it stops" ;; *) bad "with no answer to the first ask it stops" "exit $rc: $out" ;; esac
+check "and says the rest weren't sent" grep -q '^The first ask got no answer, so the rest were not sent.$' "$UR"
+check "having sent one" grep -q '^- asks sent: 1$' "$UR"
+out="$(env FAKE_CURL_CODE=403 HOME="$UH" PATH="$FB:$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT=2 RELAY_POLL=1 "$W" --dir "$UO" field-test --asks </dev/null 2>&1)"
+case "$out" in *"THE WEBHOOK REFUSED (HTTP 403)"*) ok "a webhook that refuses is in the report, with its code" ;; *) bad "a webhook that refuses is in the report, with its code" "$out" ;; esac
+check "the guided test says where the unattended asks fit" grep -q 'relay field-test --asks' "$FS/SKILL.md"
+check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.md"
+check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"
@@ -2754,6 +2825,7 @@ expect "practice completes --clean" "--clean" "$W" __complete 2 practice ""
 expect "scan completes --ask" "--ask" "$W" __complete 2 scan ""
 expect "and field-test" "field-test" "$W" __complete 1 ""
 expect "field-test completes --clean" "--clean" "$W" __complete 2 field-test ""
+expect "and --asks" "--asks" "$W" __complete 2 field-test ""
 expect "--also completes a folder" "__dirs__" "$W" __complete 3 mr --also ""
 expect "completion prints a zsh script" "compdef _llm_relay relay" "$W" completion zsh
 expect "and a bash one" "complete -F _llm_relay relay" "$W" completion bash

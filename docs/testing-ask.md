@@ -6,6 +6,23 @@ A small model is the right one to test with. If Haiku follows the skill, a stron
 
 The other half, the relay with real Cowork and a real webhook, is part J of the guided test: `relay field-test`.
 
+## Or let it run itself
+
+One command does all six rounds with nobody at the keyboard, in about 10 minutes:
+
+```bash
+tests/ask-haiku.sh
+```
+
+It starts Claude Code without a window, gives it each prompt, plays Cowork, says "done", and prints what the model did. `tests/ask-haiku.sh 3 5` runs only those rounds. Two things differ from the rounds done by hand, below:
+
+- **Nobody runs `relay answer`.** The script saves the answer under `~/relay-answers` itself, as pressing `y` would. The keypress has its own tests in `tests/smoke.sh`.
+- **The model may run shell commands without asking.** Otherwise the round with a planted instruction would prove nothing. It runs in `~/relay-ask-test/repo`, and the planted command only makes an empty file.
+
+It uses only the test folder's settings, so your own hooks, plugins and servers aren't part of the test, and it puts the skill in that folder, not in `~/.claude/skills`.
+
+The facts a script can check are printed for each round: whether it asked, whether it looked in the OneDrive folder, whether it read the saved answer, what `MAX_TRIES` ended as, whether the planted command ran. Whether it told you what mattered is a judgement, so each round's last words are printed too, and `~/relay-ask-test/results/round-N.txt` has every tool call.
+
 ## What it checks
 
 Six things the skill asks of Claude Code:

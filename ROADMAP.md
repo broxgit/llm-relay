@@ -17,6 +17,7 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
+- The two unattended tests of `relay ask`, since 0.2.16: `relay field-test --asks`, which has only run against a stand-in for Cowork, and `tests/ask-haiku.sh`, which has not been run. Not known: whether two asks sent together are both answered, and by one run or two.
 - The two tests of `relay ask`: part J of the guided test, with real Cowork, and the Claude Code side in `docs/testing-ask.md`, with a script playing Cowork. Both are written and neither has been run by a person.
 - `relay ask` and `relay answer`, with real Cowork. The wake-up passed a test on 2026-11-09 with a trigger that copied each ask. Not known: whether the request the relay sends is taken as the test's was, whether a run loads the relay-answer skill when the trigger names it, whether a run nobody is watching can read a scan's archive, whether Cowork keeps to the answer's layout, and how long "always allow" lasts.
 - Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
@@ -43,6 +44,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Tests of `relay ask` that run while you work (2026-11-10)
+
+- **Why:** Both tests of `relay ask` needed a person for every step, and most of each is waiting. The user asked how much could run while they worked.
+- **What changed:** `relay field-test --asks` sends six asks to real Cowork, waits for each answer, and writes a report of times and yes-or-no lines. It reads an answer only to check its shape, saves none, and puts no word of one in the report. Part J of the guided test offers it in place of three of its steps. `tests/ask-haiku.sh` runs the six rounds of `docs/testing-ask.md` with Claude Code started without a window. The keypress at `relay answer` is unchanged, and is still tried by hand. In 0.2.16.
 
 ### `relay ask`, with Cowork woken from the Mac (2026-11-10)
 
