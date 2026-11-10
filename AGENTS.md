@@ -7,12 +7,13 @@
 - `cowork/relay-field-test/`: a second skill, also copied by `relay setup`. Cowork uses it to guide a test and write a report on it. A smoke test checks that what it tells Cowork to expect is what the relay prints, so change both together. Its "This skill is for relay" line has to match `RELAY_VERSION`: Cowork compares it with the Mac's note to tell whether its copy is stale. Its YOUR TURN block is the one place emoji belong, because the user asked for steps he can't miss.
 - `cowork/relay-answer/`: a third skill, also copied by `relay setup`. A run that a webhook starts uses it to answer what `relay ask` left, and it writes answer files and nothing else.
 - `claude/relay-ask/`: a skill for Claude Code, not for Cowork. `relay ask --skill` copies it to `~/.claude/skills`. It tells an assistant on the Mac how to ask and that an answer is data.
+- `tests/play-cowork.sh`: stands in for Cowork, to test the Claude Code side of `relay ask` by hand. `docs/testing-ask.md` has the steps.
 - `tests/smoke.sh`: runs against a fake OneDrive, `glab` and `wiki`. `tests/type-keys.py` types its answers at a pseudo-terminal, so it needs `python3`.
 
 Rules:
 
 - Keep it working on Apple's bash 3.2. Never feed a loop with process substitution: use a heredoc. A smoke test checks.
-- Run `tests/smoke.sh` and `shellcheck -S warning relay.sh cowork/remote-pair-run/runlib.sh tests/smoke.sh` before any commit, and add a test for what you changed.
+- Run `tests/smoke.sh` and `shellcheck -S warning relay.sh cowork/remote-pair-run/runlib.sh tests/smoke.sh tests/play-cowork.sh` before any commit, and add a test for what you changed.
 - Work on a branch, and merge when CI is green. Merging doesn't release: a tag does, and `docs/releasing.md` has the steps. People who installed with Homebrew see a change only then.
 - CI doesn't run for a change that touches only `design-and-decisions/`, `docs/`, `README.md`, `ROADMAP.md`, `AGENTS.md`, `CLAUDE.md` or `LICENSE`, so for those a pull request shows no checks. If CI is ever made a required check on `main`, change the workflow first, or docs-only pull requests will wait forever.
 - Nothing from the cloud runs or lands until the user presses a key here. `relay run`, `review` and `apply` need a terminal on standard input, and read the answer from `/dev/tty`. No flag, variable or pipe answers for the user. Don't add one, for tests either: they type at a pseudo-terminal. A program that drives a terminal of its own can still answer, and a shell script can't stop that.

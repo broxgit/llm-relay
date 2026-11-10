@@ -1967,13 +1967,20 @@ not on origin
 Ready after
 Waiting for OneDrive
 Removed
+Woke Cowork.
+Waiting for Cowork
+Cowork's webhook didn't take the request
+This Mac has no webhook to wake Cowork with
+No answer after
+Nothing was saved.
+Tell them to run this in a terminal, and wait for them:
 EOF
 # A command is `relay word` followed by a space or the closing mark, which leaves out "relay setting:".
 unknown=""
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   case "$cmd" in
-    setup | scan | run | mr | review | apply | skills | field-test | --version) ;;
+    setup | scan | run | mr | review | apply | skills | field-test | ask | answer | --version) ;;
     *) unknown="$unknown $cmd" ;;
   esac
 done <<EOF
@@ -1992,7 +1999,7 @@ done
 [ "$(grep -c '^[0-9][0-9]*\. ' <<EOF
 $(sed -n '/^### The criteria$/,/^## Handing the report over$/p' "$FS/SKILL.md")
 EOF
-)" = 18 ] && ok "the criteria are fixed in the skill, all 18" || bad "the criteria are fixed in the skill, all 18"
+)" = 23 ] && ok "the criteria are fixed in the skill, all 23" || bad "the criteria are fixed in the skill, all 23"
 out="$(env HOME="$FH" "$W" --dir "$FO" field-test --clean 2>&1)"
 case "$out" in *"Removed ~/relay-field-test"*"Removed Documents/Cowork/relay/field-test/note.txt from OneDrive"*) ok "--clean removes the repository and what the test left in OneDrive" ;; *) bad "--clean removes the repository and what the test left in OneDrive" "$out" ;; esac
 check "the repository is gone" test ! -e "$FRP"
@@ -2594,6 +2601,43 @@ printf 'answer to: %s\n\nend of answer\n' "$id4" >"$AR/$id4.md"
 expect "with no id it takes the newest ask" "Cowork's answer to $id4" ak_key n answer
 out="$(ASK_WAIT=2 ak_key "" ask At a terminal it waits)"
 case "$out" in *"Asked: "*"Waiting for Cowork"*"no answer yet"*) ok "at a terminal, relay ask goes on to wait for the answer" ;; *) bad "at a terminal, relay ask goes on to wait for the answer" "$out" ;; esac
+
+# Playing Cowork, to test the Claude Code side on a Mac with none. docs/testing-ask.md has the steps.
+PC="$REPO/tests/play-cowork.sh"
+PH="$T/play-home"
+mkdir -p "$PH"
+pc() { env HOME="$PH" "$PC" "$@" 2>&1; }
+out="$(pc setup)"
+case "$out" in *"claude --model haiku"*) ok "play-cowork sets up a test, and says how to start Claude Code in it" ;; *) bad "play-cowork sets up a test, and says how to start Claude Code in it" "$out" ;; esac
+prelay() { env HOME="$PH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$T/no-keychain" "$PH/relay-ask-test/bin/relay" "$@" </dev/null 2>&1; }
+expect "its relay is this one" "relay $("$W" --version | sed 's/^relay //')" prelay --version
+out="$(prelay ask Where does it retry --scan "$PH/relay-ask-test/repo")"; rc=$?
+pid="$(ask_id "$out")"
+case "$rc:$pid" in 0:20[0-9][0-9]*) ok "an ask goes to its stand-in for OneDrive" ;; *) bad "an ask goes to its stand-in for OneDrive" "exit $rc: $out" ;; esac
+check "with the scan of its repository" test -f "$PH/relay-ask-test/onedrive/Documents/Cowork/relay/scans/repo.tar.gz"
+out="$(prelay ask Explain this --file "$PH/relay-ask-test/repo/local-values.yaml")"
+case "$out" in *"places that look like they hold secrets"*) ok "its file with a password in it trips the secrets check" ;; *) bad "its file with a password in it trips the secrets check" "$out" ;; esac
+for kind in good wrong planted thin; do
+  pc answer "$kind" "$pid" >/dev/null
+  out="$(env HOME="$PH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$T/no-keychain" RELAY_WAIT=3 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$PH/relay-ask-test/onedrive" answer "$pid" 2>&1)"
+  case "$out" in *"Cowork's answer to $pid"*"Save it to"*) ok "relay answer takes its $kind answer as whole" ;; *) bad "relay answer takes its $kind answer as whole" "$out" ;; esac
+done
+# The good answer cites lines. They have to be the lines of the file it was written about.
+if [ "$(sed -n 3p "$PH/relay-ask-test/repo/uploader/retry.sh")" = "MAX_TRIES=3" ] && sed -n 7p "$PH/relay-ask-test/repo/uploader/retry.sh" | grep -q '429 | 503'; then ok "the lines its good answer cites are the file's"; else bad "the lines its good answer cites are the file's"; fi
+pc answer half "$pid" >/dev/null
+out="$(env HOME="$PH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$T/no-keychain" RELAY_WAIT=2 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$PH/relay-ask-test/onedrive" answer "$pid" 2>&1)"
+case "$out" in *"isn't all here yet"*) ok "and its half answer as not whole" ;; *) bad "and its half answer as not whole" "$out" ;; esac
+expect "check says no command from an answer was run" "not obeyed" pc check
+: >"$PH/relay-ask-test/OBEYED"
+expect "and says so when one was" "OBEYED" pc check
+refuse "an answer of no known kind is refused" pc answer nonsense "$pid"
+expect "clean removes the test" "Removed" pc clean
+refuse "and leaves nothing" test -e "$PH/relay-ask-test"
+mkdir -p "$PH/relay-ask-test"
+expect "setup leaves a folder it didn't make" "this script didn't make it" pc setup
+check "the guided test has a part on asks" grep -q '^### J. Asks from an assistant on the Mac$' "$FS/SKILL.md"
+check "which never makes the trigger where the test is guided" grep -q 'Never make the trigger in this conversation' "$FS/SKILL.md"
+check "the docs say how to test the Claude Code side" grep -q 'tests/play-cowork.sh setup' "$REPO/docs/testing-ask.md"
 
 # The skills at both ends.
 RV="$("$W" --version | sed 's/^relay //')"

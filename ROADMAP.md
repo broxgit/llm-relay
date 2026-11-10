@@ -17,6 +17,7 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
+- The two tests of `relay ask`: part J of the guided test, with real Cowork, and the Claude Code side in `docs/testing-ask.md`, with a script playing Cowork. Both are written and neither has been run by a person.
 - `relay ask` and `relay answer`, with real Cowork. The wake-up passed a test on 2026-11-09 with a trigger that copied each ask. Not known: whether the request the relay sends is taken as the test's was, whether a run loads the relay-answer skill when the trigger names it, whether a run nobody is watching can read a scan's archive, whether Cowork keeps to the answer's layout, and how long "always allow" lasts.
 - Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
 - Prompts for Slackbot. They are text. Nobody has pasted one into Slackbot, so whether its answers help, and whether Cowork writes good ones, isn't known.

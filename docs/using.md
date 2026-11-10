@@ -268,6 +268,8 @@ security add-generic-password -U -s llm-relay-wake-secret -a "$USER" -w
 
 **6. Approve the first write.** Run `relay ask "Say hello."` in a terminal. In Cowork, open the conversation the run started, and when it asks to write to OneDrive, answer "always allow". Later runs don't ask.
 
+To test it, `relay field-test` has a part for asks, which Cowork guides you through. [testing-ask.md](testing-ask.md) tests the Claude Code side on its own, with a script playing Cowork.
+
 This is the one place the relay reads a secret. It reads the two Keychain items at the moment it wakes Cowork, and nowhere else. It never prints them, never writes them to a file, and takes them from no flag or variable. The request it sends holds no question: it only says "go", so someone who had the address and the secret could start a run and couldn't tell Cowork what to do.
 
 Every ask starts a new Cowork conversation, and they stay until you clear them.
