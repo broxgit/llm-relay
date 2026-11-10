@@ -17,6 +17,7 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
+- `relay ask` and `relay answer`, with real Cowork. The wake-up passed a test on 2026-11-09 with a trigger that copied each ask. Not known: whether the request the relay sends is taken as the test's was, whether a run loads the relay-answer skill when the trigger names it, whether a run nobody is watching can read a scan's archive, whether Cowork keeps to the answer's layout, and how long "always allow" lasts.
 - Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
 - Prompts for Slackbot. They are text. Nobody has pasted one into Slackbot, so whether its answers help, and whether Cowork writes good ones, isn't known.
 - `relay start` over a long session, and its stop for a stale copy. It ran for real once, on 2026-11-06 at 0.2.5, and the user reported four things: Cowork read the note and asked "What are you working on?" with no menu, its steps came as the short YOUR TURN block with one command each, two scans in a row were both on the clipboard, and a second `relay start` had nothing to wait for. Not known: whether the block holds late in a long session, whether Cowork stops when its copy is stale, which that run had no reason to show, and whether people run it each session.
@@ -41,6 +42,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### `relay ask`, with Cowork woken from the Mac (2026-11-10)
+
+- **Why:** Claude's tokens are scarce at work and Copilot's aren't. Cowork can do the bulk reading if an assistant on the Mac can hand it a question and get an answer back with nobody typing in Cowork.
+- **What changed:** `relay ask` writes a question to OneDrive, with files or a scan, and wakes Cowork through a webhook whose address and secret it reads from the Keychain at that moment and nowhere else. `relay answer` waits for the answer file, shows it, and saves it under `~/relay-answers` on `y`. Two new skills: relay-answer for Cowork, and relay-ask for Claude Code, installed by `relay ask --skill`. [ask.md](design-and-decisions/ask.md) has the tests behind it. In 0.2.15.
 
 ### A running check says so (2026-11-09)
 

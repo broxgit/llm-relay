@@ -34,7 +34,7 @@ Tab completion comes with it. `relay --version` says which release you have.
 
 ### Without Homebrew
 
-Download the source of the [latest release](https://github.com/broxgit/llm-relay/releases/latest), unpack it anywhere, and link `relay.sh` onto your PATH as `relay`. Keep `cowork/` beside it: the skill it installs is in there.
+Download the source of the [latest release](https://github.com/broxgit/llm-relay/releases/latest), unpack it anywhere, and link `relay.sh` onto your PATH as `relay`. Keep `cowork/` and `claude/` beside it: the skill it installs is in there.
 
 ```bash
 mkdir -p ~/.local/bin && ln -s <where you unpacked it>/relay.sh ~/.local/bin/relay

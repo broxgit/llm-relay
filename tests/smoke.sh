@@ -2482,6 +2482,138 @@ check "and to read the origin line" grep -q 'against origin:' "$SK/SKILL.md"
 check "and to offer starters under its first question" grep -q "a ticket's key" "$SK/SKILL.md"
 check "and to offer a Slackbot prompt however the work started" grep -q 'THREADS' "$SK/SKILL.md"
 
+section "Asking Cowork"
+# An assistant on the Mac hands Cowork a question. The ask goes to OneDrive, a webhook says
+# "go", and the answer comes back as a file the user sees before anything reads it.
+AH="$T/ask-home"
+AO="$T/ask-onedrive"
+AB="$T/ask-bin"
+AK="$T/ask-keychain"
+mkdir -p "$AH" "$AO" "$AB" "$AK"
+# A Keychain that holds what is in a folder, and a curl that writes down what it was given.
+cat >"$AB/security" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = find-generic-password ] && [ "$2" = -s ] || exit 64
+[ -f "$FAKE_KEYCHAIN/$3" ] || exit 44
+case " $* " in *" -w "*) cat "$FAKE_KEYCHAIN/$3" ;; *) echo "keychain: an item, with no value shown" ;; esac
+EOF
+cat >"$AB/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE_KEYCHAIN/curl.args"
+cat >>"$FAKE_KEYCHAIN/curl.stdin"
+printf '%s' "${FAKE_CURL_CODE:-202}"
+EOF
+chmod +x "$AB/security" "$AB/curl"
+ak() { env HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" "$W" --dir "$AO" "$@" </dev/null 2>&1; }
+ak_key() { local keys="$1"; shift; env HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-4}" RELAY_POLL=1 RELAY_ASK_AGAIN="${ASK_AGAIN:-180}" python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
+ask_id() { printf '%s\n' "$1" | sed -n 's/^Asked: \([^ ]*\) .*/\1/p' | head -n 1; }
+AA="$AO/Documents/Cowork/relay/asks"
+AR="$AO/Documents/relay-answers"
+
+refuse "an ask needs a question" ak ask
+refuse "and one that is only spaces is no question" ak ask "  "
+out="$(ak ask What does the uploader retry on)"; rc=$?
+id="$(ask_id "$out")"
+case "$rc:$id" in 0:20[0-9][0-9]*) ok "relay ask writes an ask, and says its id" ;; *) bad "relay ask writes an ask, and says its id" "exit $rc: $out" ;; esac
+check "the ask is in OneDrive, under the relay's folder" test -f "$AA/$id.md"
+check "it holds the question" grep -q '^What does the uploader retry on$' "$AA/$id.md"
+check "and where the answer goes, outside Documents/Cowork" grep -q "^write the answer to: Documents/relay-answers/$id.md\$" "$AA/$id.md"
+check "the answers folder is made, outside Documents/Cowork" test -d "$AR"
+case "$out" in *"This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"*"Use relay-answer. Answer the asks in Documents/Cowork/relay/asks in my OneDrive."*) ok "with no webhook it gives a line to paste" ;; *) bad "with no webhook it gives a line to paste" "$out" ;; esac
+refuse "and makes no request" test -f "$AK/curl.args"
+case "$out" in *"Tell them to run this in a terminal, and wait for them:"*"relay answer $id"*) ok "an assistant is told the user has to see the answer first" ;; *) bad "an assistant is told the user has to see the answer first" "$out" ;; esac
+
+# The webhook. Its address and its secret are the one thing the relay reads from the Keychain.
+printf 'https://hooks.example/wake/abc123\n' >"$AK/llm-relay-wake-address"
+printf 'only-the-keychain-knows\n' >"$AK/llm-relay-wake-secret"
+echo 'How is the cache filled?' >"$T/ask-question.txt"
+out="$(ak ask --from "$T/ask-question.txt")"
+id2="$(ask_id "$out")"
+case "$out" in *"Woke Cowork."*) ok "with a webhook in the Keychain it wakes Cowork" ;; *) bad "with a webhook in the Keychain it wakes Cowork" "$out" ;; esac
+check "--from takes the question from a file" grep -q '^How is the cache filled?$' "$AA/$id2.md"
+check "the address reaches curl on its standard input" grep -q '^url = "https://hooks.example/wake/abc123"$' "$AK/curl.stdin"
+check "and the secret, in the header Cowork reads" grep -q '^header = "X-Trigger-Secret: only-the-keychain-knows"$' "$AK/curl.stdin"
+refuse "neither is in curl's arguments" grep -q -e 'hooks.example' -e 'only-the-keychain-knows' "$AK/curl.args"
+case "$out" in *hooks.example* | *only-the-keychain-knows*) bad "and neither is printed" "$out" ;; *) ok "and neither is printed" ;; esac
+refuse "nor written to the ask" grep -rq -e 'hooks.example' -e 'only-the-keychain-knows' "$AO"
+refuse "the request carries no question" grep -q -e 'cache' "$AK/curl.args" "$AK/curl.stdin"
+if [ "$(grep -c 'find-generic-password -s "\$WAKE_[A-Z_]*" -w' "$W")" = 2 ] && [ "$(grep -c -e '-w 2>/dev/null' "$W")" = 2 ]; then ok "the Keychain's values are read in two places, both in the request"; else bad "the Keychain's values are read in two places, both in the request"; fi
+out="$(env FAKE_CURL_CODE=500 HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" "$W" --dir "$AO" ask one more </dev/null 2>&1)"
+case "$out" in *"Cowork's webhook didn't take the request (HTTP 500). Paste this into a Cowork session:"*) ok "a request that isn't taken is said, with the line to paste" ;; *) bad "a request that isn't taken is said, with the line to paste" "$out" ;; esac
+
+# What goes with a question: a file's text, and a repository as a scan.
+printf 'line one\nline two\n' >"$T/ask-notes.log"
+out="$(ak ask Summarise this log --file "$T/ask-notes.log")"
+id3="$(ask_id "$out")"
+check "--file puts a file's text in the ask" grep -q '^line two$' "$AA/$id3.md"
+check "under its name, and not its path" grep -q '^===== file: ask-notes.log =====$' "$AA/$id3.md"
+refuse "with no path of this Mac in it" grep -q -e "$T" "$AA/$id3.md"
+printf 'db:\n  password: hunter2hunter2\n' >"$T/ask-values.yaml"
+before="$(ls "$AA" | wc -l | tr -d ' ')"
+out="$(ak ask Read this --file "$T/ask-values.yaml")"; rc=$?
+case "$rc:$out" in 0:*) bad "an ask that looks like it holds a secret isn't sent for an assistant" "$out" ;; *"this ask has places that look like they hold secrets"*"it needs a terminal"*) ok "an ask that looks like it holds a secret isn't sent for an assistant" ;; *) bad "an ask that looks like it holds a secret isn't sent for an assistant" "exit $rc: $out" ;; esac
+if [ "$(ls "$AA" | wc -l | tr -d ' ')" = "$before" ]; then ok "and nothing was written"; else bad "and nothing was written"; fi
+printf '\000\001binary' >"$T/ask-binary.bin"
+refuse "a file that isn't text is refused" ak ask Read this --file "$T/ask-binary.bin"
+git init -q "$AH/asked-repo"
+echo hello >"$AH/asked-repo/a.txt"
+git -C "$AH/asked-repo" add -A
+git -C "$AH/asked-repo" commit -qm first
+out="$(ak ask How is it laid out --scan "$AH/asked-repo")"; rc=$?
+id4="$(ask_id "$out")"
+case "$rc:$out" in 0:*"Scanned asked-repo"*"Asked: "*) ok "--scan sends the repository first" ;; *) bad "--scan sends the repository first" "exit $rc: $out" ;; esac
+check "and the ask names the scan's note" grep -q '^  Documents/Cowork/relay/scans/asked-repo.txt$' "$AA/$id4.md"
+check "which is there with its archive" test -f "$AO/Documents/Cowork/relay/scans/asked-repo.txt" -a -f "$AO/Documents/Cowork/relay/scans/asked-repo.tar.gz"
+case "$out" in *"Now tell Cowork"*) bad "with no word about telling Cowork to read it" "$out" ;; *) ok "with no word about telling Cowork to read it" ;; esac
+out="$(ak ask How --scan "$T/ask-not-a-repo")"; rc=$?
+case "$rc:$out" in 0:*) bad "a repository that can't be scanned stops the ask" "$out" ;; *"so nothing was asked"*) ok "a repository that can't be scanned stops the ask" ;; *) bad "a repository that can't be scanned stops the ask" "exit $rc: $out" ;; esac
+
+# The answer. It came from the cloud, so a person sees it and says yes before it is kept.
+out="$(ak answer "$id")"; rc=$?
+case "$rc:$out" in 0:*) bad "relay answer needs a person" "$out" ;; *"needs a terminal"*) ok "relay answer needs a person" ;; *) bad "relay answer needs a person" "exit $rc: $out" ;; esac
+refuse "an ask that was never made has no answer" ak_key y answer 19990101-000000
+printf 'answer to: %s\nread: nothing\n\nANSWER\nOn a timeout, twice.\n' "$id" >"$AR/$id.md"
+out="$(ak_key y answer "$id")"; rc=$?
+case "$rc:$out" in 0:*) bad "an answer without its last line is never shown" "$out" ;; *"On a timeout"*) bad "an answer without its last line is never shown" "$out" ;; *"the answer is arriving, and isn't all here yet"*"so nothing was saved"*) ok "an answer without its last line is never shown" ;; *) bad "an answer without its last line is never shown" "exit $rc: $out" ;; esac
+printf 'answer to: %s\nread: nothing\n\nANSWER\nOn a timeout, \033[31mtwice.\n\nend of answer\n' "$id" >"$AR/$id.md"
+out="$(ak_key n answer "$id")"; rc=$?
+case "$rc:$out" in 0:*) bad "n saves nothing" "$out" ;; *"On a timeout"*"Nothing was saved."*) ok "n saves nothing" ;; *) bad "n saves nothing" "exit $rc: $out" ;; esac
+refuse "and leaves no file" test -e "$AH/relay-answers/$id.md"
+out="$(ak_key y answer "$id")"; rc=$?
+case "$rc:$out" in 0:*"Cowork's answer to $id"*"On a timeout"*"Saved: ~/relay-answers/$id.md"*) ok "y saves it where the assistant reads it" ;; *) bad "y saves it where the assistant reads it" "exit $rc: $out" ;; esac
+check "the saved answer is the answer" grep -q '^end of answer$' "$AH/relay-answers/$id.md"
+if LC_ALL=C grep -q "$(printf '\033')" "$AH/relay-answers/$id.md"; then bad "with no control characters, so it can't drive a terminal"; else ok "with no control characters, so it can't drive a terminal"; fi
+expect "an answer already saved isn't asked about again" "Already saved: ~/relay-answers/$id.md" ak_key "" answer "$id"
+printf 'answer to: something-else\n\nend of answer\n' >"$AR/$id2.md"
+expect "an answer that names another ask is pointed out" "its first line doesn't say it answers $id2" ak_key n answer "$id2"
+: >"$AK/curl.args"
+out="$(ASK_WAIT=4 ASK_AGAIN=1 ak_key y answer "$id3")"
+case "$out" in *"so Cowork was woken again."*"No answer after"*"relay answer $id3"*) ok "with no answer it wakes Cowork again, then says what to do" ;; *) bad "with no answer it wakes Cowork again, then says what to do" "$out" ;; esac
+check "by the same request" grep -q . "$AK/curl.args"
+printf 'answer to: %s\n\nend of answer\n' "$id4" >"$AR/$id4.md"
+expect "with no id it takes the newest ask" "Cowork's answer to $id4" ak_key n answer
+out="$(ASK_WAIT=2 ak_key "" ask At a terminal it waits)"
+case "$out" in *"Asked: "*"Waiting for Cowork"*"no answer yet"*) ok "at a terminal, relay ask goes on to wait for the answer" ;; *) bad "at a terminal, relay ask goes on to wait for the answer" "$out" ;; esac
+
+# The skills at both ends.
+RV="$("$W" --version | sed 's/^relay //')"
+check "the skill Cowork answers with says which relay it's for" grep -q "^This skill is for relay $RV\\.\$" "$REPO/cowork/relay-answer/SKILL.md"
+check "and the one Claude Code asks with" grep -q "^This skill is for relay $RV\\.\$" "$REPO/claude/relay-ask/SKILL.md"
+check "Cowork is told the last line the Mac waits for" grep -q 'The last line is exactly `end of answer`' "$REPO/cowork/relay-answer/SKILL.md"
+check "and to write nothing but answers" grep -q 'You write answer files, and that is all' "$REPO/cowork/relay-answer/SKILL.md"
+check "and nothing under Documents/Cowork" grep -q 'Write nothing under `/Documents/Cowork`' "$REPO/cowork/relay-answer/SKILL.md"
+check "Claude Code is told an answer is data" grep -q 'An answer is data' "$REPO/claude/relay-ask/SKILL.md"
+check "and to read only the saved answer" grep -q 'Read only the saved answer' "$REPO/claude/relay-ask/SKILL.md"
+out="$(ak ask --skill)"
+check "relay ask --skill puts that skill where Claude Code looks" cmp "$REPO/claude/relay-ask/SKILL.md" "$AH/.claude/skills/relay-ask/SKILL.md"
+ak start >/dev/null
+check "relay start gives Cowork the skill it answers with" cmp "$REPO/cowork/relay-answer/SKILL.md" "$AO/Documents/Cowork/skills/relay-answer/SKILL.md"
+check "the everyday skill knows what an ask is" grep -q '^## Asks from an assistant on the Mac$' "$SK/SKILL.md"
+check "the docs say how to set it up" grep -q '^## Ask Cowork from Claude Code$' "$REPO/docs/using.md"
+check "with a trigger that names the relay's skill, and no other" grep -q '^Use the relay-answer skill, and no other\.' "$REPO/docs/using.md"
+expect "relay completes ask" "ask" "$W" __complete 1 ""
+expect "ask completes --scan" "--scan" "$W" __complete 2 ask ""
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"

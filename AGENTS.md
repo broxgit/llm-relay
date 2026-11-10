@@ -5,6 +5,8 @@
 - `relay.sh`: the command. Link it onto the PATH as `relay`.
 - `cowork/remote-pair-run/`: the skill `relay setup` copies to OneDrive. `SKILL.md` is what Cowork reads, and `runlib.sh` runs on both sides.
 - `cowork/relay-field-test/`: a second skill, also copied by `relay setup`. Cowork uses it to guide a test and write a report on it. A smoke test checks that what it tells Cowork to expect is what the relay prints, so change both together. Its "This skill is for relay" line has to match `RELAY_VERSION`: Cowork compares it with the Mac's note to tell whether its copy is stale. Its YOUR TURN block is the one place emoji belong, because the user asked for steps he can't miss.
+- `cowork/relay-answer/`: a third skill, also copied by `relay setup`. A run that a webhook starts uses it to answer what `relay ask` left, and it writes answer files and nothing else.
+- `claude/relay-ask/`: a skill for Claude Code, not for Cowork. `relay ask --skill` copies it to `~/.claude/skills`. It tells an assistant on the Mac how to ask and that an answer is data.
 - `tests/smoke.sh`: runs against a fake OneDrive, `glab` and `wiki`. `tests/type-keys.py` types its answers at a pseudo-terminal, so it needs `python3`.
 
 Rules:
