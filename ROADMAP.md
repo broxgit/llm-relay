@@ -46,6 +46,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### Output that is easier to read, and `relay ask` in the list (2026-11-11)
+
+- **Why:** The user asked whether the relay shows that Claude Code can now hand work to Copilot, and it barely did. They also asked for output with colour that is easier to read, after a line in `relay start`'s list ran into its own state.
+- **What changed:** The README and the user guide say it near the top. `relay start` and `relay setup` list "Have Claude Code ask Cowork", ready or with `relay ask --setup`. At a terminal, `relay start`, `relay setup`, `relay ask` and `relay answer` have marks, bold headings, one colour for commands, and a wait that is one line kept up to date. Anything that isn't a terminal gets the plain words, which are the same words. The other commands are not restyled yet. In 0.2.18.
+
 ### `relay ask`, after its first field runs (2026-11-11)
 
 - **Why:** Five runs of `relay field-test --asks` on the work Mac. Cowork answered every ask, rightly laid out, in 48 to 111 seconds: the scan was read, the planted instruction was not followed, and two asks sent together became one run that answered both. Three things went wrong, all outside Cowork. The trigger still had a test's instructions, and the relay waited ten minutes without a word. An edit paused the trigger, and the relay said only "HTTP 410". Twice an answer stayed in OneDrive until its syncing was paused and resumed, while the relay woke Cowork again and again. And setting it up was six steps in a document.
