@@ -2904,6 +2904,22 @@ check "the guided test says where the unattended asks fit" grep -q 'relay field-
 check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.md"
 check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"
 
+section "Releasing"
+# scripts/release.sh does the steps of docs/releasing.md. What it refuses is tested here. The
+# rest needs GitHub and Homebrew, and runs at each release.
+RS="$REPO/scripts/release.sh"
+echo "Notes." >"$T/release-notes.md"
+NOW="$("$W" --version | sed 's/^relay //')"
+refuse "the release script needs a version and notes" "$RS"
+expect "a version has no v in front" "with no v in front: v$NOW" "$RS" "v$NOW" "$T/release-notes.md"
+expect "the notes have to be there" "no release notes at" "$RS" "$NOW" "$T/no-such-notes.md"
+out="$("$RS" 9.9.9 "$T/release-notes.md" --check 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "it refuses a version the five lines don't say" "$out" ;; *"these don't say 9.9.9: relay.sh cowork/remote-pair-run/SKILL.md cowork/relay-field-test/SKILL.md cowork/relay-answer/SKILL.md claude/relay-ask/SKILL.md"*) ok "it refuses a version the five lines don't say" ;; *) bad "it refuses a version the five lines don't say" "exit $rc: $out" ;; esac
+case "$out" in *"== The commit"* | *"== The release"*) bad "and stops there, before it asks GitHub anything" "$out" ;; *) ok "and stops there, before it asks GitHub anything" ;; esac
+# The files CI skips are listed in the workflow and in the script, and have to be the same.
+if [ "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml" | sed -n 's/^ *- "\(.*\)"$/\1/p' | sort -u | tr '\n' ' ')" = "AGENTS.md CLAUDE.md LICENSE README.md ROADMAP.md design-and-decisions/** docs/** " ] && grep -qF "DOCS_ONLY='^(design-and-decisions/|docs/|README\.md\$|ROADMAP\.md\$|AGENTS\.md\$|CLAUDE\.md\$|LICENSE\$)'" "$RS"; then ok "the script and CI agree on which files are only documents"; else bad "the script and CI agree on which files are only documents" "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml")"; fi
+check "the releasing guide gives the script" grep -q '^   scripts/release.sh <version> <notes-file>$' "$REPO/docs/releasing.md"
+
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.
 NW="$T/no-wiki-repo"
