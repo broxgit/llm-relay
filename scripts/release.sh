@@ -55,21 +55,35 @@ echo "main is at $(git -C "$REPO" log --oneline -1)"
 step "CI"
 # CI doesn't run for a commit that only changes documents, so the run to trust is the newest
 # one on main, as long as everything since it is documents.
-run="$(gh run list -R "$SLUG" --branch main --workflow CI --limit 1 --json databaseId,headSha,status,conclusion --jq '.[0] | "\(.databaseId) \(.headSha) \(.status) \(.conclusion)"')" || die "couldn't ask GitHub about CI"
-[ -n "$run" ] || die "no CI run on main"
-# shellcheck disable=SC2086
-set -- $run
-run_id="$1" run_sha="$2" run_status="$3"
-if [ "$run_sha" != "$sha" ]; then
+newest_run() { gh run list -R "$SLUG" --branch main --workflow CI --limit 1 --json databaseId,headSha,status --jq '.[0] | "\(.databaseId) \(.headSha) \(.status)"'; }
+waited=0
+while :; do
+  run="$(newest_run)" || die "couldn't ask GitHub about CI"
+  [ -n "$run" ] || die "no CI run on main"
+  # shellcheck disable=SC2086
+  set -- $run
+  run_id="$1" run_sha="$2" run_status="$3"
+  [ "$run_sha" != "$sha" ] || break
   git -C "$REPO" merge-base --is-ancestor "$run_sha" "$sha" 2>/dev/null || die "the newest CI run is for $run_sha, which isn't part of main here"
   since="$(git -C "$REPO" diff --name-only "$run_sha" "$sha" | grep -vE "$DOCS_ONLY" || true)"
-  [ -z "$since" ] || die "CI hasn't run on these since its last run: $(echo "$since" | tr '\n' ' ')"
-  echo "the newest run is for ${run_sha:0:7}, and only documents have changed since"
-fi
-if [ "$run_status" != completed ]; then
-  echo "run $run_id is still going, so this waits for it"
-  gh run watch "$run_id" -R "$SLUG" --exit-status --interval 20 >/dev/null 2>&1 || true
-fi
+  if [ -z "$since" ]; then
+    echo "the newest run is for ${run_sha:0:7}, and only documents have changed since"
+    break
+  fi
+  # Just after a merge, GitHub takes a moment to start the run for it.
+  [ "$waited" -lt 120 ] || die "CI hasn't started on this commit after ${waited}s. These changed since its last run: $(echo "$since" | tr '\n' ' ')"
+  [ "$waited" -gt 0 ] || echo "no run for this commit yet, so this waits up to two minutes for one to start"
+  sleep 10
+  waited=$((waited + 10))
+done
+waited=0
+while [ "$run_status" != completed ]; do
+  [ "$waited" -lt 1800 ] || die "CI run $run_id is still going after 30 minutes. Run this again when it ends."
+  if [ $((waited % 60)) = 0 ]; then echo "run $run_id is $run_status, ${waited}s so far. It takes about seven minutes."; fi
+  sleep 20
+  waited=$((waited + 20))
+  run_status="$(gh run view "$run_id" -R "$SLUG" --json status --jq .status)" || die "couldn't ask GitHub about run $run_id"
+done
 [ "$(gh run view "$run_id" -R "$SLUG" --json conclusion --jq .conclusion)" = success ] || die "CI run $run_id didn't pass. Fix main first."
 echo "run $run_id passed"
 
