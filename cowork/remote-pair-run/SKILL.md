@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.22.
+This skill is for relay 0.2.23.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 

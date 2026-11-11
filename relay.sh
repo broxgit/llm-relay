@@ -81,7 +81,7 @@ wait_draw() {
 wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.22"
+RELAY_VERSION="0.2.23"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -1112,7 +1112,13 @@ EOF
   if [ -z "${RELAY_SCAN_NAME_OUT:-}" ] && clip_scan "Documents/Cowork/relay/scans/$name.txt"; then
     echo "That's on your clipboard to paste, with any other scan from the last two minutes."
   fi
-  echo "Now tell Cowork: read Documents/Cowork/relay/scans/$name.txt"
+  if [ "$OWN_SKILL_STATE" = missing ] && [ -z "${RELAY_SCAN_NAME_OUT:-}" ]; then
+    # Cowork has no skill to read a scan with, so telling it now would get nowhere.
+    say_warn "Cowork can't use this yet: it doesn't have the relay's skills. Run: $(typed "relay start"), which says when Cowork has them."
+    echo "Then tell Cowork: read Documents/Cowork/relay/scans/$name.txt"
+  else
+    echo "Now tell Cowork: read Documents/Cowork/relay/scans/$name.txt"
+  fi
 }
 
 # ---- also --------------------------------------------------------------------
@@ -2991,7 +2997,7 @@ check_own_skill() {
   for s in $OWN_SKILLS; do
     if [ ! -f "$SKILLS_DIR/$s/SKILL.md" ]; then
       OWN_SKILL_STATE=missing
-      say_warn "Cowork doesn't have the $s skill yet. Run: $(typed "relay setup")" >&2
+      say_warn "Cowork doesn't have the $s skill yet. Run: $(typed "relay start")" >&2
       return 0
     fi
     for f in "$REPO/cowork/$s"/*; do
@@ -3002,7 +3008,7 @@ check_own_skill() {
       fi
       if ! cmp -s "$f" "$SKILLS_DIR/$s/$(basename "$f")"; then
         OWN_SKILL_STATE="not this relay's"
-        say_warn "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: $(typed "relay setup")" >&2
+        say_warn "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: $(typed "relay start")" >&2
         return 0
       fi
     done
@@ -3313,8 +3319,11 @@ feature_lines() {
     for t in $tools; do
       command -v "$t" >/dev/null 2>&1 || missing="${missing:+$missing. }needs $t: $(tool_hint "$t")"
     done
-    # Asking Cowork has its tools on any Mac. What it needs is the webhook.
-    if [ "$begins" = ask ] && [ -z "$missing" ] && ! has_webhook; then missing="set up with: relay ask --setup"; fi
+    # Asking Cowork has its tools on any Mac. What it needs is the webhook, and the skill that
+    # tells Claude Code how to ask. relay ask --setup does whichever is missing.
+    if [ "$begins" = ask ] && [ -z "$missing" ]; then
+      if ! has_webhook || [ ! -f "$HOME/.claude/skills/relay-ask/SKILL.md" ]; then missing="set up with: relay ask --setup"; fi
+    fi
     if [ "$how" = shown ] && [ "$STYLE" = yes ]; then
       # The same words as the plain line, with a mark in front and the commands in their colour.
       if [ -z "$missing" ]; then
@@ -3857,6 +3866,7 @@ say_wake() {
     1)
       say_warn "This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"
       echo "  $WAKE_PASTE"
+      echo "To have the relay wake Cowork itself, set it up once: $(typed "relay ask --setup")"
       ;;
     *)
       if [ "$WAKE_CODE" = 410 ]; then
@@ -4103,6 +4113,11 @@ cmd_ask() {
     question="$(cat "$from")" || die "--from: can't read $from"
   fi
   [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || die "relay ask needs a question: relay ask \"what does the uploader retry on?\" --scan ~/code/thing"
+  # Cowork is about to be asked for something, so say if it hasn't this relay's skills to answer with.
+  if [ -z "$SKILLS_CHECKED" ]; then
+    SKILLS_CHECKED=1
+    check_own_skill
+  fi
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   while IFS= read -r f; do
@@ -4385,7 +4400,7 @@ field_asks() {
   needs_tool "field-test --asks" security
   needs_tool "field-test --asks" curl
   if ! security find-generic-password -s "$WAKE_ADDRESS_ITEM" >/dev/null 2>&1 || ! security find-generic-password -s "$WAKE_SECRET_ITEM" >/dev/null 2>&1; then
-    die "relay field-test --asks needs the webhook that wakes Cowork, because nobody types into Cowork here. docs/using.md has the steps, under \"Ask Cowork from Claude Code\"."
+    die "relay field-test --asks needs the webhook that wakes Cowork, because nobody types into Cowork here. Set it up with: relay ask --setup"
   fi
   make_field_repo
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
