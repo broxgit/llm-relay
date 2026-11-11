@@ -46,6 +46,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### One set of conventions with llm-wiki (2026-11-11)
+
+- **Why:** The user liked the relay's look at 0.2.18 and wanted llm-wiki to match. The llm-wiki session turned the style into a wider guide, `docs/conventions.md`, with changes, and merged it there as version 1.
+- **What changed:** The relay holds a verbatim copy of the guide, and its style helpers are the guide's block. A test holds them together. Four things changed to match it: a state such as `ready` stays a word at a terminal, with the mark in front. What a thing needs is normal weight, with the command in cyan, never dim. The warning mark is bold yellow. `LLM_RELAY_STYLE=on` or `off` overrides the terminal test, and the tick is a `+` where the locale isn't UTF-8. `relay start`'s "Where things are" is now the same block piped as at a terminal. In 0.2.20.
+
 ### A user guide that covers everything, and is easier to use (2026-11-11)
 
 - **Why:** The guide had every command and all but two flags, but no contents, no way from a task to its command, nowhere to look up a flag, no settings, and its troubleshooting was scattered.
