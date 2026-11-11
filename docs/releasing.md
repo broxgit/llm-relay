@@ -8,28 +8,29 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
 1. On a branch, change `RELAY_VERSION` in `relay.sh` to the new version, and the "This skill is for relay" line in each skill to match: `cowork/relay-field-test/SKILL.md`, `cowork/remote-pair-run/SKILL.md`, `cowork/relay-answer/SKILL.md` and `claude/relay-ask/SKILL.md`. A smoke test fails if any of the five differ. Move what changed into `ROADMAP.md`'s Done section if it isn't there. Merge it when CI is green.
 
-2. Write the release notes in a file, for the person upgrading: what is new, what changed, what hasn't been tried, and how to update.
+2. Write the release notes, for the person upgrading: what is new, what changed, what hasn't been tried, and how to update. They go in `releases/latest`, in a file named for the release, such as `release-0.2.25.md`. Move the file that is there to `releases/archive` first: `releases/latest` holds one file, the next release's. Neither folder is in git.
 
-3. On `main`, with that merged, run the script with the version and the notes:
-
-   ```bash
-   git switch main && git pull --ff-only
-   ```
+3. With that merged, run the script. It takes nothing:
 
    ```bash
-   scripts/release.sh <version> <notes-file>
+   scripts/release.sh
    ```
 
    It does the rest, and says each step as it goes:
 
-   - **It refuses unless** `main` here is what GitHub has, the five version lines say that version, and CI passed. A commit that only changes documents has no CI run, so it takes the newest run on `main` when only documents have changed since. It waits for a run that is still going.
+   - **It reads the version from the name of the notes file.**
+   - **It switches to `main` and pulls,** unless the checkout has changes that aren't committed.
+   - **It refuses unless** the five version lines say that version, and CI passed. A commit that only changes documents has no CI run, so it takes the newest run on `main` when only documents have changed since. It waits for a run that is still going.
    - **It makes the release** at that commit, with a `v` in front of the number.
    - **It points the formula at it:** the address and the hash of the release's source, in a fresh clone of the tap, committed and pushed.
    - **It checks it the way a user gets it:** `brew update`, `brew upgrade`, `relay --version`, `brew test` and `brew audit --strict`.
+   - **It adds a line to `releases/log.md`,** and commits and pushes that one file to `main`.
 
-   `--dry-run` stops before anything is made. If a step fails after the release is made, run the same command again: it skips what is done.
+   `--dry-run` stops before anything is made or changed, the checkout included. If a step fails after the release is made, run the same command again: it skips what is done.
 
    The script decides nothing. Whether to release is Brock's call each time, and the notes are written before it runs.
+
+   The older way still works, with the version and a notes file named: `scripts/release.sh <version> <notes-file>`.
 
 ## What a version number means
 
