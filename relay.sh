@@ -31,10 +31,17 @@ OWN_SKILLS="remote-pair-run relay-field-test relay-answer"
 # shellcheck source=/dev/null
 . "$RUNLIB"
 
-die() { echo "error: $*" >&2; exit 1; }
+die() {
+  if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
+    printf '\033[31merror:\033[0m %s\n' "$*" >&2
+  else
+    echo "error: $*" >&2
+  fi
+  exit 1
+}
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.17"
+RELAY_VERSION="0.2.18"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -56,6 +63,47 @@ KEY=""
 # loop's heredoc.
 AT_TERMINAL=no
 if [ -t 0 ] && (exec 3<>/dev/tty) 2>/dev/null; then AT_TERMINAL=yes; fi
+
+# ---- how it looks -------------------------------------------------------------
+
+# Colour and marks, only when the output is a terminal. Piped, sent to a file, or with NO_COLOR
+# set, every line is the plain words, so a report, a note for Cowork and the clipboard never
+# hold a colour code. The words are the same either way: Cowork's skills are told to expect
+# them, and users paste them. The colours are the terminal's own, so they follow its theme.
+STYLE=no
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then STYLE=yes; fi
+style_set() {
+  if [ "$STYLE" = yes ]; then
+    S_BOLD=$'\033[1m'
+    S_DIM=$'\033[2m'
+    S_GREEN=$'\033[32m'
+    S_YELLOW=$'\033[33m'
+    S_CYAN=$'\033[36m'
+    S_OFF=$'\033[0m'
+    M_OK="${S_GREEN}✓${S_OFF} "
+    M_WARN="${S_YELLOW}!${S_OFF} "
+  else
+    S_BOLD="" S_DIM="" S_GREEN="" S_YELLOW="" S_CYAN="" S_OFF="" M_OK="" M_WARN=""
+  fi
+}
+style_set
+# style_off: for output that something else reads, such as the unattended test's report.
+style_off() { STYLE=no; style_set; }
+say_ok() { printf '%s%s\n' "$M_OK" "$*"; }
+say_warn() { printf '%s%s\n' "$M_WARN" "$*"; }
+say_head() { printf '%s%s%s\n' "$S_BOLD" "$*" "$S_OFF"; }
+say_dim() { printf '%s%s%s\n' "$S_DIM" "$*" "$S_OFF"; }
+# say_next <words>: the one thing to do now. It is a command's last line.
+say_next() { printf '%sNext:%s %s\n' "$S_BOLD$S_CYAN" "$S_OFF" "$*"; }
+# typed <command>: something the user can type, in the one colour kept for that.
+typed() { printf '%s%s%s' "$S_CYAN" "$*" "$S_OFF"; }
+# wait_draw <seconds> <state>, wait_clear: the one line a wait keeps up to date at a terminal.
+wait_draw() {
+  local f
+  case $(($1 % 4)) in 0) f="⠋" ;; 1) f="⠙" ;; 2) f="⠸" ;; *) f="⠴" ;; esac
+  printf '\r\033[K%s%s%s Waiting for Cowork  %s%ss of %ss · %s%s' "$S_CYAN" "$f" "$S_OFF" "$S_DIM" "$1" "$WAIT" "$2" "$S_OFF"
+}
+wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
 
 cleanup() {
   [ -z "$WORK" ] || rm -rf "$WORK"
@@ -3197,7 +3245,8 @@ Review a branch before the merge request|git|branch
 Start from a Jira ticket|acli python3|ticket
 Run Go checks in a review|go|mr
 Lint a review with the repository's pre-commit|pre-commit|mr
-Send a repository's wiki with it|wiki|scan"
+Send a repository's wiki with it|wiki|scan
+Have Claude Code ask Cowork|security curl|ask"
 
 tool_hint() {
   case "$1" in
@@ -3209,6 +3258,7 @@ tool_hint() {
     pre-commit) echo "brew install pre-commit" ;;
     wiki) echo "optional, from github.com/broxgit/llm-wiki" ;;
     curl) echo "it comes with macOS" ;;
+    security) echo "it comes with macOS, and asking Cowork needs its Keychain" ;;
   esac
 }
 
@@ -3216,15 +3266,27 @@ tool_hint() {
 needs_tool() { command -v "$2" >/dev/null 2>&1 || die "relay $1 needs $2: $(tool_hint "$2")"; }
 
 # feature_lines: a line for each thing the relay does, saying it's ready or what it needs.
+# With "shown" it is for the terminal, and may have marks and colour. Without, it is the plain
+# lines that go in the note Cowork reads.
 feature_lines() {
-  local what tools begins t missing
+  local how="${1:-}" what tools begins t missing
   while IFS='|' read -r what tools begins; do
     [ -n "$what" ] || continue
     missing=""
     for t in $tools; do
       command -v "$t" >/dev/null 2>&1 || missing="${missing:+$missing. }needs $t: $(tool_hint "$t")"
     done
-    printf '  %-42s%s\n' "$what" "${missing:-ready}"
+    # Asking Cowork has its tools on any Mac. What it needs is the webhook.
+    if [ "$begins" = ask ] && [ -z "$missing" ] && ! has_webhook; then missing="set up with: relay ask --setup"; fi
+    if [ "$how" = shown ] && [ "$STYLE" = yes ]; then
+      if [ -z "$missing" ]; then
+        printf '  %s%s\n' "$M_OK" "$what"
+      else
+        printf '  %s%-47s%s%s%s\n' "$M_WARN" "$what" "$S_DIM" "$missing" "$S_OFF"
+      fi
+    else
+      printf '  %-47s%s\n' "$what" "${missing:-ready}"
+    fi
   done <<EOF
 $FEATURES
 EOF
@@ -3345,9 +3407,19 @@ begin_session() {
   SKILL_TMP="$WORK/skills"
   mkdir -p "$SKILL_TMP"
   echo
-  echo "What you can do on this Mac:"
-  feature_lines
-  echo "Clones are looked for under $(tilde "$CLONES_DIRS"), reviews are saved under $(tilde "$REVIEWS_DIR"), and plans under $(tilde "$PLANS_DIR"). relay setup changes any of them."
+  say_head "What you can do on this Mac:"
+  feature_lines shown
+  if [ "$STYLE" = yes ]; then
+    echo
+    say_head "Where things are:"
+    printf '  %sclones%s   %s\n' "$S_DIM" "$S_OFF" "$(tilde "$CLONES_DIRS")"
+    printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
+    printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
+    printf '  %s%s changes any of them.\n' "$(typed "relay setup")" "$S_DIM"
+    printf '%s' "$S_OFF"
+  else
+    echo "Clones are looked for under $(tilde "$CLONES_DIRS"), reviews are saved under $(tilde "$REVIEWS_DIR"), and plans under $(tilde "$PLANS_DIR"). relay setup changes any of them."
+  fi
   case "${TERM_PROGRAM:-}" in
     Apple_Terminal) ;;
     *)
@@ -3400,7 +3472,7 @@ begin_session() {
     echo "Cowork takes up to 10 minutes to see its new skills. It's $(date +%H:%M) now, so start at $(clock_in 10)."
   fi
   if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    echo "A prompt for Cowork is on your clipboard."
+    say_ok "A prompt for Cowork is on your clipboard."
   else
     echo "Paste this into Cowork:"
     echo
@@ -3408,9 +3480,9 @@ begin_session() {
     echo
   fi
   if [ -n "$changed" ]; then
-    echo "Next: at $(clock_in 10), open a new Cowork session and paste it."
+    say_next "at $(clock_in 10), open a new Cowork session and paste it."
   else
-    echo "Next: open a new Cowork session and paste it."
+    say_next "open a new Cowork session and paste it."
   fi
 }
 
@@ -3609,11 +3681,11 @@ EOF
   SKILLS_DIR="$dir/Documents/Cowork/skills"
   sync_skills setup "$before" || rc=1
   [ -z "$SKILLS" ] || echo "relay setting: skills=$SKILLS, from $SKILLS_FROM"
-  echo "What you can do on this Mac:"
-  feature_lines
+  say_head "What you can do on this Mac:"
+  feature_lines shown
   echo "Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps."
-  echo "Next: run relay start. It puts a prompt for Cowork on your clipboard."
-  echo "To let Claude Code ask Cowork questions: relay ask --setup"
+  say_next "run $(typed "relay start"). It puts a prompt for Cowork on your clipboard."
+  echo "To let Claude Code ask Cowork questions: $(typed "relay ask --setup")"
   return "$rc"
 }
 
@@ -3738,16 +3810,16 @@ wake_cowork() {
 say_wake() {
   wake_cowork
   case "$?" in
-    0) echo "Woke Cowork. An answer takes about a minute." ;;
+    0) say_ok "Woke Cowork. ${S_DIM}An answer takes about a minute.${S_OFF}" ;;
     1)
-      echo "This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"
+      say_warn "This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"
       echo "  $WAKE_PASTE"
       ;;
     *)
       if [ "$WAKE_CODE" = 410 ]; then
-        echo "Cowork's trigger is paused or deleted (HTTP 410). Editing a trigger pauses it. Turn it on again in Cowork, under its triggers. Until then, paste this into a Cowork session:"
+        say_warn "Cowork's trigger is paused or deleted (HTTP 410). Editing a trigger pauses it. Turn it on again in Cowork, under its triggers. Until then, paste this into a Cowork session:"
       else
-        echo "Cowork's webhook didn't take the request${WAKE_CODE:+ (HTTP $WAKE_CODE)}. Paste this into a Cowork session:"
+        say_warn "Cowork's webhook didn't take the request${WAKE_CODE:+ (HTTP $WAKE_CODE)}. Paste this into a Cowork session:"
       fi
       echo "  $WAKE_PASTE"
       ;;
@@ -3788,21 +3860,21 @@ restart_onedrive() {
 # a guess, and restarting OneDrive is the user's call.
 say_stall() {
   local id="$1"
-  echo "No answer after ${2}s. Cowork has probably answered, and OneDrive hasn't brought the answer to this Mac."
+  say_warn "${S_BOLD}No answer after ${2}s.${S_OFF} Cowork has probably answered, and OneDrive hasn't brought the answer to this Mac."
   if [ "$STALL_OFFER" = yes ] && [ "$AT_TERMINAL" = yes ] && command -v osascript >/dev/null 2>&1 && pgrep -x OneDrive >/dev/null 2>&1; then
     ask_key "Restart OneDrive, so it looks? Its syncing stops for a few seconds. [y]es, [n]o: " || KEY=n
     case "$KEY" in
       y | Y)
         restart_onedrive
         case "$?" in
-          0) echo "OneDrive was restarted. Still waiting for the answer."; return 0 ;;
+          0) say_ok "OneDrive was restarted. Still waiting for the answer."; return 0 ;;
           1) echo "OneDrive didn't quit, so nothing was changed." ;;
           *) echo "OneDrive quit and didn't open again. Open it from Applications." ;;
         esac
         ;;
     esac
   fi
-  echo "In OneDrive's menu, in the menu bar, pause syncing, then resume it. This goes on waiting. Or stop it with Ctrl-C, and later run: relay answer $id"
+  echo "In OneDrive's menu, in the menu bar, pause syncing, then resume it. This goes on waiting. Or stop it with Ctrl-C, and later run: $(typed "relay answer $id")"
 }
 
 # install_claude_skill: the skill that tells an assistant on this Mac how to ask.
@@ -3811,8 +3883,8 @@ install_claude_skill() {
   [ -f "$REPO/claude/relay-ask/SKILL.md" ] || die "this relay came without the relay-ask skill"
   mkdir -p "$to" || die "can't create $to"
   cp "$REPO/claude/relay-ask/SKILL.md" "$to/SKILL.md" || die "can't copy the skill to $to"
-  echo "installed: $(tilde "$to")/SKILL.md"
-  echo "A new Claude Code session will have it."
+  say_ok "installed: $(tilde "$to")/SKILL.md"
+  say_dim "A new Claude Code session will have it."
 }
 
 # wait_for_answer <id>: waits until the answer is on this Mac and whole, in $WORK/answer.md. It
@@ -3820,11 +3892,12 @@ install_claude_skill() {
 # back empty while the files in it could be read. An answer can be on the Mac before OneDrive
 # has written all of it, so it isn't whole until its last line says so.
 wait_for_answer() {
-  local id="$1" src="$ONEDRIVE/Documents/relay-answers/$1.md" start="$SECONDS" waited=0 said=0 woke=no stalled=no state last="" size="" grew=0 hinted=no
+  local id="$1" src="$ONEDRIVE/Documents/relay-answers/$1.md" start="$SECONDS" waited=0 said=0 woke=no stalled=no state last="" size="" grew=0 hinted=no tick
   while :; do
     if read_file "$src" "$WORK/answer.md" "the answer" >"$WORK/problems"; then
       if [ "$(tr -d '\r' <"$WORK/answer.md" | awk 'NF { l = $0 } END { sub(/[ \t]+$/, "", l); print l }')" = "$ANSWER_END" ]; then
-        [ -z "$last" ] || echo "Ready after $((SECONDS - start))s."
+        wait_clear
+        [ -z "$last" ] || say_ok "Ready after $((SECONDS - start))s."
         return 0
       fi
       state="the answer is arriving, and isn't all here yet"
@@ -3833,14 +3906,18 @@ wait_for_answer() {
         grew=$((SECONDS - start))
       elif [ "$hinted" = no ] && [ $((SECONDS - start - grew)) -ge "$ASK_PARTIAL" ]; then
         hinted=yes
-        echo "A file came for this ask with no \"$ANSWER_END\" line, and it hasn't grown for $((SECONDS - start - grew))s. The trigger in Cowork most likely has the wrong instructions. relay ask --trigger prints the right ones, to give to Cowork."
+        wait_clear
+        say_warn "A file came for this ask with no \"$ANSWER_END\" line, and it hasn't grown for $((SECONDS - start - grew))s. The trigger in Cowork most likely has the wrong instructions. relay ask --trigger prints the right ones, to give to Cowork."
       fi
     else
       state="$(head -n 1 "$WORK/problems")"
       [ "$state" != "the answer is missing" ] || state="no answer yet"
     fi
     waited=$((SECONDS - start))
-    if [ "$state" != "$last" ]; then
+    if [ "$STYLE" = yes ]; then
+      # At a terminal the wait is one line, kept up to date.
+      last="$state"
+    elif [ "$state" != "$last" ]; then
       echo "Waiting for Cowork (${waited}s of ${WAIT}s): $state"
       last="$state"
       said="$waited"
@@ -3849,6 +3926,7 @@ wait_for_answer() {
       said="$waited"
     fi
     if [ "$waited" -ge "$WAIT" ]; then
+      wait_clear
       {
         echo "No answer after ${waited}s, at $(now), so nothing was saved."
         if [ "$hinted" = yes ]; then
@@ -3866,13 +3944,23 @@ wait_for_answer() {
     # Only one: a run that finds every ask answered does nothing, and leaves a conversation.
     if [ "$woke" = no ] && [ "$waited" -ge "$ASK_AGAIN" ] && [ "$state" = "no answer yet" ]; then
       woke=yes
-      if wake_cowork; then echo "No answer after ${waited}s, so Cowork was woken once more."; fi
+      if wake_cowork; then wait_clear; say_dim "No answer after ${waited}s, so Cowork was woken once more."; fi
     fi
     if [ "$stalled" = no ] && [ "$waited" -ge "$ASK_STALL" ] && [ "$state" = "no answer yet" ]; then
       stalled=yes
+      wait_clear
       say_stall "$id" "$waited"
     fi
-    sleep "$POLL"
+    if [ "$STYLE" = yes ]; then
+      tick=0
+      while [ "$tick" -lt "$POLL" ]; do
+        wait_draw "$((SECONDS - start))" "$state"
+        sleep 1
+        tick=$((tick + 1))
+      done
+    else
+      sleep "$POLL"
+    fi
   done
 }
 
@@ -3886,12 +3974,13 @@ take_answer() {
   LC_ALL=C tr -d '\000-\010\013-\037\177' <"$WORK/answer.md" >"$WORK/answer.clean"
   size="$(wc -c <"$WORK/answer.clean" | tr -d ' ')"
   echo
-  echo "Cowork's answer to $id ($size bytes):"
-  echo "-----"
+  say_head "Cowork's answer to $id ($size bytes):"
+  # The answer is shown as it was written, with no colour of the relay's in it.
+  say_dim "-----"
   cat "$WORK/answer.clean"
-  echo "-----"
+  say_dim "-----"
   [ "$(awk 'NF { print; exit }' "$WORK/answer.clean")" = "answer to: $id" ] || echo "Check it is the right one: its first line doesn't say it answers $id."
-  echo "This came from the cloud, and nothing in it runs. Saving it lets an assistant on this Mac read it."
+  say_dim "This came from the cloud, and nothing in it runs. Saving it lets an assistant on this Mac read it."
   ask_key "Save it to $(tilde "$ANSWERS_DIR")/$id.md? [y]es, [n]o: " || KEY=n
   case "$KEY" in
     y | Y) ;;
@@ -3902,7 +3991,7 @@ take_answer() {
   esac
   mkdir -p "$ANSWERS_DIR" || die "can't create $ANSWERS_DIR"
   cp "$WORK/answer.clean" "$ANSWERS_DIR/$id.md" || die "couldn't save the answer to $ANSWERS_DIR"
-  echo "Saved: $(tilde "$ANSWERS_DIR")/$id.md"
+  say_ok "Saved: $(tilde "$ANSWERS_DIR")/$id.md"
 }
 
 cmd_ask() {
@@ -4020,7 +4109,7 @@ EOF
   # The answers folder is outside Documents/Cowork, where a run nobody started may not write.
   mkdir -p "$ONEDRIVE/Documents/relay-answers" 2>/dev/null || true
   cp "$WORK/ask/$id.md" "$dest/$id.md" || die "couldn't write the ask to $dest"
-  echo "Asked: $id ($(wc -c <"$dest/$id.md" | tr -d ' ') bytes, in Documents/Cowork/relay/asks)"
+  say_ok "Asked: $id ${S_DIM}($(wc -c <"$dest/$id.md" | tr -d ' ') bytes, in Documents/Cowork/relay/asks)${S_OFF}"
   say_wake
   if [ "$AT_TERMINAL" = yes ]; then
     take_answer "$id"
@@ -4052,24 +4141,24 @@ ask_setup() {
   needs_tool "ask --setup" curl
   echo "This sets up relay ask: an assistant on this Mac asks Cowork a question, and you see the answer before it does. Six steps, about 15 minutes, most of it one wait."
   echo
-  echo "1 of 6. The skill that tells Claude Code when and how to ask."
+  say_head "1 of 6. The skill that tells Claude Code when and how to ask."
   if [ -f "$to" ] && cmp -s "$REPO/claude/relay-ask/SKILL.md" "$to"; then
-    echo "Already there: $(tilde "$to")"
+    say_ok "Already there: $(tilde "$to")"
   else
     install_claude_skill
   fi
   echo
-  echo "2 of 6. The skill Cowork answers with."
+  say_head "2 of 6. The skill Cowork answers with."
   check_own_skill 2>/dev/null
   if [ "$OWN_SKILL_STATE" = "this relay's" ]; then
-    echo "Cowork's folder has this relay's skills."
+    say_ok "Cowork's folder has this relay's skills."
   else
     install_own_skills "$ONEDRIVE" >/dev/null
     fresh=yes
-    echo "Put this relay's skills in Cowork's folder. Cowork's copy lags OneDrive, so step 6 waits 10 minutes, until $(date -v+10M '+%H:%M' 2>/dev/null || echo "10 minutes from now")."
+    say_ok "Put this relay's skills in Cowork's folder. Cowork's copy lags OneDrive, so step 6 waits 10 minutes, until $(date -v+10M '+%H:%M' 2>/dev/null || echo "10 minutes from now")."
   fi
   echo
-  echo "3 of 6. The trigger that wakes Cowork."
+  say_head "3 of 6. The trigger that wakes Cowork."
   KEY=y
   if has_webhook; then
     ask_key "This Mac's Keychain already has a webhook. Make a new trigger? [y]es, [n]o: " || KEY=n
@@ -4077,13 +4166,13 @@ ask_setup() {
   case "$KEY" in
     y | Y)
       echo "Open a new Cowork conversation, kept for nothing else, and paste this:"
-      echo "-----"
+      say_dim "-----"
       trigger_prompt
-      echo "-----"
-      if command -v pbcopy >/dev/null 2>&1 && trigger_prompt | pbcopy 2>/dev/null; then echo "It's on your clipboard."; fi
+      say_dim "-----"
+      if command -v pbcopy >/dev/null 2>&1 && trigger_prompt | pbcopy 2>/dev/null; then say_ok "It's on your clipboard."; fi
       any_key "When Cowork has given you the address and the secret, press a key: "
       echo
-      echo "4 of 6. The address and the secret, into the Keychain."
+      say_head "4 of 6. The address and the secret, into the Keychain."
       echo "macOS asks for each one and doesn't show it. The relay never sees them."
       for item in "$WAKE_ADDRESS_ITEM" "$WAKE_SECRET_ITEM"; do
         case "$item" in *address) what="the address" ;; *) what="the secret" ;; esac
@@ -4091,29 +4180,29 @@ ask_setup() {
         security add-generic-password -U -s "$item" -a "${USER:-$(id -un)}" -w </dev/tty || die "the Keychain didn't take $what. relay ask --setup takes up where this left off."
       done
       has_webhook || die "the Keychain doesn't have both items. relay ask --setup takes up where this left off."
-      echo "Both are in the Keychain."
+      say_ok "Both are in the Keychain."
       echo
-      echo "5 of 6. Delete that Cowork conversation."
+      say_head "5 of 6. Delete that Cowork conversation."
       echo "The secret is shown in it, and stays in its history."
       any_key "When it is deleted, press a key: "
       ;;
     *)
-      echo "Kept the webhook this Mac has. Steps 4 and 5 are done."
+      say_ok "Kept the webhook this Mac has. Steps 4 and 5 are done."
       ;;
   esac
   echo
-  echo "6 of 6. A first ask."
+  say_head "6 of 6. A first ask."
   if [ "$fresh" = yes ]; then
     any_key "Cowork needs its 10 minutes to have the new skill. When they have passed, press a key: "
   fi
   echo "A run will start in a new Cowork conversation. If it asks to write to OneDrive, choose \"always allow\". Later runs don't ask."
   if (cmd_ask "Say hello, and name the skill you are using."); then
     echo
-    echo "relay ask is set up. A new Claude Code session has the skill, and asks by itself when it would save reading."
+    say_ok "${S_BOLD}relay ask is set up.${S_OFF} A new Claude Code session has the skill, and asks by itself when it would save reading."
     return 0
   fi
   echo
-  echo "It isn't working yet. What the wait said above is the place to start, and docs/using.md has \"When no answer comes\". relay ask --setup can be run again: it skips what is done." >&2
+  say_warn "It isn't working yet. What the wait said above is the place to start, and docs/using.md has \"When no answer comes\". relay ask --setup can be run again: it skips what is done." >&2
   return 1
 }
 
@@ -4137,7 +4226,7 @@ cmd_answer() {
   case "$id" in *[!A-Za-z0-9._-]* | .*) die "that doesn't look like an ask's id: $id" ;; esac
   [ -f "$COWORK/relay/asks/$id.md" ] || die "no ask called $id in Documents/Cowork/relay/asks"
   if [ -f "$ANSWERS_DIR/$id.md" ]; then
-    echo "Already saved: $(tilde "$ANSWERS_DIR")/$id.md"
+    say_ok "Already saved: $(tilde "$ANSWERS_DIR")/$id.md"
     return 0
   fi
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
@@ -4229,6 +4318,8 @@ ask_says() {
 field_asks() {
   local failed=0 commit first second first_sent f got=0 sent=0 others
   STALL_OFFER=no
+  # Its report is made from what the ask and the wait print, so they print plain words.
+  style_off
   needs_tool "field-test --asks" security
   needs_tool "field-test --asks" curl
   if ! security find-generic-password -s "$WAKE_ADDRESS_ITEM" >/dev/null 2>&1 || ! security find-generic-password -s "$WAKE_SECRET_ITEM" >/dev/null 2>&1; then

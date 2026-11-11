@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.17.
+This skill is for relay 0.2.18.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -34,6 +34,7 @@ Their first message asks you to read `Documents/Cowork/relay/start/note.txt`. Do
 2. **Check your copies.** Compare the note's `relay:` line with the version at the top of this skill. Compare its `runlib:` line with the line that sets `RUNLIB_VERSION` in your `runlib.sh`. If either differs, your copy is stale, and what you hand over could be wrong. Say so, ask them to wait five minutes and start a new session, and stop. Your copy of a skill can lag OneDrive by several minutes.
 3. **Ask one thing: "What are you working on?"** Under it, give four short starters the user can answer with, one line each: a ticket's key, a merge request's address, a repository to change or fix, a branch to review before pushing. Put nothing else in that message. If the note says `runs on this Mac so far: 0`, add two lines. One: you'll give one step at a time, and nothing runs on their Mac until they press a key there. Two: if they'd like to try it on code that doesn't matter first, they can run `relay practice`, which takes about ten minutes.
 4. **Give the first step,** as a block. To change or fix code, that is `relay scan` with the repository's folder. If the note lists the clone, put its folder in the command, such as `relay scan ~/code/thing`, and never tell the user to change folder first. If it isn't listed, ask where it is, or give the command with a placeholder for them to fill in. To review a merge request, it is `relay mr` with its address. To review a branch before there's a merge request, it is `relay branch`, run in the repository. To start from a Jira ticket, it is `relay ticket` with the ticket's key. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question. Whatever it is, it begins at stage 1 of "How a piece of work goes", below, unless they say they're further along.
+   The note's line `Have Claude Code ask Cowork` is not a way to start work with you. It says whether an assistant on their Mac can hand you questions with `relay ask`. Leave it out of the starters. If it says `set up with: relay ask --setup` and the user asks about it, that command is the step, in a terminal, and "Asks from an assistant on the Mac" below has the rest.
 5. **Name the session.** The first line of your first reply once you know the work is a short title, such as `ABC-123: add retry to the uploader` or `Review: project!42`. Sessions otherwise all look alike in their list.
 
 ## Starting from a ticket

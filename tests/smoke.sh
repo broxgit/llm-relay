@@ -24,6 +24,8 @@ done
 IFS="$old_ifs"
 
 export HOME="$T/home"
+# The tests read plain words. The ones about colour take this away again.
+export NO_COLOR=1
 export WIKIS_DIR="$T/wikis"
 unset XDG_CONFIG_HOME
 mkdir -p "$HOME" "$WIKIS_DIR/global/wiki" "$T/fake-wiki"
@@ -2721,6 +2723,46 @@ out="$(env HOME="$SUH" USER=tester PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" RELAY_W
 case "$rc:$out" in 0:*) bad "with no answer to the first ask it says it isn't working yet" "$out" ;; *"It isn't working yet."*"it skips what is done"*) ok "with no answer to the first ask it says it isn't working yet" ;; *) bad "with no answer to the first ask it says it isn't working yet" "exit $rc: $out" ;; esac
 check "the user guide leads with it" grep -q '^relay ask --setup$' "$REPO/docs/using.md"
 check "and says what to do when no answer comes" grep -q '^### When no answer comes$' "$REPO/docs/using.md"
+
+# How it looks. Colour and marks are for a terminal. Anything else gets the plain words, and
+# the words are the same either way.
+ESC="$(printf '\033')"
+st() { env HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$1" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" start 2>&1; }
+st_tty() { local k="$1"; shift; python3 "$TTY" "" env -u NO_COLOR TERM=xterm HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$k" TERM_PROGRAM=Apple_Terminal "$@" "$W" --dir "$GO" start 2>&1; }
+out="$(st "$T/no-keychain")"
+case "$out" in *"$ESC"*) bad "piped, relay start has no colour codes" "$out" ;; *) ok "piped, relay start has no colour codes" ;; esac
+case "$out" in *"  Have Claude Code ask Cowork"*"set up with: relay ask --setup"*) ok "the list says Claude Code can ask Cowork, and how to set it up" ;; *) bad "the list says Claude Code can ask Cowork, and how to set it up" "$out" ;; esac
+check "and the note for Cowork has the line" grep -q '^  Have Claude Code ask Cowork  *set up with: relay ask --setup$' "$GN"
+expect "with the webhook in the Keychain it is ready" "Have Claude Code ask Cowork                    ready" st "$AK"
+if printf '%s\n' "$out" | grep -qE "pre-commit +(ready|needs)"; then ok "a long line in the list keeps a space before its state"; else bad "a long line in the list keeps a space before its state" "$out"; fi
+rm -f "$T/clipboard"
+out="$(st_tty "$AK")"
+case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Cowork"*) ok "at a terminal, what is ready has a green mark" ;; *) bad "at a terminal, what is ready has a green mark" "$out" ;; esac
+case "$out" in *"${ESC}[1mWhat you can do on this Mac:${ESC}[0m"*"Where things are:"*"${ESC}[36mNext:${ESC}[0m open a new Cowork session and paste it."*) ok "headings are bold, and the last line is what to do next" ;; *) bad "headings are bold, and the last line is what to do next" "$out" ;; esac
+out2="$(st_tty "$T/no-keychain")"
+case "$out2" in *"${ESC}[33m!${ESC}[0m Have Claude Code ask Cowork"*"set up with: relay ask --setup"*) ok "and what isn't has a yellow one, with what it needs" ;; *) bad "and what isn't has a yellow one, with what it needs" "$out2" ;; esac
+if grep -q "$ESC" "$GN"; then bad "the note for Cowork has no colour codes, even then"; else ok "the note for Cowork has no colour codes, even then"; fi
+if grep -q "$ESC" "$T/clipboard"; then bad "nor has the clipboard"; else ok "nor has the clipboard"; fi
+check "the note still says ready in words" grep -q '^  Change code with Cowork  *ready$' "$GN"
+out="$(st_tty "$AK" NO_COLOR=1)"
+case "$out" in *"$ESC"*) bad "NO_COLOR turns it off at a terminal" "$out" ;; *"Have Claude Code ask Cowork"*"ready"*) ok "NO_COLOR turns it off at a terminal" ;; *) bad "NO_COLOR turns it off at a terminal" "$out" ;; esac
+out="$(st_tty "$AK" TERM=dumb)"
+case "$out" in *"$ESC"*) bad "and so does a terminal that has no colour" "$out" ;; *) ok "and so does a terminal that has no colour" ;; esac
+# The wait is one line kept up to date, and an answer is shown as it was written.
+ak_tty() { local keys="$1"; shift; env -u NO_COLOR TERM=xterm HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-3}" RELAY_POLL=1 python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
+out="$(ak_tty "" answer "$id3")"
+case "$out" in *"Waiting for Cowork  "*"s of 3s · no answer yet"*"No answer after"*) ok "at a terminal the wait is one line that is kept up to date" ;; *) bad "at a terminal the wait is one line that is kept up to date" "$out" ;; esac
+case "$out" in *"Still waiting"*) bad "with no lines piling up" "$out" ;; *) ok "with no lines piling up" ;; esac
+printf 'answer to: %s\n\nANSWER\nPlain as written.\n\nend of answer\n' "$id3" >"$AR/$id3.md"
+out="$(ak_tty y answer "$id3")"
+case "$out" in *"${ESC}[1mCowork's answer to $id3"*"${ESC}[2m-----${ESC}[0m"*"Plain as written."*"${ESC}[32m✓${ESC}[0m Saved: ~/relay-answers/$id3.md"*) ok "an answer has a bold heading, and saving it a green mark" ;; *) bad "an answer has a bold heading, and saving it a green mark" "$out" ;; esac
+if grep -q "$ESC" "$AH/relay-answers/$id3.md"; then bad "the saved answer has no colour codes"; else ok "the saved answer has no colour codes"; fi
+rm -f "$AR/$id3.md" "$AH/relay-answers/$id3.md"
+out="$(env -u NO_COLOR TERM=xterm HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" python3 "$TTY" "" "$W" --dir "$AO" ask 2>&1)"
+case "$out" in *"${ESC}[31merror:${ESC}[0m relay ask needs a question"*) ok "an error is red at a terminal" ;; *) bad "an error is red at a terminal" "$out" ;; esac
+out="$(ak ask Plain when an assistant runs it)"
+case "$out" in *"$ESC"* | *"✓"*) bad "an assistant, with no terminal, gets the plain words" "$out" ;; *"Asked: 20"*) ok "an assistant, with no terminal, gets the plain words" ;; *) bad "an assistant, with no terminal, gets the plain words" "$out" ;; esac
+rm -f "$AA/$(ask_id "$out").md"
 printf 'answer to: %s\n\nend of answer\n' "$id4" >"$AR/$id4.md"
 expect "with no id it takes the newest ask" "Cowork's answer to $id4" ak_key n answer
 out="$(ASK_WAIT=2 ak_key "" ask At a terminal it waits)"
@@ -2851,6 +2893,13 @@ case "$out" in *"Restart OneDrive"*) bad "with nobody watching it offers no rest
 check "having sent one" grep -q '^- asks sent: 1$' "$UR"
 out="$(env FAKE_CURL_CODE=403 HOME="$UH" PATH="$FB:$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT=2 RELAY_POLL=1 "$W" --dir "$UO" field-test --asks </dev/null 2>&1)"
 case "$out" in *"THE WEBHOOK REFUSED (HTTP 403)"*) ok "a webhook that refuses is in the report, with its code" ;; *) bad "a webhook that refuses is in the report, with its code" "$out" ;; esac
+# Its report is made from what the relay prints, so at a terminal it still gets plain words.
+rm -f "$UH"/relay-field-test-asks-*.md
+rm -rf "$UO/Documents/relay-answers" "$UO/Documents/Cowork/relay/asks"
+out="$(env -u NO_COLOR TERM=xterm HOME="$UH" PATH="$FB:$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT=2 RELAY_POLL=1 python3 "$TTY" "" "$W" --dir "$UO" field-test --asks 2>&1)"
+UR="$(ls "$UH"/relay-field-test-asks-*.md 2>/dev/null | head -n 1)"
+if [ -s "$UR" ] && grep -q '^- sent: yes, as 20' "$UR" && ! grep -q "$(printf '\033')" "$UR"; then ok "run at a terminal, the unattended report is still plain"; else bad "run at a terminal, the unattended report is still plain" "$out"; fi
+rm -f "$UR"
 check "the guided test says where the unattended asks fit" grep -q 'relay field-test --asks' "$FS/SKILL.md"
 check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.md"
 check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"

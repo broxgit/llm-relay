@@ -57,6 +57,8 @@ A new dependency, such as a Jira tool for `relay ticket`, is one line in each. N
 
 ## What the terminal says next
 
+At 0.2.18 the list gained a line, `Have Claude Code ask Cowork`, and at a terminal it has colour: a green mark for ready, a yellow one with what is needed. Three rules were set with it. Colour is only for a terminal, so the note for Cowork, a report and the clipboard never hold a colour code, and `NO_COLOR` turns it off. The words don't change, because Cowork's skills are told to expect them and users paste them. And an answer from Cowork is shown as it was written, with none of the relay's colour inside it.
+
 Most commands already ended with a next step: `Now tell Cowork: done`, `Now tell Cowork: read ...`, the prompt from `relay mr`. Two things were missing.
 
 - **`relay scan` puts its line on the clipboard,** as `relay mr` does. Cowork often asks for two scans in one line, so scans within two minutes of each other add up on the clipboard, and the last doesn't wipe the first. It only happens at a terminal, and never for a scan that `relay mr` makes for `--also`.
