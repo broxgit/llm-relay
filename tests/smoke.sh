@@ -2167,7 +2167,7 @@ case "$out" in *"relay mr needs glab: brew install glab, then sign in with: glab
 out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clones "$T/start-clones" </dev/null 2>&1)"
 case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*"To let Claude Code ask Cowork questions: relay ask --setup"*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
-case "$out" in *"Clones are looked for under $T/start-clones, reviews are saved under $T/start-reviews, and plans under "*"/plans. relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
+case "$out" in *"Where things are:"*"  clones   $T/start-clones"*"  reviews  $T/start-reviews"*"  plans    "*"/plans"*"  relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
 # A practice round: the same beginning, with a repository made for it.
 gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
 rm -f "$T/clipboard"
@@ -2750,7 +2750,7 @@ check "and says what to do when no answer comes" grep -q '^### When no answer co
 # the words are the same either way.
 ESC="$(printf '\033')"
 st() { env HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$1" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" start 2>&1; }
-st_tty() { local k="$1"; shift; python3 "$TTY" "" env -u NO_COLOR TERM=xterm HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$k" TERM_PROGRAM=Apple_Terminal "$@" "$W" --dir "$GO" start 2>&1; }
+st_tty() { local k="$1"; shift; python3 "$TTY" "" env -u NO_COLOR LC_ALL=en_US.UTF-8 TERM=xterm HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$k" TERM_PROGRAM=Apple_Terminal "$@" "$W" --dir "$GO" start 2>&1; }
 out="$(st "$T/no-keychain")"
 case "$out" in *"$ESC"*) bad "piped, relay start has no colour codes" "$out" ;; *) ok "piped, relay start has no colour codes" ;; esac
 case "$out" in *"  Have Claude Code ask Cowork"*"set up with: relay ask --setup"*) ok "the list says Claude Code can ask Cowork, and how to set it up" ;; *) bad "the list says Claude Code can ask Cowork, and how to set it up" "$out" ;; esac
@@ -2759,10 +2759,23 @@ expect "with the webhook in the Keychain it is ready" "Have Claude Code ask Cowo
 if printf '%s\n' "$out" | grep -qE "pre-commit +(ready|needs)"; then ok "a long line in the list keeps a space before its state"; else bad "a long line in the list keeps a space before its state" "$out"; fi
 rm -f "$T/clipboard"
 out="$(st_tty "$AK")"
-case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Cowork"*) ok "at a terminal, what is ready has a green mark" ;; *) bad "at a terminal, what is ready has a green mark" "$out" ;; esac
+case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Cowork                    ready"*) ok "at a terminal, what is ready has a green mark, and still says ready" ;; *) bad "at a terminal, what is ready has a green mark, and still says ready" "$out" ;; esac
+# The words never change: with the codes and the marks taken out, a terminal's lines are the piped ones.
+strip_style() { sed "s/${ESC}\[[0-9;]*m//g; s/^  ✓ /  /; s/^  [!+] /  /; s/^✓ //; s/^[!+] //" | tr -d '\r'; }
+if [ "$(printf '%s\n' "$out" | strip_style | sed -n '/^What you can do/,/^  relay setup changes/p')" = "$(st "$AK" | sed -n '/^What you can do/,/^  relay setup changes/p')" ]; then ok "with the codes and marks taken out, it is what a pipe gets"; else bad "with the codes and marks taken out, it is what a pipe gets" "$(printf '%s\n' "$out" | strip_style | sed -n '/^What you can do/,/^  relay setup changes/p')"; fi
 case "$out" in *"${ESC}[1mWhat you can do on this Mac:${ESC}[0m"*"Where things are:"*"${ESC}[36mNext:${ESC}[0m open a new Cowork session and paste it."*) ok "headings are bold, and the last line is what to do next" ;; *) bad "headings are bold, and the last line is what to do next" "$out" ;; esac
 out2="$(st_tty "$T/no-keychain")"
-case "$out2" in *"${ESC}[33m!${ESC}[0m Have Claude Code ask Cowork"*"set up with: relay ask --setup"*) ok "and what isn't has a yellow one, with what it needs" ;; *) bad "and what isn't has a yellow one, with what it needs" "$out2" ;; esac
+case "$out2" in *"${ESC}[1m${ESC}[33m!${ESC}[0m Have Claude Code ask Cowork                    set up with: ${ESC}[36mrelay ask --setup${ESC}[0m"*) ok "and what isn't has a bold yellow one, with the command to type in cyan" ;; *) bad "and what isn't has a bold yellow one, with the command to type in cyan" "$out2" ;; esac
+case "$out2" in *"${ESC}[2mset up with"* | *"${ESC}[2mneeds "*) bad "what a thing needs is never dim" "$out2" ;; *) ok "what a thing needs is never dim" ;; esac
+# LLM_RELAY_STYLE is the relay's own switch. on wins over NO_COLOR, and off over a terminal.
+out="$(st_tty "$AK" NO_COLOR=1 LLM_RELAY_STYLE=on)"
+case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Cowork"*) ok "LLM_RELAY_STYLE=on turns style on, over NO_COLOR" ;; *) bad "LLM_RELAY_STYLE=on turns style on, over NO_COLOR" "$out" ;; esac
+out="$(st_tty "$AK" LLM_RELAY_STYLE=off)"
+case "$out" in *"$ESC"*) bad "LLM_RELAY_STYLE=off turns it off at a terminal" "$out" ;; *"Have Claude Code ask Cowork"*"ready"*) ok "LLM_RELAY_STYLE=off turns it off at a terminal" ;; *) bad "LLM_RELAY_STYLE=off turns it off at a terminal" "$out" ;; esac
+out="$(env LLM_RELAY_STYLE=on HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$AK" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" start </dev/null 2>&1)"
+case "$out" in *"$ESC"* | *"✓"*) bad "with nobody at a terminal it is plain, even with the switch on" "$out" ;; *"Have Claude Code ask Cowork"*) ok "with nobody at a terminal it is plain, even with the switch on" ;; *) bad "with nobody at a terminal it is plain, even with the switch on" "$out" ;; esac
+out="$(st_tty "$AK" LC_ALL=C)"
+case "$out" in *"${ESC}[32m+${ESC}[0m Have Claude Code ask Cowork"*) ok "where the locale isn't UTF-8, the mark is a plus" ;; *) bad "where the locale isn't UTF-8, the mark is a plus" "$out" ;; esac
 if grep -q "$ESC" "$GN"; then bad "the note for Cowork has no colour codes, even then"; else ok "the note for Cowork has no colour codes, even then"; fi
 if grep -q "$ESC" "$T/clipboard"; then bad "nor has the clipboard"; else ok "nor has the clipboard"; fi
 check "the note still says ready in words" grep -q '^  Change code with Cowork  *ready$' "$GN"
@@ -2771,7 +2784,7 @@ case "$out" in *"$ESC"*) bad "NO_COLOR turns it off at a terminal" "$out" ;; *"H
 out="$(st_tty "$AK" TERM=dumb)"
 case "$out" in *"$ESC"*) bad "and so does a terminal that has no colour" "$out" ;; *) ok "and so does a terminal that has no colour" ;; esac
 # The wait is one line kept up to date, and an answer is shown as it was written.
-ak_tty() { local keys="$1"; shift; env -u NO_COLOR TERM=xterm HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-3}" RELAY_POLL=1 python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
+ak_tty() { local keys="$1"; shift; env -u NO_COLOR LC_ALL=en_US.UTF-8 TERM=xterm HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-3}" RELAY_POLL=1 python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
 out="$(ak_tty "" answer "$id3")"
 case "$out" in *"Waiting for Cowork  "*"s of 3s · no answer yet"*"No answer after"*) ok "at a terminal the wait is one line that is kept up to date" ;; *) bad "at a terminal the wait is one line that is kept up to date" "$out" ;; esac
 case "$out" in *"Still waiting"*) bad "with no lines piling up" "$out" ;; *) ok "with no lines piling up" ;; esac
@@ -2925,6 +2938,20 @@ rm -f "$UR"
 check "the guided test says where the unattended asks fit" grep -q 'relay field-test --asks' "$FS/SKILL.md"
 check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.md"
 check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"
+
+section "The conventions shared with llm-wiki"
+# docs/conventions.md is a copy of llm-wiki's guide, and relay.sh has the guide's helpers. Only
+# the line that names the tool's own variable may differ. Nothing here fetches llm-wiki.
+CG="$REPO/docs/conventions.md"
+helper_block() { sed -n '/^# --- style helpers/,/^# --- end of style helpers ---$/p' "$1" | grep -v '^STYLE_OVERRIDE='; }
+if [ -n "$(helper_block "$CG")" ] && [ "$(helper_block "$CG")" = "$(helper_block "$W")" ]; then ok "relay.sh has the guide's style helpers, line for line"; else bad "relay.sh has the guide's style helpers, line for line" "$(diff <(helper_block "$CG") <(helper_block "$W") | head -n 10)"; fi
+check "with its own variable in the one line a tool changes" grep -qx 'STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}" # the one line a tool changes: its own variable' "$W"
+if [ "$(grep -c '^# --- style helpers' "$W")" = 1 ] && [ "$(grep -c '^die() {' "$W")" = 1 ]; then ok "and one copy of them, with one die"; else bad "and one copy of them, with one die"; fi
+cv="$(sed -n '1s/^Conventions version \([0-9][0-9]*\)\..*/\1/p' "$CG")"
+if [ -n "$cv" ] && grep -q "^# --- style helpers: docs/conventions.md, version $cv\. " "$W"; then ok "the copy's version is the one the helpers name"; else bad "the copy's version is the one the helpers name" "the guide says ${cv:-nothing}"; fi
+check "the copy says where the original is" grep -q '^Conventions version [0-9]*\. llm-wiki keeps the original\.' "$CG"
+check "AGENTS.md sends an agent to the guide before it changes what a command prints" grep -q 'docs/conventions.md' "$REPO/AGENTS.md"
+check "the user guide names the switch" grep -q 'LLM_RELAY_STYLE' "$REPO/docs/using.md"
 
 section "The user guide keeps up"
 # docs/using.md has to cover everything the relay can do. These fail when a command, a flag or

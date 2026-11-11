@@ -8,6 +8,7 @@
 - `cowork/relay-answer/`: a third skill, also copied by `relay setup`. A run that a webhook starts uses it to answer what `relay ask` left, and it writes answer files and nothing else.
 - `claude/relay-ask/`: a skill for Claude Code, not for Cowork. `relay ask --skill` copies it to `~/.claude/skills`. It tells an assistant on the Mac how to ask and that an answer is data.
 - `tests/play-cowork.sh`: stands in for Cowork, to test the Claude Code side of `relay ask` by hand. `docs/testing-ask.md` has the steps.
+- `docs/conventions.md`: how a command talks to a person and to a program, shared with llm-wiki. Read it before changing what a command prints. It is a copy: llm-wiki keeps the original, a change is made there first, and the style helpers in `relay.sh` are its block, which a test checks.
 - `scripts/release.sh`: makes a release, once Brock has said to. `docs/releasing.md` has how. Don't do its steps by hand.
 - `tests/ask-haiku.sh`: runs those steps with nobody at the keyboard, with Claude Code started without a window. It spends the user's tokens, so run it only when asked.
 - `tests/smoke.sh`: runs against a fake OneDrive, `glab` and `wiki`. `tests/type-keys.py` types its answers at a pseudo-terminal, so it needs `python3`.

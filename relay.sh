@@ -31,17 +31,57 @@ OWN_SKILLS="remote-pair-run relay-field-test relay-answer"
 # shellcheck source=/dev/null
 . "$RUNLIB"
 
+# ---- how it looks -------------------------------------------------------------
+
+# docs/conventions.md is the guide, shared with llm-wiki, and this block is its block. A test
+# holds the two together. Colour and marks go around the words and never replace one, so a
+# report, a note for Cowork and the clipboard never hold a colour code, and what a user pastes
+# reads the same either way.
+# --- style helpers: docs/conventions.md, version 1. Copy, don't edit. ---
+STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}" # the one line a tool changes: its own variable
+# style_wanted <fd>: style on? LLM_<TOOL>_STYLE=on or off decides; else a terminal, no NO_COLOR, TERM not dumb.
+style_wanted() {
+  case "$STYLE_OVERRIDE" in on) return 0 ;; off) return 1 ;; esac
+  [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]
+}
+style_utf8() {
+  case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *[Uu][Tt][Ff]-8* | *[Uu][Tt][Ff]8*) return 0 ;; esac
+  return 1
+}
+style_set() {
+  S_BOLD="" S_DIM="" S_GREEN="" S_YELLOW="" S_CYAN="" S_OFF="" M_OK="" M_WARN=""
+  [ "$STYLE" = yes ] || return 0
+  S_BOLD=$'\033[1m' S_DIM=$'\033[2m' S_GREEN=$'\033[32m' S_YELLOW=$'\033[33m' S_CYAN=$'\033[36m' S_OFF=$'\033[0m'
+  if style_utf8; then M_OK="${S_GREEN}✓${S_OFF} "; else M_OK="${S_GREEN}+${S_OFF} "; fi
+  M_WARN="${S_BOLD}${S_YELLOW}!${S_OFF} "
+}
+STYLE=no STYLE_ERR=no
+if style_wanted 1; then STYLE=yes; fi
+if style_wanted 2; then STYLE_ERR=yes; fi
+style_set
+# style_off: for a command whose output an agent or a program reads. Nothing is styled, errors included.
+style_off() { STYLE=no STYLE_ERR=no; style_set; }
+say_ok() { printf '%s%s\n' "$M_OK" "$*"; }
+say_warn() { printf '%s%s\n' "$M_WARN" "$*"; }
+say_head() { printf '%s%s%s\n' "$S_BOLD" "$*" "$S_OFF"; }
+say_dim() { printf '%s%s%s\n' "$S_DIM" "$*" "$S_OFF"; }
+say_next() { printf '%sNext:%s %s\n' "$S_BOLD$S_CYAN" "$S_OFF" "$*"; }
+typed() { printf '%s%s%s' "$S_CYAN" "$*" "$S_OFF"; }
 die() {
-  if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
-    printf '\033[31merror:\033[0m %s\n' "$*" >&2
-  else
-    echo "error: $*" >&2
-  fi
+  if [ "$STYLE_ERR" = yes ]; then printf '\033[31merror:\033[0m %s\n' "$*" >&2; else echo "error: $*" >&2; fi
   exit 1
 }
+# --- end of style helpers ---
+# wait_draw <seconds> <state>, wait_clear: the one line a wait keeps up to date at a terminal.
+wait_draw() {
+  local f
+  case $(($1 % 4)) in 0) f="⠋" ;; 1) f="⠙" ;; 2) f="⠸" ;; *) f="⠴" ;; esac
+  printf '\r\033[K%s%s%s Waiting for Cowork  %s%ss of %ss · %s%s' "$S_CYAN" "$f" "$S_OFF" "$S_DIM" "$1" "$WAIT" "$2" "$S_OFF"
+}
+wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.19"
+RELAY_VERSION="0.2.20"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -64,46 +104,9 @@ KEY=""
 AT_TERMINAL=no
 if [ -t 0 ] && (exec 3<>/dev/tty) 2>/dev/null; then AT_TERMINAL=yes; fi
 
-# ---- how it looks -------------------------------------------------------------
-
-# Colour and marks, only when the output is a terminal. Piped, sent to a file, or with NO_COLOR
-# set, every line is the plain words, so a report, a note for Cowork and the clipboard never
-# hold a colour code. The words are the same either way: Cowork's skills are told to expect
-# them, and users paste them. The colours are the terminal's own, so they follow its theme.
-STYLE=no
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then STYLE=yes; fi
-style_set() {
-  if [ "$STYLE" = yes ]; then
-    S_BOLD=$'\033[1m'
-    S_DIM=$'\033[2m'
-    S_GREEN=$'\033[32m'
-    S_YELLOW=$'\033[33m'
-    S_CYAN=$'\033[36m'
-    S_OFF=$'\033[0m'
-    M_OK="${S_GREEN}✓${S_OFF} "
-    M_WARN="${S_YELLOW}!${S_OFF} "
-  else
-    S_BOLD="" S_DIM="" S_GREEN="" S_YELLOW="" S_CYAN="" S_OFF="" M_OK="" M_WARN=""
-  fi
-}
-style_set
-# style_off: for output that something else reads, such as the unattended test's report.
-style_off() { STYLE=no; style_set; }
-say_ok() { printf '%s%s\n' "$M_OK" "$*"; }
-say_warn() { printf '%s%s\n' "$M_WARN" "$*"; }
-say_head() { printf '%s%s%s\n' "$S_BOLD" "$*" "$S_OFF"; }
-say_dim() { printf '%s%s%s\n' "$S_DIM" "$*" "$S_OFF"; }
-# say_next <words>: the one thing to do now. It is a command's last line.
-say_next() { printf '%sNext:%s %s\n' "$S_BOLD$S_CYAN" "$S_OFF" "$*"; }
-# typed <command>: something the user can type, in the one colour kept for that.
-typed() { printf '%s%s%s' "$S_CYAN" "$*" "$S_OFF"; }
-# wait_draw <seconds> <state>, wait_clear: the one line a wait keeps up to date at a terminal.
-wait_draw() {
-  local f
-  case $(($1 % 4)) in 0) f="⠋" ;; 1) f="⠙" ;; 2) f="⠸" ;; *) f="⠴" ;; esac
-  printf '\r\033[K%s%s%s Waiting for Cowork  %s%ss of %ss · %s%s' "$S_CYAN" "$f" "$S_OFF" "$S_DIM" "$1" "$WAIT" "$2" "$S_OFF"
-}
-wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
+# With nobody at a terminal, an agent or a program is reading, so every line is plain, whatever
+# the terminal test or LLM_RELAY_STYLE says.
+[ "$AT_TERMINAL" = yes ] || style_off
 
 cleanup() {
   [ -z "$WORK" ] || rm -rf "$WORK"
@@ -3248,6 +3251,26 @@ Lint a review with the repository's pre-commit|pre-commit|mr
 Send a repository's wiki with it|wiki|scan
 Have Claude Code ask Cowork|security curl|ask"
 
+# tool_commands <tool>: the parts of its hint that are commands to type, one a line, so a
+# terminal can show them in the colour kept for that.
+tool_commands() {
+  case "$1" in
+    git | python3) echo "xcode-select --install" ;;
+  esac
+  case "$1" in
+    glab) printf 'brew install glab\nglab auth login\n' ;;
+    acli) printf 'brew tap atlassian/homebrew-acli && brew install acli\nacli auth login\n' ;;
+    python3) echo "brew install python" ;;
+    go) echo "brew install go" ;;
+    pre-commit) echo "brew install pre-commit" ;;
+  esac
+}
+# typed_in <text> <command>: the text, with that command in it shown as one to type.
+typed_in() {
+  local pre="${1%%"$2"*}"
+  if [ "$pre" = "$1" ]; then printf '%s' "$1"; else printf '%s%s%s' "$pre" "$(typed "$2")" "${1#*"$2"}"; fi
+}
+
 tool_hint() {
   case "$1" in
     git) echo "xcode-select --install" ;;
@@ -3269,7 +3292,7 @@ needs_tool() { command -v "$2" >/dev/null 2>&1 || die "relay $1 needs $2: $(tool
 # With "shown" it is for the terminal, and may have marks and colour. Without, it is the plain
 # lines that go in the note Cowork reads.
 feature_lines() {
-  local how="${1:-}" what tools begins t missing
+  local how="${1:-}" what tools begins t missing c
   while IFS='|' read -r what tools begins; do
     [ -n "$what" ] || continue
     missing=""
@@ -3279,10 +3302,19 @@ feature_lines() {
     # Asking Cowork has its tools on any Mac. What it needs is the webhook.
     if [ "$begins" = ask ] && [ -z "$missing" ] && ! has_webhook; then missing="set up with: relay ask --setup"; fi
     if [ "$how" = shown ] && [ "$STYLE" = yes ]; then
+      # The same words as the plain line, with a mark in front and the commands in their colour.
       if [ -z "$missing" ]; then
-        printf '  %s%s\n' "$M_OK" "$what"
+        printf '  %s%-47s%s\n' "$M_OK" "$what" "ready"
       else
-        printf '  %s%-47s%s%s%s\n' "$M_WARN" "$what" "$S_DIM" "$missing" "$S_OFF"
+        missing="$(typed_in "$missing" "relay ask --setup")"
+        for t in $tools; do
+          while IFS= read -r c; do
+            [ -z "$c" ] || missing="$(typed_in "$missing" "$c")"
+          done <<EOC
+$(tool_commands "$t")
+EOC
+        done
+        printf '  %s%-47s%s\n' "$M_WARN" "$what" "$missing"
       fi
     else
       printf '  %-47s%s\n' "$what" "${missing:-ready}"
@@ -3410,17 +3442,12 @@ begin_session() {
   echo
   say_head "What you can do on this Mac:"
   feature_lines shown
-  if [ "$STYLE" = yes ]; then
-    echo
-    say_head "Where things are:"
-    printf '  %sclones%s   %s\n' "$S_DIM" "$S_OFF" "$(tilde "$CLONES_DIRS")"
-    printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
-    printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
-    printf '  %s%s changes any of them.\n' "$(typed "relay setup")" "$S_DIM"
-    printf '%s' "$S_OFF"
-  else
-    echo "Clones are looked for under $(tilde "$CLONES_DIRS"), reviews are saved under $(tilde "$REVIEWS_DIR"), and plans under $(tilde "$PLANS_DIR"). relay setup changes any of them."
-  fi
+  echo
+  say_head "Where things are:"
+  printf '  %sclones%s   %s\n' "$S_DIM" "$S_OFF" "$(tilde "$CLONES_DIRS")"
+  printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
+  printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
+  printf '  %s changes any of them.\n' "$(typed "relay setup")"
   case "${TERM_PROGRAM:-}" in
     Apple_Terminal) ;;
     *)
@@ -4223,7 +4250,7 @@ ask_setup() {
     return 0
   fi
   echo
-  say_warn "It isn't working yet. What the wait said above is the place to start, and docs/using.md has \"When no answer comes\". relay ask --setup can be run again: it skips what is done." >&2
+  say_warn "It isn't working yet. What the wait said above is the place to start, and docs/using.md has \"When no answer comes\". $(typed "relay ask --setup") can be run again: it skips what is done." >&2
   return 1
 }
 
