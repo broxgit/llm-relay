@@ -8,33 +8,28 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
 1. On a branch, change `RELAY_VERSION` in `relay.sh` to the new version, and the "This skill is for relay" line in each skill to match: `cowork/relay-field-test/SKILL.md`, `cowork/remote-pair-run/SKILL.md`, `cowork/relay-answer/SKILL.md` and `claude/relay-ask/SKILL.md`. A smoke test fails if any of the five differ. Move what changed into `ROADMAP.md`'s Done section if it isn't there. Merge it when CI is green.
 
-2. On `main`, with that merged, tag it and make the release. Use the same number, with a `v` in front.
+2. Write the release notes in a file, for the person upgrading: what is new, what changed, what hasn't been tried, and how to update.
+
+3. On `main`, with that merged, run the script with the version and the notes:
 
    ```bash
-   git switch main && git pull --ff-only && ./relay.sh --version
+   git switch main && git pull --ff-only
    ```
 
    ```bash
-   gh release create v<version> --target main --generate-notes
+   scripts/release.sh <version> <notes-file>
    ```
 
-3. Get the hash of the release's source.
+   It does the rest, and says each step as it goes:
 
-   ```bash
-   curl -fsSL https://github.com/broxgit/llm-relay/archive/refs/tags/v<version>.tar.gz | shasum -a 256
-   ```
+   - **It refuses unless** `main` here is what GitHub has, the five version lines say that version, and CI passed. A commit that only changes documents has no CI run, so it takes the newest run on `main` when only documents have changed since. It waits for a run that is still going.
+   - **It makes the release** at that commit, with a `v` in front of the number.
+   - **It points the formula at it:** the address and the hash of the release's source, in a fresh clone of the tap, committed and pushed.
+   - **It checks it the way a user gets it:** `brew update`, `brew upgrade`, `relay --version`, `brew test` and `brew audit --strict`.
 
-4. In the tap, set `url` to that address and `sha256` to that hash in `Formula/llm-relay.rb`, then commit and push.
+   `--check` stops before anything is made. If a step fails after the release is made, run the same command again: it skips what is done.
 
-5. Check it the way a user gets it.
-
-   ```bash
-   brew update && brew upgrade llm-relay && relay --version
-   ```
-
-   ```bash
-   brew test llm-relay
-   ```
+   The script decides nothing. Whether to release is Brock's call each time, and the notes are written before it runs.
 
 ## What a version number means
 

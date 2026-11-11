@@ -46,6 +46,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### A release is one command (2026-11-11)
+
+- **Why:** Every release was the same eight steps done by hand, by an agent, and one of them had gone wrong: a clone of the tap that couldn't push.
+- **What changed:** `scripts/release.sh <version> <notes-file>` checks that `main` is what GitHub has, that the five version lines agree, and that CI passed. Then it makes the release, points the Homebrew formula at it, and checks it with `brew`. `--check` stops before anything is made, and a second run skips what is done. Whether to release is still Brock's call each time.
+
 ### Output that is easier to read, and `relay ask` in the list (2026-11-11)
 
 - **Why:** The user asked whether the relay shows that Claude Code can now hand work to Copilot, and it barely did. They also asked for output with colour that is easier to read, after a line in `relay start`'s list ran into its own state.
