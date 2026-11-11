@@ -3229,20 +3229,40 @@ check "and a place for when something goes wrong" grep -q '^## When something go
 section "Releasing"
 # scripts/release.sh does the steps of docs/releasing.md. What it refuses is tested here. The
 # rest needs GitHub and Homebrew, and runs at each release.
+# Every run here names its own notes folder and is a dry run. Run bare on a developer's Mac,
+# the script would find the real notes in releases/latest and make a release.
 RS="$REPO/scripts/release.sh"
-echo "Notes." >"$T/release-notes.md"
+RL="$T/release-latest"
+mkdir -p "$RL"
+# shellcheck disable=SC2120
+rs() { env RELEASE_LATEST="$RL" "$RS" "$@" --dry-run 2>&1; }
 NOW="$("$W" --version | sed 's/^relay //')"
-refuse "the release script needs a version and notes" "$RS"
-expect "a version has no v in front" "with no v in front: v$NOW" "$RS" "v$NOW" "$T/release-notes.md"
-expect "the notes have to be there" "no release notes at" "$RS" "$NOW" "$T/no-such-notes.md"
-out="$("$RS" 9.9.9 "$T/release-notes.md" --dry-run 2>&1)"; rc=$?
-case "$rc:$out" in 0:*) bad "it refuses a version the five lines don't say" "$out" ;; *"these don't say 9.9.9: relay.sh cowork/remote-pair-run/SKILL.md cowork/relay-field-test/SKILL.md cowork/relay-answer/SKILL.md claude/relay-ask/SKILL.md"*) ok "it refuses a version the five lines don't say" ;; *) bad "it refuses a version the five lines don't say" "exit $rc: $out" ;; esac
-case "$out" in *"== The commit"* | *"== The release"*) bad "and stops there, before it asks GitHub anything" "$out" ;; *) ok "and stops there, before it asks GitHub anything" ;; esac
-expect "its flag for changing nothing is --dry-run, as the conventions name it" "[--dry-run]" "$RS"
-expect "and the old name, --check, still does the same" "these don't say 9.9.9" "$RS" 9.9.9 "$T/release-notes.md" --check
+out="$(rs)"; rc=$?
+case "$rc:$out" in 0:*) bad "with no notes in releases/latest there is nothing to release" "$out" ;; *"no release notes in $RL. Put them there as release-VERSION.md"*) ok "with no notes in releases/latest there is nothing to release" ;; *) bad "with no notes in releases/latest there is nothing to release" "exit $rc: $out" ;; esac
+echo "Notes." >"$RL/release-9.9.9.md"
+out="$(rs)"; rc=$?
+case "$rc:$out" in 0:*) bad "the version comes from the name of the notes file" "$out" ;; *"release-9.9.9.md, so this is 9.9.9"*"these don't say 9.9.9: relay.sh cowork/remote-pair-run/SKILL.md cowork/relay-field-test/SKILL.md cowork/relay-answer/SKILL.md claude/relay-ask/SKILL.md"*) ok "the version comes from the name of the notes file" ;; *) bad "the version comes from the name of the notes file" "exit $rc: $out" ;; esac
+case "$out" in *"== The commit"* | *"== The release"*) bad "and a version the five lines don't say stops it, before it asks GitHub anything" "$out" ;; *) ok "and a version the five lines don't say stops it, before it asks GitHub anything" ;; esac
+echo "Notes." >"$RL/release-9.9.8.md"
+out="$(rs)"; rc=$?
+case "$rc:$out" in 0:*) bad "two notes files leave it unclear which release is meant" "$out" ;; *"more than one file in $RL"*"Move the older ones to releases/archive"*"release-9.9.8.md"*"release-9.9.9.md"*) ok "two notes files leave it unclear which release is meant" ;; *) bad "two notes files leave it unclear which release is meant" "exit $rc: $out" ;; esac
+rm -f "$RL"/*.md
+echo "Notes." >"$RL/notes.md"
+expect "a notes file has to be named for its release" "A notes file is named release-0.2.18.md" rs
+rm -f "$RL"/*.md
+# The older way, with the version and the notes named.
+expect "named outright, a version has no v in front" "with no v in front: v$NOW" rs "v$NOW" "$RL/../release-notes.md"
+expect "and the notes have to be there" "no release notes at" rs "$NOW" "$T/no-such-notes.md"
+echo "Notes." >"$T/release-notes.md"
+expect "and a version the five lines don't say is refused" "these don't say 9.9.9" rs 9.9.9 "$T/release-notes.md"
+expect "its flag for changing nothing is --dry-run, as the conventions name it" "scripts/release.sh [--dry-run]" "$RS" --help
+expect "and the old name, --check, still does the same" "these don't say 9.9.9" env RELEASE_LATEST="$RL" "$RS" 9.9.9 "$T/release-notes.md" --check
+if grep -n '"\$RS"' "$REPO/tests/smoke.sh" | grep -v -e 'RELEASE_LATEST=' -e '"\$RS" --help' -e 'grep -' | grep -q .; then bad "no test runs the release script bare"; else ok "no test runs the release script bare"; fi
 # The files CI skips are listed in the workflow and in the script, and have to be the same.
-if [ "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml" | sed -n 's/^ *- "\(.*\)"$/\1/p' | LC_ALL=C sort -u | tr '\n' ' ')" = "AGENTS.md CLAUDE.md LICENSE README.md ROADMAP.md design-and-decisions/** docs/** " ] && grep -qF "DOCS_ONLY='^(design-and-decisions/|docs/|README\.md\$|ROADMAP\.md\$|AGENTS\.md\$|CLAUDE\.md\$|LICENSE\$)'" "$RS"; then ok "the script and CI agree on which files are only documents"; else bad "the script and CI agree on which files are only documents" "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml")"; fi
-check "the releasing guide gives the script" grep -q '^   scripts/release.sh <version> <notes-file>$' "$REPO/docs/releasing.md"
+if [ "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml" | sed -n 's/^ *- "\(.*\)"$/\1/p' | LC_ALL=C sort -u | tr '\n' ' ')" = "AGENTS.md CLAUDE.md LICENSE README.md ROADMAP.md design-and-decisions/** docs/** releases/** " ] && grep -qF "DOCS_ONLY='^(design-and-decisions/|docs/|releases/|README\.md\$|ROADMAP\.md\$|AGENTS\.md\$|CLAUDE\.md\$|LICENSE\$)'" "$RS"; then ok "the script and CI agree on which files are only documents"; else bad "the script and CI agree on which files are only documents" "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml")"; fi
+check "the releasing guide gives the script, with nothing to type after it" grep -q '^   scripts/release.sh$' "$REPO/docs/releasing.md"
+check "the notes of a release are kept out of git" grep -qx 'releases/latest' "$REPO/.gitignore"
+check "the log of releases has a line for each" grep -q '^| 0.2.23 | 2026-11-11 | da5f73c |$' "$REPO/releases/log.md"
 
 section "No dependency on llm-wiki"
 # Scans and merge requests with no wiki command installed.

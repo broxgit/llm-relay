@@ -46,6 +46,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### A release with nothing to type (2026-11-11)
+
+- **Why:** Each release meant pasting a command with that release's version and the path of its notes. The user scaffolded `releases/latest` and `releases/archive`, and asked for a script that needs no arguments and does the git steps too.
+- **What changed:** `scripts/release.sh` takes nothing. It reads the version from the one notes file in `releases/latest`, named `release-<version>.md`, switches to `main` and pulls, and after the release adds a line to `releases/log.md` and pushes it. The two notes folders aren't in git. `releases/log.md` is, with a line for every release so far.
+
 ### Conventions version 2, and the last two gaps (2026-11-11)
 
 - **Why:** llm-wiki merged version 2 of the shared guide, with the three changes the relay asked for. And the audit had left two gaps.
