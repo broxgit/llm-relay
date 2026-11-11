@@ -46,6 +46,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### Every command looks the same (2026-11-11)
+
+- **Why:** Four commands had the new look and the rest printed as before, so a session moved between two styles.
+- **What changed:** `relay run`, `scan`, `mr`, `branch`, `ticket`, `review`, `apply`, `practice`, `skills`, `setup --skills`, `field-test` and the secrets check follow `docs/conventions.md`: a tick on what was sent, saved or passed, a bold yellow mark on what needs attention, bold headings, dim sizes and timings, and commands in cyan. No word changed. What the relay writes for Cowork stays plain, and tests check each command for it: nothing it wrote holds a colour code, and a terminal's lines with the codes taken out are a pipe's. In 0.2.21.
+
 ### One set of conventions with llm-wiki (2026-11-11)
 
 - **Why:** The user liked the relay's look at 0.2.18 and wanted llm-wiki to match. The llm-wiki session turned the style into a wider guide, `docs/conventions.md`, with changes, and merged it there as version 1.

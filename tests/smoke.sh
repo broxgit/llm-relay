@@ -72,6 +72,27 @@ refuse() {
   shift
   if out="$("$@" 2>&1)"; then bad "$name (it succeeded)" "$out"; else ok "$name"; fi
 }
+# How it looks, for every command. docs/conventions.md has the rules these two hold a command to.
+ESC_BYTE="$(printf '\033')"
+# styled <keys> <command...>: runs it at a pseudo-terminal with style on, typing the keys.
+styled() { local keys="$1"; shift; env -u NO_COLOR LC_ALL=en_US.UTF-8 TERM=xterm python3 "$TTY" "$keys" "$@" 2>&1; }
+# no_codes_in <name> <folder>...: nothing the relay wrote there holds a colour code. A note, a
+# prompt, a report and a saved answer are read by Cowork or an assistant, never by a terminal.
+no_codes_in() {
+  local name="$1" found
+  shift
+  # Archives and git's own files are binary, and can hold the byte by chance. What is inside an
+  # archive is checked where it is unpacked. LC_ALL=C, so a file with a tick in it is still text.
+  found="$(LC_ALL=C grep -rIl --exclude-dir=.git -e "$ESC_BYTE" -e '✓ ' "$@" 2>/dev/null | head -n 5)"
+  if [ -z "$found" ]; then ok "$name"; else bad "$name" "$found"; fi
+}
+# plain_words: what a terminal showed, with the codes, the marks and the live wait taken out.
+plain_words() { sed "s/${ESC_BYTE}\[[0-9;]*[mK]//g; s/^\( *\)✓ /\1/; s/^\( *\)[!+] /\1/" | tr -d '\r' | grep -v 'Waiting for Cowork  '; }
+# same_words <name> <styled output> <piped output>: the words never change.
+same_words() {
+  if [ "$(printf '%s\n' "$2" | plain_words)" = "$(printf '%s\n' "$3")" ]; then ok "$1"; else bad "$1" "$(diff <(printf '%s\n' "$2" | plain_words) <(printf '%s\n' "$3") | head -n 12)"; fi
+}
+
 # expect <name> <text> <command...>: the output contains text, whatever the exit code.
 expect() {
   local name="$1" want="$2" out
@@ -690,6 +711,19 @@ rl_expect "it says what to tell Cowork" 0 "Now tell Cowork: done"
 check "the sent report is complete" bash -c "tail -n 1 '$OD'/Documents/Cowork/relay/t1/reports/demo-v1-*.txt | grep -q 'DEMO RUN: PASS'"
 check "a copy stays on the machine" bash -c "ls '$RH'/pair-run-reports/demo-v1-*.txt"
 sleep 1
+# How a run looks at a terminal: the same words, a mark where something was done, and no code in
+# the report or anywhere else the relay wrote.
+rl_new t1s d1 'result "fine" 0
+report_end'
+rl y t1s/d1 --expect 1
+RL_PLAIN="$RL_OUT"
+sleep 1
+sty_out="$(styled y env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" run t1s/d1 --expect 1)"
+same_words "a styled run shows what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed -n '/^Deliverable: /,/^Run it?/p')" "$(printf '%s\n' "$RL_PLAIN" | tr -d '\r' | sed -n '/^Deliverable: /,/^Run it?/p')"
+case "$sty_out" in *"${ESC_BYTE}[1mFiles:${ESC_BYTE}[0m"*) ok "a styled run makes Files: a heading" ;; *) bad "a styled run makes Files: a heading" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/t1s/reports/"*"Now tell Cowork: done"*) ok "a styled run marks the report it sent, and ends on what to tell Cowork" ;; *) bad "a styled run marks the report it sent, and ends on what to tell Cowork" "$sty_out" ;; esac
+case "$sty_out" in *"DEMO RUN: PASS"*) ok "the deliverable's own output is still there" ;; *) bad "the deliverable's own output is still there" "$sty_out" ;; esac
+no_codes_in "a styled run writes no code to OneDrive, the report or the home folder" "$RH"
 
 rl n t1/d1
 rl_expect "n runs nothing" 1 "Nothing ran, and no report was sent"
@@ -901,6 +935,20 @@ out="$(cd "$SR/sub" && env HOME="$RH" "$W" scan 2>&1)"
 case "$out" in *"Scanned scan-me"*) ok "scan defaults to the repository you're in" ;; *) bad "scan defaults to the repository you're in" "$out" ;; esac
 check "a repository with no wiki says so" grep -q '^wiki: none covers this repository$' "$SD/scan-me.txt"
 check "and its archive has no wiki" bash -c "! tar -tzf '$SD/scan-me.tar.gz' | grep -q repo-wiki"
+# How a scan looks at a terminal: the same words, with a mark and a colour, and no code in what
+# it writes. The clipboard here is a fake, so a real one is never touched.
+STB="$T/style-bin"
+mkdir -p "$STB"
+printf '#!/bin/sh\ncat >"%s/clipboard-sty"\n' "$T" >"$STB/pbcopy"
+chmod +x "$STB/pbcopy"
+sty_scan() { styled "" env HOME="$RH" PATH="$STB:$PATH" "$W" scan "$@"; }
+unsize() { sed 's/, [0-9][0-9]* bytes//'; }
+sty_out="$(sty_scan "$SR")"
+same_words "a styled scan says what a piped one says" "$(printf '%s\n' "$sty_out" | plain_words | grep -v 'on your clipboard' | unsize)" "$(sc "$SR" 2>&1 | unsize)"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive:"*) ok "a styled scan marks what it sent" ;; *) bad "a styled scan marks what it sent" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Scanned scan-me:"*"${ESC_BYTE}[2m"*" bytes${ESC_BYTE}[0m"*) ok "and dims its size" ;; *) bad "and dims its size" "$sty_out" ;; esac
+no_codes_in "a styled scan writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard-sty"
+check "nor into the scan's own note inside the archive" bash -c "! tar -xzOf '$SD/scan-me.tar.gz' scan.txt | grep -q '$ESC_BYTE'"
 
 # The wiki that covers a repository goes with its scan, and nothing else from the collection.
 new_wiki relay-covered
@@ -1241,6 +1289,22 @@ case "$out" in *"Run go build"*) bad "--no-checks doesn't ask" "$out" ;; *) ok "
 check "or run them" test ! -e "$T/go.log"
 out="$(mr_key n "$MRU" --checks)"
 case "$out" in *"Run go build"*) bad "--checks doesn't ask" "$out" ;; *"go test: passed"*) ok "--checks doesn't ask" ;; *) bad "--checks doesn't ask" "$out" ;; esac
+# How a merge request looks at a terminal. A check that is running is drawn over by its result,
+# so the plain words are what is left after the last carriage return.
+mrp() { local keys="$1"; shift; env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" "$keys" "$W" mr "$@" 2>&1; }
+mrs() { local keys="$1"; shift; styled "$keys" env HOME="$RH" PATH="$FG:$PATH" "$W" mr "$@"; }
+tty_plain() { sed 's/^.*\r\(.\)/\1/' | plain_words | sed 's/ ([0-9]*s)$//; s/, [0-9][0-9]* bytes//'; }
+rm -f "$T/clipboard"
+sty_out="$(mrs y "$MRU")"
+same_words "a styled merge request says what a plain one does" "$(printf '%s\n' "$sty_out" | tty_plain)" "$(mrp y "$MRU" | tty_plain)"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m go build: passed"*) ok "a styled check that passed has a mark" ;; *) bad "a styled check that passed has a mark" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/mrs/svc-7.txt"*) ok "a styled merge request marks what it sent" ;; *) bad "a styled merge request marks what it sent" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[1mPaste this into Cowork. It's on your clipboard:${ESC_BYTE}[0m"*) ok "and makes the line above the prompt a heading" ;; *) bad "and makes the line above the prompt a heading" "$sty_out" ;; esac
+no_codes_in "a styled merge request writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
+check "nor into the checks' summary inside the archive" bash -c "! tar -xzOf '$MD/svc-7.tar.gz' mr/checks/summary.txt | grep -q '$ESC_BYTE'"
+sty_out="$(FAKE_GO_FAIL="test" mrs y "$MRU")"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m go test: FAILED, exit 1"*) ok "a styled check that failed is marked as needing attention" ;; *) bad "a styled check that failed is marked as needing attention" "$sty_out" ;; esac
+check "and the summary in the archive says it in plain words" bash -c "tar -xzOf '$MD/svc-7.tar.gz' mr/checks/summary.txt | grep -q '^go test: FAILED, exit 1 ('"
 # A global hook has to stay off in the temporary copy, as it would rewrite go.mod there.
 GH="$T/global-hooks"
 mkdir -p "$GH"
@@ -1386,6 +1450,21 @@ out="$(rv n t20/rev --expect 3)"
 case "$out" in *"svc-7.md says it covered:"*"  - Read 3 of 9 files"*"Skipped: [31mdocs"*) ok "review shows the Coverage section" ;; *) bad "review shows the Coverage section" "$out" ;; esac
 case "$out" in *"no Coverage section"*) bad "with no warning" "$out" ;; *) ok "with no warning" ;; esac
 case "$out" in *"Not this"* | *"A finding"*) bad "and only that section" "$out" ;; *) ok "and only that section" ;; esac
+# How a review looks at a terminal.
+rvs() { local keys="$1"; shift; styled "$keys" env HOME="$RH" PATH="$FG:$PATH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" review "$@"; }
+sty_out="$(rvs n t20/rev --expect 3)"
+same_words "a styled review shows what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+case "$sty_out" in *"${ESC_BYTE}[1mWhat svc-7.md says it covered:${ESC_BYTE}[0m"*) ok "a styled review makes the coverage a heading" ;; *) bad "a styled review makes the coverage a heading" "$sty_out" ;; esac
+# The review above has a control character of Cowork's in it, which is copied as it came, so what
+# the relay writes is checked on a review without one.
+RDS="$OD/Documents/Cowork/Tasks/t20s/output/rev"
+mkdir -p "$RDS/reviews/ABC-12"
+printf '# a plain review\n\n## Coverage\n\n- Read all of it\n' >"$RDS/reviews/ABC-12/plain-1.md"
+bash "$LIB" manifest "$RDS" >/dev/null
+sty_out="$(rvs y t20s/rev --expect 1)"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Saved: $RV/ABC-12/plain-1.md"*) ok "a styled review marks what it saved" ;; *) bad "a styled review marks what it saved" "$sty_out" ;; esac
+check "what it saved is the review" grep -q 'a plain review' "$RV/ABC-12/plain-1.md"
+no_codes_in "a styled review writes no code into the reviews or the settings" "$RV/ABC-12/plain-1.md" "$RH/.config" "$RH/pair-run-reports"
 case "$out" in *$'\033'*) bad "and no control characters" "$out" ;; *) ok "and no control characters" ;; esac
 echo '# second review' >"$RD/reviews/ABC-12/svc-7.md"
 bash "$LIB" manifest "$RD" >/dev/null
@@ -1453,6 +1532,9 @@ git -C "$AR" checkout -q -- b.txt
 bash "$LIB" manifest "$RL_D" >/dev/null
 out="$(ap n t22/fix --repo "$AR" --expect 2)"
 case "$out" in *"Warning: there's no report"*"Nothing changed"*) ok "apply warns with no passing run, and n changes nothing" ;; *) bad "apply warns with no passing run, and n changes nothing" "$out" ;; esac
+sty_out="$(styled n env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" apply t22/fix --repo "$AR" --expect 2)"
+same_words "a styled apply that is refused says what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Warning: there's no report"*) ok "a styled apply marks its warning" ;; *) bad "a styled apply marks its warning" "$sty_out" ;; esac
 check "really nothing" test -z "$(git -C "$AR" status --short)"
 RL_WAIT=0 rl y t22/fix --expect 2
 sleep 1
@@ -1460,6 +1542,12 @@ out="$(ap y t22/fix --repo "$AR" --expect 2)"
 case "$out" in *"no report"*) bad "a passing run means no warning" "$out" ;; *) ok "a passing run means no warning" ;; esac
 check "apply changes the working tree" bash -c "grep -q two '$AR/a.txt' && grep -q two '$AR/b.txt'"
 check "and commits nothing" bash -c "[ \"\$(git -C '$AR' rev-parse HEAD)\" = '$AH' ]"
+# How apply looks at a terminal: the same words, and no code in the patch it leaves.
+git -C "$AR" checkout -q -- a.txt b.txt
+sty_out="$(styled y env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" apply t22/fix --repo "$AR" --expect 2)"
+same_words "a styled apply shows what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Applied, and nothing is committed. Look it over with: ${ESC_BYTE}[36mgit -C $AR diff${ESC_BYTE}[0m"*) ok "a styled apply marks it done, with the command to type in colour" ;; *) bad "a styled apply marks it done, with the command to type in colour" "$sty_out" ;; esac
+no_codes_in "a styled apply leaves no code in the repository, OneDrive or the home folder" "$AR" "$RH"
 git -C "$AR" checkout -q -- a.txt b.txt
 printf 'conflict\n' >"$AR/b.txt"
 git -C "$AR" commit -qam conflict
@@ -1630,6 +1718,11 @@ case "$rc:$out" in 0:*"the same as when you said to send it. Sending."*"Now tell
 check "its note says the answer was an earlier one" grep -q '^secrets check: places that looked like secrets: 4, the same as when the user chose to send them before' "$SD/secret-repo.txt"
 out="$(xk n "$XR" --ask)"
 case "$out" in *"Send secret-repo to OneDrive anyway? [y]es, [n]o: "*"Nothing from secret-repo was sent."*) ok "--ask asks again" ;; *) bad "--ask asks again" "$out" ;; esac
+# The question is shown with a mark and a colour, and says the same words.
+sty_out="$(styled n env HOME="$RH" PATH="$STB:$PATH" "$W" --dir "$OD" scan "$XR" --ask)"
+same_words "the styled secrets question says what the plain one says" "$sty_out" "$(xk n "$XR" --ask | tr -d '\r')"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Before anything is sent:"*"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Nothing from secret-repo was sent."*) ok "the styled secrets question is marked as needing attention" ;; *) bad "the styled secrets question is marked as needing attention" "$sty_out" ;; esac
+no_codes_in "refusing a scan writes no code to OneDrive or the home folder" "$RH"
 out="$(xsc "$XR" </dev/null 2>&1)"; rc=$?
 case "$rc:$out" in 0:*) bad "a kept answer isn't used with no terminal" "$out" ;; *"needs a terminal"*) ok "a kept answer isn't used with no terminal" ;; *) bad "a kept answer isn't used with no terminal" "$out" ;; esac
 # A line that only moved is the same finding. A new one isn't.
@@ -1740,9 +1833,18 @@ check "the copy carries a stamp" grep -q '^<!-- relay:stamp template 1 | source 
 check "the note says how to cite the skill" grep -q 'write this one as `review [0-9a-f]\{8\}`' "$KC/review/SKILL.md"
 out="$(kk)"; rc=$?
 case "$rc:$out" in 0:*"review: in step"*"plain: in step"*) ok "relay skills says they're in step" ;; *) bad "relay skills says they're in step" "exit $rc: $out" ;; esac
+# How the skills commands look at a terminal.
+kks() { styled "" env HOME="$KH" "$W" --dir "$KO" skills; }
+sty_out="$(kks)"
+same_words "a styled relay skills says what a piped one does" "$sty_out" "$out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m review: in step."*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m plain: in step."*) ok "and marks each skill that is in step" ;; *) bad "and marks each skill that is in step" "$sty_out" ;; esac
 cp "$KC/review/SKILL.md" "$T/skill-before"
 out="$(ks)"
 case "$out" in *"skill review: Cowork's copy is in step"*) ok "setup again says so" ;; *) bad "setup again says so" "$out" ;; esac
+sty_out="$(styled "" env HOME="$KH" "$W" setup --dir "$KO")"
+same_words "a styled setup says what a piped one does" "$sty_out" "$out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m installed: $KC/remote-pair-run"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m skill review: Cowork's copy is in step"*) ok "a styled setup marks what it installed and what is in step" ;; *) bad "a styled setup marks what it installed and what is in step" "$sty_out" ;; esac
+no_codes_in "a styled setup writes no code to OneDrive or the home folder" "$KO" "$KH"
 check "and doesn't make the copy again" cmp "$T/skill-before" "$KC/review/SKILL.md"
 # Another Mac can share this OneDrive. Its setup, with no skills named, leaves these copies alone.
 env HOME="$T/skill-home-2" "$W" setup --dir "$KO" --reviews "$T/skill-reviews" --clones "$T/skill-clones" </dev/null >/dev/null 2>&1
@@ -1752,6 +1854,9 @@ check "a setup that never named a skill removes none" test -f "$KC/plain/SKILL.m
 echo 'A new step.' >>"$KS/review/SKILL.md"
 out="$(kk)"; rc=$?
 case "$rc:$out" in 1:*"review: your skill has changed since Cowork's copy was made"*) ok "relay skills sees a skill that changed" ;; *) bad "relay skills sees a skill that changed" "exit $rc: $out" ;; esac
+sty_out="$(kks)"
+same_words "a styled relay skills says what a piped one does for a skill that changed" "$sty_out" "$out"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m review: your skill has changed since Cowork's copy was made. ${ESC_BYTE}[36mrelay setup${ESC_BYTE}[0m, scan or mr updates it."*) ok "a skill that changed is marked as needing attention, with the command in colour" ;; *) bad "a skill that changed is marked as needing attention, with the command in colour" "$sty_out" ;; esac
 git init -q "$T/skill-repo" && git -C "$T/skill-repo" commit -q --allow-empty -m first
 kscan() { env HOME="$KH" "$W" --dir "$KO" scan "$T/skill-repo" --no-wiki 2>&1; }
 out="$(kscan)"
@@ -1778,6 +1883,8 @@ case "$out" in *"$(printf '\033')"*) bad "control characters from OneDrive don't
 out="$(env HOME="$KH" python3 "$TTY" n "$W" setup --dir "$KO" 2>&1)"
 case "$out" in *"Replace Cowork's copy with a fresh one?"*"left as it is in OneDrive"*) ok "at a terminal it shows the difference and asks" ;; *) bad "at a terminal it shows the difference and asks" "$out" ;; esac
 check "n keeps OneDrive's copy" grep -q 'Cowork added this' "$KC/review/SKILL.md"
+sty_out="$(styled n env HOME="$KH" "$W" setup --dir "$KO")"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m skill review: Cowork's copy was changed in OneDrive after the relay made it."*"Replace Cowork's copy with a fresh one? [y]es, [n]o: "*"left as it is in OneDrive"*) ok "a styled setup marks a copy changed in OneDrive, and asks as it did" ;; *) bad "a styled setup marks a copy changed in OneDrive, and asks as it did" "$sty_out" ;; esac
 out="$(env HOME="$KH" python3 "$TTY" y "$W" setup --dir "$KO" 2>&1)"
 case "$out" in *"skill review: Cowork's copy replaced with a fresh one"*) ok "y replaces it" ;; *) bad "y replaces it" "$out" ;; esac
 refuse "and the change is gone" grep -q 'Cowork added this' "$KC/review/SKILL.md"
@@ -1791,6 +1898,9 @@ bash "$LIB" manifest "$KR" >/dev/null
 krev() { env HOME="$KH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$KO" review kt/rev 2>&1; }
 out="$(krev)"
 case "$out" in *"Warning: this review used an older copy of your review skill (00000000, and yours is now $KSHA)"*) ok "relay review warns when a review cites an older copy" ;; *) bad "relay review warns when a review cites an older copy" "$out" ;; esac
+sty_out="$(styled n env HOME="$KH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" --dir "$KO" review kt/rev)"
+same_words "a styled review says what a plain one does about a skill's stamp" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Warning: this review used an older copy of your review skill"*) ok "and marks it as needing attention" ;; *) bad "and marks it as needing attention" "$sty_out" ;; esac
 printf '# Review\n\n## Coverage\n\n- Skills loaded: `review %s`\n' "$KSHA" >"$KR/reviews/ABC-1/svc-1.md"
 bash "$LIB" manifest "$KR" >/dev/null
 lacks "and not when it cites the current one" "older copy" krev
@@ -1918,6 +2028,14 @@ out="$(ft field-test)"
 check "a second run keeps the repository as it is" test -f "$FRP/kept.txt"
 check "and the note says it was there" grep -q '^test repository: ~/relay-field-test, there already, ' "$FN"
 rm -f "$FRP/kept.txt"
+# How a field test looks at a terminal. The note it shows is the one it wrote, so only the lines
+# that depend on the time and on there being a terminal are left out of the comparison.
+rm -f "$T/clipboard"
+pl_out="$(ft field-test | grep -v -e '^taken: ' -e '^at a terminal: ')"
+sty_out="$(styled "" env HOME="$FH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$FO" field-test)"
+same_words "a styled field-test says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | grep -v -e '^taken: ' -e '^at a terminal: ')" "$pl_out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"*"${ESC_BYTE}[1mPaste this into a new Cowork session. It's on your clipboard:${ESC_BYTE}[0m"*"send it: ${ESC_BYTE}[36mUse the YOUR TURN block format.${ESC_BYTE}[0m"*) ok "a styled field-test marks what it sent, and the words to send in colour" ;; *) bad "a styled field-test marks what it sent, and the words to send in colour" "$sty_out" ;; esac
+no_codes_in "a styled field-test writes no code to OneDrive, the home folder or the clipboard" "$FO" "$FH" "$T/clipboard"
 expect "the second branch scans as the skill says" "from your local side, not on origin" env HOME="$FH" "$W" --dir "$FO" scan "$FRP" --branch side --no-wiki
 mkdir -p "$T/ft-home-2/relay-field-test"
 echo mine >"$T/ft-home-2/relay-field-test/mine.txt"
@@ -2063,6 +2181,14 @@ rm -rf "$T/branch-unpack" && mkdir -p "$T/branch-unpack" && tar -xzf "$BD/svc-AB
 check "and their output goes in the archive, under branch/" test -f "$T/branch-unpack/branch/checks/summary.txt"
 out="$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" n "$W" --dir "$OD" branch "$BC" 2>&1)"
 case "$out" in *"on a temporary copy of your branch ABC-12-work at $MR_HEAD, by you?"*) ok "at a terminal the question names the branch" ;; *) bad "at a terminal the question names the branch" "$out" ;; esac
+# How a branch looks at a terminal.
+rm -f "$T/clipboard"
+sty_out="$(styled "" env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks)"
+same_words "a styled branch says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(brh "$BC" --no-checks | sed 's/, [0-9][0-9]* bytes//')"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed branch ABC-12-work of svc"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1mPaste this into a new Cowork session. It's on your clipboard:${ESC_BYTE}[0m"*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
+styled "" env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks >/dev/null
+no_codes_in "a styled branch writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
+check "nor into the note inside the archive" bash -c "! tar -xzOf '$BD/svc-ABC-12-work.tar.gz' branch/diff.patch | grep -q '$ESC_BYTE'"
 # The plan kept for the ticket goes with it.
 out="$(brh "$BC" --no-checks)"
 case "$out" in *"Included the plan, ~/plans/ABC-12/plan.md"*) ok "the plan kept for the branch's ticket goes with it" ;; *) bad "the plan kept for the branch's ticket goes with it" "$out" ;; esac
@@ -2177,6 +2303,13 @@ check "it makes a repository that says the relay made it" test -f "$GH/relay-pra
 check "with one file that says hello" bash -c "[ \"\$(cat '$GH/relay-practice/greeting.txt')\" = hello ]"
 check "committed, with nothing left over" bash -c "[ -z \"\$(git -C '$GH/relay-practice' status --short)\" ] && git -C '$GH/relay-practice' rev-parse -q --verify HEAD >/dev/null"
 check "the prompt asks for a practice round" grep -q "Use remote-pair-run for a practice round. I've just run relay practice." "$T/clipboard"
+rm -f "$T/clipboard"
+PSH="$T/practice-style-home"
+PSO="$T/practice-style-onedrive"
+mkdir -p "$PSH" "$PSO/Documents/Cowork"
+sty_out="$(styled "" env HOME="$PSH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$PSO" practice)"
+case "$sty_out" in *"The practice changes ~/relay-practice, which this command made. ${ESC_BYTE}[36mrelay practice --clean${ESC_BYTE}[0m removes it."*) ok "a styled practice shows the command that cleans up in colour" ;; *) bad "a styled practice shows the command that cleans up in colour" "$sty_out" ;; esac
+no_codes_in "a styled practice writes no code to OneDrive, the home folder, the repository or the clipboard" "$PSO" "$PSH" "$T/clipboard"
 check "the note says it's a practice, and what's in the repository" grep -q '^practice: yes. The repository is ~/relay-practice, made now, with greeting.txt on main, which says hello$' "$GN"
 refuse "the practice note holds no path from this Mac" grep -q -e "$T" -e "$GH" -e "$HOME" -e '/Users/' -e '/home/' "$GN"
 gp >/dev/null
@@ -2194,6 +2327,35 @@ out="$(gp --clean)"
 case "$out" in *"Left ~/relay-practice: relay practice didn't make it."*) ok "and --clean leaves such a folder alone" ;; *) bad "and --clean leaves such a folder alone" "$out" ;; esac
 check "it's still there" test -d "$GH/relay-practice"
 rmdir "$GH/relay-practice"
+# How the clean-ups look at a terminal, on a home of their own.
+SH="$T/clean-home"
+SO="$T/clean-onedrive"
+mkdir -p "$SH" "$SO/Documents/Cowork/relay/scans"
+mk_clean() {
+  mkdir -p "$SH/relay-practice" "$SH/relay-field-test" "$SO/Documents/Cowork/relay/field-test"
+  echo made >"$SH/relay-practice/.relay-practice"
+  echo made >"$SH/relay-field-test/.relay-field-test"
+  echo x >"$SO/Documents/Cowork/relay/scans/relay-practice.txt"
+  echo x >"$SO/Documents/Cowork/relay/field-test/note.txt"
+}
+mk_clean
+pl_out="$(cd "$SH/relay-practice" && env HOME="$SH" "$W" --dir "$SO" practice --clean 2>&1)"
+mk_clean
+sty_out="$(cd "$SH/relay-practice" && styled "" env HOME="$SH" "$W" --dir "$SO" practice --clean)"
+same_words "a styled practice --clean says what a piped one does" "$sty_out" "$pl_out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed ~/relay-practice"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed Documents/Cowork/relay/scans/relay-practice.txt from OneDrive"*"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Your terminal was in the folder that's gone now. Before anything else, run: ${ESC_BYTE}[36mcd ~${ESC_BYTE}[0m"*) ok "a styled practice --clean marks what it removed, and the command to type" ;; *) bad "a styled practice --clean marks what it removed, and the command to type" "$sty_out" ;; esac
+mk_clean
+pl_out="$(cd "$SH/relay-field-test" && env HOME="$SH" "$W" --dir "$SO" field-test --clean 2>&1)"
+mk_clean
+sty_out="$(cd "$SH/relay-field-test" && styled "" env HOME="$SH" "$W" --dir "$SO" field-test --clean)"
+same_words "a styled field-test --clean says what a piped one does" "$sty_out" "$pl_out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed ~/relay-field-test"*"${ESC_BYTE}[2mCowork's task folders"*) ok "a styled field-test --clean marks what it removed, and dims what it left" ;; *) bad "a styled field-test --clean marks what it removed, and dims what it left" "$sty_out" ;; esac
+rm -rf "$SH/relay-practice" "$SH/relay-field-test"
+mkdir -p "$SH/relay-practice"
+sty_out="$(styled "" env HOME="$SH" "$W" --dir "$SO" practice --clean)"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Left ~/relay-practice: relay practice didn't make it."*) ok "a styled --clean marks a folder it left alone" ;; *) bad "a styled --clean marks a folder it left alone" "$sty_out" ;; esac
+rm -rf "$SH/relay-practice"
+no_codes_in "the clean-ups write no code anywhere" "$SO" "$SH"
 refuse "relay practice takes --clean or nothing" gp extra
 check "the skill has a section for a practice round" grep -q '^## A practice round$' "$SK/SKILL.md"
 check "it offers practice to someone who hasn't run anything yet" grep -q 'they can run `relay practice`' "$SK/SKILL.md"
@@ -2322,6 +2484,16 @@ case "$out" in *'Find the discussions that mention ABC-12 or "Make the widget fa
 case "$out" in *'and the tickets ABC-13, ABC-1. Answer under these headings'*) ok "and the parent" ;; *) bad "and the parent" "$out" ;; esac
 case "$out" in *'THREADS, one line each with its link, channel and date. DECISIONS'*'OPEN QUESTIONS. PEOPLE'*'NOT FOUND'*) ok "and asks for a layout Cowork can read back" ;; *) bad "and asks for a layout Cowork can read back" "$out" ;; esac
 refuse "and the clipboard keeps the prompt for Cowork only" grep -q -e 'Slackbot' -e 'Find the discussions' "$T/clipboard"
+# How a ticket looks at a terminal.
+rm -f "$T/clipboard"
+sty_out="$(styled "" env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12)"
+same_words "a styled ticket says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(tk ABC-12 | sed 's/, [0-9][0-9]* bytes//')"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed ABC-12:"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt"*"${ESC_BYTE}[1mPaste this into Cowork. It's on your clipboard:${ESC_BYTE}[0m"*"${ESC_BYTE}[1mAnd this one is for Slackbot"*) ok "a styled ticket marks what it packed and sent, and heads the two prompts" ;; *) bad "a styled ticket marks what it packed and sent, and heads the two prompts" "$sty_out" ;; esac
+styled "" env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12 >/dev/null
+no_codes_in "a styled ticket writes no code to OneDrive, the home folder or the clipboard" "$TO" "$TH" "$T/clipboard"
+check "nor into the page inside the archive" bash -c "! tar -xzOf '$TD/ABC-12.tar.gz' ticket/ticket.md | grep -q '$ESC_BYTE'"
+sty_out="$(styled "" env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-14)"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m No Confluence page went with it."*"${ESC_BYTE}[36mrelay ticket ABC-14 --page ADDRESS${ESC_BYTE}[0m"*) ok "a styled ticket with no page says so, with the command in colour" ;; *) bad "a styled ticket with no page says so, with the command in colour" "$sty_out" ;; esac
 out14="$(tk ABC-14)"
 case "$out14" in *'Find the discussions that mention ABC-14 or '*) ok "a ticket with no links still gets a prompt for Slackbot" ;; *) bad "a ticket with no links still gets a prompt for Slackbot" "$out14" ;; esac
 case "$out14" in *"and the tickets"*) bad "and it leaves out the linked tickets" "$out14" ;; *) ok "and it leaves out the linked tickets" ;; esac
