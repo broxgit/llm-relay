@@ -765,14 +765,14 @@ rl_expect "a run with no report says nothing was sent" 7 "wrote no report, so no
 rl_new t4 d4 'result "fine" 0
 report_end'
 rl y t4/d4 --expect 9
-rl_expect "a version that never arrives runs nothing" 1 "manifest.txt is version 1, expected 9"
-rl_expect "it says nothing was sent" 1 "nothing ran and no report was sent"
+rl_expect "a version that never arrives runs nothing" 75 "manifest.txt is version 1, expected 9"
+rl_expect "it says nothing was sent" 75 "nothing ran and no report was sent"
 [ "$(rl_sent t4)" = 0 ] && ok "a version that never arrives sends nothing" || bad "a version that never arrives sends nothing" "$(rl_sent t4)"
 echo tampered >>"$RL_D/run.sh"
 rl y t4/d4
-rl_expect "a file that doesn't match runs nothing" 1 "hash differs: run.sh"
+rl_expect "a file that doesn't match runs nothing" 75 "hash differs: run.sh"
 rl y nothing/there
-rl_expect "a deliverable that isn't there says so" 1 "manifest.txt is missing"
+rl_expect "a deliverable that isn't there says so" 75 "manifest.txt is missing"
 sleep 1
 
 # OneDrive's refusal, imitated: the file can't be read, then it can.
@@ -794,17 +794,17 @@ report_end'
 if [ "$(id -u)" != 0 ]; then
   chmod 000 "$RL_D/manifest.txt"
   rl y t9/d9 --expect 1
-  rl_expect "an unreadable manifest gives its reason" 1 "manifest.txt can't be read: Permission denied (size "
+  rl_expect "an unreadable manifest gives its reason" 75 "manifest.txt can't be read: Permission denied (size "
   rl_lacks "and it isn't called missing" "manifest.txt is missing"
-  rl_expect "and it says what to do next" 1 "Paste this output to Cowork"
+  rl_expect "and it says what to do next" 75 "Paste this output to Cowork"
   chmod 644 "$RL_D/manifest.txt"
 fi
 printf '\n' >"$RL_D/manifest.txt"
 rl y t9/d9
-rl_expect "a manifest with no version shows what it read" 1 "manifest.txt has no version line: read 1 bytes, starting 0a (size 1"
+rl_expect "a manifest with no version shows what it read" 75 "manifest.txt has no version line: read 1 bytes, starting 0a (size 1"
 : >"$RL_D/manifest.txt"
 rl y t9/d9
-rl_expect "an empty manifest says it's empty" 1 "manifest.txt has no version line: read 0 bytes"
+rl_expect "an empty manifest says it's empty" 75 "manifest.txt has no version line: read 0 bytes"
 
 # A download that never finishes can't outlast the wait.
 rl_new t10 d10 'result "fine" 0
@@ -812,7 +812,7 @@ report_end'
 rm -f "$RL_D/manifest.txt"
 mkfifo "$RL_D/manifest.txt"
 RELAY_READ_LIMIT=1 rl y t10/d10
-rl_expect "a read that never ends gives up" 1 "manifest.txt can't be read: still reading after 1s"
+rl_expect "a read that never ends gives up" 75 "manifest.txt can't be read: still reading after 1s"
 rm -f "$RL_D/manifest.txt"
 bash "$LIB" manifest "$RL_D" 1 >/dev/null
 sleep 1
@@ -855,11 +855,11 @@ exec /bin/cat "$@"
 FAKE
 chmod +x "$FC/cat"
 TERM_PROGRAM=iTerm.app PATH="$FC:$PATH" rl y t12/d12 --expect 1
-rl_expect "a refusal is named" 1 "manifest.txt can't be read: Operation not permitted"
-rl_expect "it names the app and the way out" 1 "refusing to let iTerm.app read OneDrive files"
-rl_expect "it points at Apple's Terminal" 1 "run the same command in Apple's Terminal"
+rl_expect "a refusal is named" 75 "manifest.txt can't be read: Operation not permitted"
+rl_expect "it names the app and the way out" 75 "refusing to let iTerm.app read OneDrive files"
+rl_expect "it points at Apple's Terminal" 75 "run the same command in Apple's Terminal"
 TERM_PROGRAM=Apple_Terminal PATH="$FC:$PATH" rl y t12/d12 --expect 1
-rl_expect "in Apple's Terminal, it points at Always Keep" 1 "refusing to let Apple's Terminal read"
+rl_expect "in Apple's Terminal, it points at Always Keep" 75 "refusing to let Apple's Terminal read"
 rl_lacks "and doesn't send you to the app you're in" "run the same command in Apple's Terminal"
 rl y t8/nothing --expect 1
 rl_lacks "other failures don't blame macOS" "refusing to let"
@@ -2768,6 +2768,7 @@ case "$rc:$out" in 0:*) bad "an answer without its last line is never shown" "$o
 printf 'answer to: %s\nread: nothing\n\nANSWER\nOn a timeout, \033[31mtwice.\n\nend of answer\n' "$id" >"$AR/$id.md"
 out="$(ak_key n answer "$id")"; rc=$?
 case "$rc:$out" in 0:*) bad "n saves nothing" "$out" ;; *"On a timeout"*"Nothing was saved."*) ok "n saves nothing" ;; *) bad "n saves nothing" "exit $rc: $out" ;; esac
+[ "$rc" = 1 ] && ok "and exits 1: the user said no, which waiting won't change" || bad "and exits 1: the user said no, which waiting won't change" "exit $rc"
 refuse "and leaves no file" test -e "$AH/relay-answers/$id.md"
 out="$(ak_key y answer "$id")"; rc=$?
 case "$rc:$out" in 0:*"Cowork's answer to $id"*"On a timeout"*"Saved: ~/relay-answers/$id.md"*) ok "y saves it where the assistant reads it" ;; *) bad "y saves it where the assistant reads it" "exit $rc: $out" ;; esac
@@ -2784,6 +2785,14 @@ check "by the same request" grep -q . "$AK/curl.args"
 if [ "$(grep -c . "$AK/curl.args")" = 1 ] && [ "$(printf '%s\n' "$out" | grep -c 'woken once more')" = 1 ]; then ok "and only once, however long it waits"; else bad "and only once, however long it waits" "$out"; fi
 case "$out" in *"If it wrote an answer, OneDrive hasn't brought it to this Mac: pause syncing in OneDrive's menu, then resume it."*) ok "giving up, it says where a written answer may be stuck" ;; *) bad "giving up, it says where a written answer may be stuck" "$out" ;; esac
 
+# A wait that ran out exits 75, "not now, try later", as docs/conventions.md has it. Something
+# that failed exits 1.
+ASK_WAIT=2 ak_key "" answer "$id3" >/dev/null 2>&1; rc=$?
+[ "$rc" = 75 ] && ok "a wait for an answer that runs out exits 75, for try later" || bad "a wait for an answer that runs out exits 75, for try later" "exit $rc"
+out="$(ASK_WAIT=2 ak_key "" ask A question nobody answers)"; rc=$?
+[ "$rc" = 75 ] && ok "and so does relay ask, when it went on to wait" || bad "and so does relay ask, when it went on to wait" "exit $rc"
+rm -f "$AA/$(ask_id "$out").md"
+check "the user guide says what 75 means" grep -q '^\*\*Exit codes\.\*\* .*75' "$REPO/docs/using.md"
 # An answer that is late is most likely in OneDrive and not on the Mac. Twice in five field
 # runs only pausing and resuming OneDrive brought it down.
 out="$(ASK_WAIT=4 ASK_STALL=1 ak_key "" answer "$id3")"
@@ -3164,9 +3173,11 @@ NOW="$("$W" --version | sed 's/^relay //')"
 refuse "the release script needs a version and notes" "$RS"
 expect "a version has no v in front" "with no v in front: v$NOW" "$RS" "v$NOW" "$T/release-notes.md"
 expect "the notes have to be there" "no release notes at" "$RS" "$NOW" "$T/no-such-notes.md"
-out="$("$RS" 9.9.9 "$T/release-notes.md" --check 2>&1)"; rc=$?
+out="$("$RS" 9.9.9 "$T/release-notes.md" --dry-run 2>&1)"; rc=$?
 case "$rc:$out" in 0:*) bad "it refuses a version the five lines don't say" "$out" ;; *"these don't say 9.9.9: relay.sh cowork/remote-pair-run/SKILL.md cowork/relay-field-test/SKILL.md cowork/relay-answer/SKILL.md claude/relay-ask/SKILL.md"*) ok "it refuses a version the five lines don't say" ;; *) bad "it refuses a version the five lines don't say" "exit $rc: $out" ;; esac
 case "$out" in *"== The commit"* | *"== The release"*) bad "and stops there, before it asks GitHub anything" "$out" ;; *) ok "and stops there, before it asks GitHub anything" ;; esac
+expect "its flag for changing nothing is --dry-run, as the conventions name it" "[--dry-run]" "$RS"
+expect "and the old name, --check, still does the same" "these don't say 9.9.9" "$RS" 9.9.9 "$T/release-notes.md" --check
 # The files CI skips are listed in the workflow and in the script, and have to be the same.
 if [ "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml" | sed -n 's/^ *- "\(.*\)"$/\1/p' | LC_ALL=C sort -u | tr '\n' ' ')" = "AGENTS.md CLAUDE.md LICENSE README.md ROADMAP.md design-and-decisions/** docs/** " ] && grep -qF "DOCS_ONLY='^(design-and-decisions/|docs/|README\.md\$|ROADMAP\.md\$|AGENTS\.md\$|CLAUDE\.md\$|LICENSE\$)'" "$RS"; then ok "the script and CI agree on which files are only documents"; else bad "the script and CI agree on which files are only documents" "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml")"; fi
 check "the releasing guide gives the script" grep -q '^   scripts/release.sh <version> <notes-file>$' "$REPO/docs/releasing.md"

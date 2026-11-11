@@ -146,6 +146,8 @@ eval "$(relay completion zsh)"
 
 Open a new terminal afterwards. A Homebrew install already does this for you.
 
+**Exit codes.** For a script that runs the relay: 0 is done, and 1 is something that failed or that you refused. 75 is "not now, try later": a wait ran out, as when `relay run` gives up on OneDrive or `relay answer` gets no answer in time, and the same command may well work in a while. An unknown command prints the usage and exits 2.
+
 **Colour.** With `NO_COLOR` set to anything, the relay prints plain words with no colour, as it does when its output is piped or sent to a file. `LLM_RELAY_STYLE=off` does the same for the relay alone. `LLM_RELAY_STYLE=on` turns colour on where it would be off, for a pager such as `less -R`, and wins over `NO_COLOR`. With nobody at a terminal the output is plain whatever these say, since an assistant is reading it. Where the locale isn't UTF-8, the tick is a `+`.
 
 ## Your own skills in Cowork

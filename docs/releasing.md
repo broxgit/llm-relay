@@ -27,7 +27,7 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
    - **It points the formula at it:** the address and the hash of the release's source, in a fresh clone of the tap, committed and pushed.
    - **It checks it the way a user gets it:** `brew update`, `brew upgrade`, `relay --version`, `brew test` and `brew audit --strict`.
 
-   `--check` stops before anything is made. If a step fails after the release is made, run the same command again: it skips what is done.
+   `--dry-run` stops before anything is made. If a step fails after the release is made, run the same command again: it skips what is done.
 
    The script decides nothing. Whether to release is Brock's call each time, and the notes are written before it runs.
 

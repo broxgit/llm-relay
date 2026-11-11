@@ -7,7 +7,7 @@ description: |
 
 # Relay answer
 
-This skill is for relay 0.2.21.
+This skill is for relay 0.2.22.
 
 An assistant on the user's Mac has left you questions. It asks you because you can do a lot of reading cheaply. It can't see your conversation. All it gets is one file per question, and the user reads that file before the assistant does. So the file is the whole of your work.
 
