@@ -110,7 +110,9 @@ The trigger's instructions name one skill, relay-answer, and no other. The test'
 
 ## Not known
 
-- How long "always allow" lasts. It held for four runs over 7 minutes. Whether it holds over days, or after the trigger is edited, isn't known.
+- How long "always allow" lasts. It held through an edit of the trigger and overnight. Whether it holds for weeks isn't known.
+- What sets off a stall in OneDrive on the Mac, and whether quitting and reopening OneDrive ends one as pause and resume does.
+- How to tell a stall from a slow run. The relay can't read OneDrive in the cloud, by its own rule on tokens.
 - Whether the block on `Documents/Cowork` is a setting somebody can change. The design doesn't count on it.
 - How the wait holds up over a day, and whether runs are ever dropped. Five of five came, over 18 minutes.
 - What an idle run costs. It reads no ask and writes nothing, but it is a full run.
@@ -135,11 +137,52 @@ One thing the relay can't enforce: an assistant with a shell could read the answ
 Added at 0.2.16, after the user asked how much of the two tests could run while they worked.
 
 - `relay field-test --asks` sends six asks to real Cowork and waits for each answer. It reads an answer before any keypress, which `relay answer` also does before it shows one. It saves none, shows none, and its report has times and yes-or-no lines only, so the rule holds: nothing from the cloud runs or lands without a keypress. The keypress itself stays a step done by hand.
-- Its last two asks go out together, inside the trigger's 2 second grouping window. Whether both are answered, and by one run or two, is not known.
+- Its last two asks go out together, inside the trigger's 2 second grouping window. On the work Mac they became one run, which answered both.
 - `tests/ask-haiku.sh` runs the Claude Code side without a window. It saves each answer itself in place of `relay answer`, because that round tests what the model does with a saved answer.
+
+## What the field tests showed
+
+Five runs of `relay field-test --asks` on the work Mac, at 0.2.16, between 2026-11-10 19:56 UTC and 2026-11-11 12:48 UTC. Cowork answered every ask it was sent, and every answer had the right shape. Twice an answer was in OneDrive and didn't reach the Mac. That is the one failure left, and it is on the Mac.
+
+| Run | Started (UTC) | Answers on the Mac | Requests | Runs | Time per answer |
+|---|---|---|---|---|---|
+| 1 | 11-10 19:56 | 0 of 1, old instructions | 1 | 1 | none |
+| 2 | 11-10 20:13 | 4 of 6 | 12 | 11 | 53 to 111 s |
+| 3 | 11-10 21:29 | 6 of 6 | 6 | 5 | 53 to 90 s |
+| 4 | 11-10 22:17 | 6 of 6 | 6 | 5 | 48 to 95 s |
+| 5 | 11-11 12:38 | 0 of 1 | 4 | 4 | none |
+
+- **Run 1 had the wrong trigger.** It still had the wake test's instructions, so it copied the ask back with no last line, and the relay rightly never took that as whole. Nothing told the user why. The trigger was then given the instructions in `docs/using.md`.
+- **Editing the trigger pauses it.** The next request got HTTP 410 until the trigger was turned on again by hand. "Always allow" held through the edit.
+- **Every answer had all its parts.** The question about a scan named the right file and the commit scanned, every time, so a run nobody is watching can read a scan's archive.
+- **The planted instruction was never followed.** Each answer said the file had tried to give one. No email was sent.
+- **Two asks sent together became one run,** which answered both. That accounts for every run that was one short of the requests. No request counted twice.
+
+### The stall
+
+Twice an answer was whole in OneDrive and never came to the Mac: asks 5 and 6 of run 2, for about an hour, and ask 1 of run 5, for 17 minutes. In run 5 the nudges were tried one at a time:
+
+| What was done | The answer on the Mac |
+|---|---|
+| Checking for the file by name, for 17 minutes | missing |
+| `ls` of the folder, then 30 s | missing |
+| The folder open in Finder for 60 s | missing |
+| OneDrive's syncing paused, then resumed, then 30 s | there, whole |
+
+OneDrive said it was synced the whole time. Both stalls came on the first run after a break: the Mac idle overnight, and the trigger paused for about 15 minutes. The likely cause is OneDrive on the Mac not hearing of changes in the cloud until it is made to look. Two cases don't prove it.
+
+Waking Cowork again doesn't help with a stall. The relay woke it 3 times in run 5 and 6 times in run 2. Each of those runs found the answer already written, did nothing, and left a conversation behind.
+
+### What it changes in `relay ask`
+
+- **Wake Cowork again once, not more.** One more request covers an ask a run missed. After that, a missing answer is almost always a stall on the Mac.
+- **Say what to do at about 3 minutes, not 10.** Answers come in 48 to 111 seconds. With none by then, the relay says that Cowork has probably answered and OneDrive hasn't brought it: pause syncing in OneDrive's menu, resume, then `relay answer <id>`.
+- **Don't pause or restart OneDrive for the user.** OneDrive on the Mac has no command for pause and resume, and quitting it is a bigger step than the relay should take by itself.
+- **Say what HTTP 410 means:** the trigger is paused or deleted, and is turned on again in Cowork.
+- **Say when a file has come without its last line and isn't growing.** That is a trigger with the wrong instructions, as in run 1.
 
 ## Next
 
-1. On the work Mac, follow "Set it up" in [docs/using.md](../docs/using.md) with a new trigger, and delete the test's. Bring back what the first real ask did.
-2. Find out whether a run nobody is watching can read a scan's archive. The test's asks were text only.
+1. Build the changes above, and a walkthrough of the setup, `relay ask --setup`.
+2. Run `tests/ask-haiku.sh`, for the Claude Code side.
 3. Leave the trigger running for a day of real asks, and count requests against runs and answers.
