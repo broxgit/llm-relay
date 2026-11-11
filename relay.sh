@@ -37,7 +37,7 @@ OWN_SKILLS="remote-pair-run relay-field-test relay-answer"
 # holds the two together. Colour and marks go around the words and never replace one, so a
 # report, a note for Cowork and the clipboard never hold a colour code, and what a user pastes
 # reads the same either way.
-# --- style helpers: docs/conventions.md, version 1. Copy, don't edit. ---
+# --- style helpers: docs/conventions.md, version 2. Copy, don't edit. ---
 STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}" # the one line a tool changes: its own variable
 # style_wanted <fd>: style on? LLM_<TOOL>_STYLE=on or off decides; else a terminal, no NO_COLOR, TERM not dumb.
 style_wanted() {
@@ -71,6 +71,19 @@ die() {
   if [ "$STYLE_ERR" = yes ]; then printf '\033[31merror:\033[0m %s\n' "$*" >&2; else echo "error: $*" >&2; fi
   exit 1
 }
+# die_usage <words>: the tool was called wrongly: an unknown command or option, a missing argument. Exits 2.
+die_usage() {
+  if [ "$STYLE_ERR" = yes ]; then printf '\033[31merror:\033[0m %s\n' "$*" >&2; else echo "error: $*" >&2; fi
+  exit 2
+}
+# say_warn_err <words>: a warning on standard error, styled as standard error is, whatever standard output is.
+say_warn_err() {
+  if [ "$STYLE_ERR" = yes ]; then printf '\033[1m\033[33m!\033[0m %s\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi
+}
+# typed_err <command>: something to type, inside a line that goes to standard error.
+typed_err() {
+  if [ "$STYLE_ERR" = yes ]; then printf '\033[36m%s\033[0m' "$*"; else printf '%s' "$*"; fi
+}
 # --- end of style helpers ---
 # wait_draw <seconds> <state>, wait_clear: the one line a wait keeps up to date at a terminal.
 wait_draw() {
@@ -81,7 +94,7 @@ wait_draw() {
 wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.23"
+RELAY_VERSION="0.2.24"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -434,7 +447,7 @@ wait_for_deliverable() {
     fi
     if [ "$waited" -ge "$WAIT" ]; then
       {
-        say_warn "Still not ready after ${waited}s, at $(now), so nothing ran and no report was sent."
+        say_warn_err "Still not ready after ${waited}s, at $(now), so nothing ran and no report was sent."
         echo "Paste this output to Cowork. If your OneDrive allows it, in Finder, right-click the task's output folder, choose Always Keep on This Device, and run the same command again."
       } >&2
       return "$EXIT_LATER"
@@ -513,7 +526,7 @@ send_report() {
     [ "$i" -lt 3 ] && sleep "$POLL"
   done
   echo
-  say_warn "Couldn't put the report in OneDrive. Attach it in Cowork instead: $report" >&2
+  say_warn_err "Couldn't put the report in OneDrive. Attach it in Cowork instead: $report"
   return 1
 }
 
@@ -539,15 +552,15 @@ cmd_run() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --expect)
-        [ -n "${2:-}" ] || die "--expect needs a version"
+        [ -n "${2:-}" ] || die_usage "--expect needs a version"
         expect="$2"
         shift 2
         ;;
       --no-install) no_install=1; shift ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay run: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay run: unknown option $1. Try relay --help" ;;
       *)
-        [ -z "$where" ] || die "relay run takes one deliverable"
+        [ -z "$where" ] || die_usage "relay run takes one deliverable"
         where="$1"
         shift
         ;;
@@ -591,7 +604,7 @@ cmd_run() {
   new="$(ls "$REPORTS" | LC_ALL=C sort | LC_ALL=C comm -13 "$WORK/before" - | tail -n 1)"
   if [ -z "$new" ]; then
     echo
-    say_warn "That run wrote no report, so nothing was sent to Cowork. Its output is above." >&2
+    say_warn_err "That run wrote no report, so nothing was sent to Cowork. Its output is above."
     [ "$rc" -ne 0 ] || rc=1
     return "$rc"
   fi
@@ -823,24 +836,24 @@ secrets_gate() {
     before="$(secrets_answer "$key")"
   fi
   if [ -n "$mark" ] && [ "$mark" = "$before" ] && [ -z "$SECRETS_ASK" ] && [ "$AT_TERMINAL" = yes ]; then
-    say_warn "$label has places that look like they hold secrets, $n of them, the same as when you said to send it. Sending. Add --ask to be asked again." >&2
+    say_warn_err "$label has places that look like they hold secrets, $n of them, the same as when you said to send it. Sending. Add --ask to be asked again."
     SECRETS_LINE="places that looked like secrets: $n, the same as when the user chose to send them before. Never repeat a credential you find here"
     return 0
   fi
   {
     echo
-    say_warn "Before anything is sent: $label has places that look like they hold secrets. This many: $n"
+    say_warn_err "Before anything is sent: $label has places that look like they hold secrets. This many: $n"
     head -n 12 "$found" | sed 's/^/  /'
     [ "$n" -le 12 ] || echo "  and $((n - 12)) more"
     echo "This goes by shape, so it can be wrong either way. ${4:-It reads the files at the commit being sent, and not the history, which goes too.}"
-    [ -z "$before" ] || [ "$mark" = "$before" ] || say_warn "What it found has changed since you last said to send this."
+    [ -z "$before" ] || [ "$mark" = "$before" ] || say_warn_err "What it found has changed since you last said to send this."
   } >&2
   [ "$AT_TERMINAL" = yes ] || die "relay asks before it sends anything that looks like a secret, so it needs a terminal. Agents: tell the user to run it."
   ask_key "Send $label to OneDrive anyway? [y]es, [n]o: " || KEY=n
   case "$KEY" in
     y | Y) ;;
     *)
-      say_warn "Nothing from $label was sent." >&2
+      say_warn_err "Nothing from $label was sent."
       return 1
       ;;
   esac
@@ -973,11 +986,11 @@ cmd_scan() {
       --no-wiki) no_wiki=1; shift ;;
       --ask) SECRETS_ASK=1; shift ;;
       --branch)
-        [ -n "${2:-}" ] || die "--branch needs a branch name"
+        [ -n "${2:-}" ] || die_usage "--branch needs a branch name"
         want="$2"
         shift 2
         ;;
-      -*) die "relay scan: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay scan: unknown option $1. Try relay --help" ;;
       *)
         dir="$1"
         dirs="$dirs$1
@@ -998,7 +1011,7 @@ cmd_scan() {
     done <<EOF
 $dirs
 EOF
-    [ "$failed" -eq 0 ] || { say_warn "$failed of $many were not scanned. The rest are in OneDrive." >&2; return 1; }
+    [ "$failed" -eq 0 ] || { say_warn_err "$failed of $many were not scanned. The rest are in OneDrive."; return 1; }
     return 0
   fi
   root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "not a git repository: $dir"
@@ -1181,7 +1194,7 @@ send_also() {
   dest="$COWORK/relay/scans"
   mkdir -p "$dest" && cp "$t/$name.tar.gz" "$dest/" && cp "$t/$name.txt" "$dest/" || { rm -rf "$t"; die "--also: couldn't copy to $dest"; }
   rm -rf "$t"
-  say_ok "Scanned the $sub folder of $(basename "$root"): $branch at $commit, from $SCAN_SOURCE, ${S_DIM}$size bytes${S_OFF}" >&2
+  echo "Scanned the $sub folder of $(basename "$root"): $branch at $commit, from $SCAN_SOURCE, $size bytes" >&2
   echo "Documents/Cowork/relay/scans/$name.txt"
 }
 
@@ -1781,12 +1794,12 @@ EOF
   # Only fetches in the clone, which can hold uncommitted work. The merge request's own ref
   # works for forks too, where origin has no branch of that name.
   GIT_TERMINAL_PROMPT=0 git -C "$clone" fetch -q origin "+refs/heads/$target:refs/remotes/origin/$target" 2>/dev/null ||
-    say_warn "Couldn't fetch $target from origin, so it's as of your last fetch." >&2
+    say_warn_err "Couldn't fetch $target from origin, so it's as of your last fetch."
   if GIT_TERMINAL_PROMPT=0 git -C "$clone" fetch -q origin "+refs/merge-requests/$MR_IID/head:refs/remotes/origin/merge-requests/$MR_IID" 2>/dev/null; then
     SCAN_REF="refs/remotes/origin/merge-requests/$MR_IID"
   else
     GIT_TERMINAL_PROMPT=0 git -C "$clone" fetch -q origin "+refs/heads/$source:refs/remotes/origin/$source" 2>/dev/null ||
-      say_warn "Couldn't fetch $source from origin, so it's as of your last fetch." >&2
+      say_warn_err "Couldn't fetch $source from origin, so it's as of your last fetch."
     SCAN_REF="refs/remotes/origin/$source"
   fi
   commit="$(git -C "$clone" rev-parse --verify -q "$SCAN_REF")" || die "can't find $source in $clone, on origin or as a merge request"
@@ -1879,32 +1892,32 @@ cmd_mr() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --also)
-        [ -n "${2:-}" ] || die "--also needs a path"
+        [ -n "${2:-}" ] || die_usage "--also needs a path"
         also="$also$2
 "
         shift 2
         ;;
       --repo)
-        [ -n "${2:-}" ] || die "--repo needs a path"
+        [ -n "${2:-}" ] || die_usage "--repo needs a path"
         repo_arg="$2"
         shift 2
         ;;
       --go-prefix)
-        [ -n "${2:-}" ] || die "--go-prefix needs a module prefix"
+        [ -n "${2:-}" ] || die_usage "--go-prefix needs a module prefix"
         prefixes="$prefixes $2"
         shift 2
         ;;
       --checks) checks=yes; shift ;;
       --no-checks) checks=no; shift ;;
       --test)
-        [ -n "${2:-}" ] || die "--test needs the command that runs this repository's tests, or none to forget it"
+        [ -n "${2:-}" ] || die_usage "--test needs the command that runs this repository's tests, or none to forget it"
         test_cmd="$2"
         shift 2
         ;;
       --no-wiki) no_wiki=1; shift ;;
       --ask) SECRETS_ASK=1; shift ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay mr: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay mr: unknown option $1. Try relay --help" ;;
       *)
         urls="$urls$1
 "
@@ -1912,7 +1925,7 @@ cmd_mr() {
         ;;
     esac
   done
-  [ -n "$urls" ] || die "relay mr needs a merge request's URL"
+  [ -n "$urls" ] || die_usage "relay mr needs a merge request's URL"
   needs_tool mr glab
   needs_tool mr python3
   SKILLS_CHECKED=1
@@ -2038,20 +2051,20 @@ cmd_review() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --expect)
-        [ -n "${2:-}" ] || die "--expect needs a version"
+        [ -n "${2:-}" ] || die_usage "--expect needs a version"
         expect="$2"
         shift 2
         ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay review: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay review: unknown option $1. Try relay --help" ;;
       *)
-        [ -z "$where" ] || die "relay review takes one deliverable"
+        [ -z "$where" ] || die_usage "relay review takes one deliverable"
         where="$1"
         shift
         ;;
     esac
   done
-  [ -n "$where" ] || die "relay review needs a deliverable, as TASK-FOLDER/DELIVERABLE"
+  [ -n "$where" ] || die_usage "relay review needs a deliverable, as TASK-FOLDER/DELIVERABLE"
   named="$(deliverable_path "$where")" || exit 1
   needs_terminal review
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
@@ -2117,26 +2130,26 @@ cmd_apply() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --expect)
-        [ -n "${2:-}" ] || die "--expect needs a version"
+        [ -n "${2:-}" ] || die_usage "--expect needs a version"
         expect="$2"
         shift 2
         ;;
       --repo)
-        [ -n "${2:-}" ] || die "--repo needs a path"
+        [ -n "${2:-}" ] || die_usage "--repo needs a path"
         repo_arg="$2"
         shift 2
         ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay apply: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay apply: unknown option $1. Try relay --help" ;;
       *)
-        [ -z "$where" ] || die "relay apply takes one deliverable"
+        [ -z "$where" ] || die_usage "relay apply takes one deliverable"
         where="$1"
         shift
         ;;
     esac
   done
-  [ -n "$where" ] || die "relay apply needs a deliverable, as TASK-FOLDER/DELIVERABLE"
-  [ -n "$repo_arg" ] || die "relay apply needs --repo PATH, the repository to change"
+  [ -n "$where" ] || die_usage "relay apply needs a deliverable, as TASK-FOLDER/DELIVERABLE"
+  [ -n "$repo_arg" ] || die_usage "relay apply needs --repo PATH, the repository to change"
   root="$(git -C "$repo_arg" rev-parse --show-toplevel 2>/dev/null)" || die "--repo: not a git repository: $repo_arg"
   named="$(deliverable_path "$where")" || exit 1
   needs_terminal apply
@@ -2190,10 +2203,10 @@ cmd_apply() {
       done_list="$p
 $done_list"
     else
-      say_warn "$p doesn't apply, so I'm undoing the rest and leaving the repository as it was." >&2
+      say_warn_err "$p doesn't apply, so I'm undoing the rest and leaving the repository as it was."
       while IFS= read -r a; do
         [ -n "$a" ] || continue
-        git -C "$root" apply -R "$copy/$a" || say_warn "Couldn't undo $a. Check the repository with $(typed "git status")." >&2
+        git -C "$root" apply -R "$copy/$a" || say_warn_err "Couldn't undo $a. Check the repository with $(typed_err "git status")."
       done <<EOF
 $done_list
 EOF
@@ -2443,22 +2456,22 @@ cmd_ticket() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --page)
-        [ -n "${2:-}" ] || die "--page needs a Confluence page, as its number or its address"
+        [ -n "${2:-}" ] || die_usage "--page needs a Confluence page, as its number or its address"
         pages="$pages$2
 "
         shift 2
         ;;
       --ask) SECRETS_ASK=1; shift ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay ticket: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay ticket: unknown option $1. Try relay --help" ;;
       *)
-        [ -z "$key" ] || die "relay ticket takes one ticket. Run it again for another."
+        [ -z "$key" ] || die_usage "relay ticket takes one ticket. Run it again for another."
         key="$1"
         shift
         ;;
     esac
   done
-  [ -n "$key" ] || die "relay ticket needs a ticket's key, such as ABC-123"
+  [ -n "$key" ] || die_usage "relay ticket needs a ticket's key, such as ABC-123"
   case "$key" in
     [A-Za-z]*-[0-9]*) ;;
     *) die "that doesn't look like a ticket's key: $key. One looks like ABC-123." ;;
@@ -2599,12 +2612,12 @@ cmd_branch() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --against)
-        [ -n "${2:-}" ] || die "--against needs the branch this one is meant to merge into"
+        [ -n "${2:-}" ] || die_usage "--against needs the branch this one is meant to merge into"
         against="$2"
         shift 2
         ;;
       --plan)
-        [ -n "${2:-}" ] || die "--plan needs the plan's file"
+        [ -n "${2:-}" ] || die_usage "--plan needs the plan's file"
         plan="$2"
         shift 2
         ;;
@@ -2612,14 +2625,14 @@ cmd_branch() {
       --checks) checks=yes; shift ;;
       --no-checks) checks=no; shift ;;
       --test)
-        [ -n "${2:-}" ] || die "--test needs the command that runs this repository's tests, or none to forget it"
+        [ -n "${2:-}" ] || die_usage "--test needs the command that runs this repository's tests, or none to forget it"
         test_cmd="$2"
         shift 2
         ;;
       --no-wiki) no_wiki=1; shift ;;
       --ask) SECRETS_ASK=1; shift ;;
       -h | --help) usage; return 0 ;;
-      -*) die "relay branch: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay branch: unknown option $1. Try relay --help" ;;
       *) dir="$1"; shift ;;
     esac
   done
@@ -2991,24 +3004,52 @@ EOF
 
 # The relay's own skill in Cowork's folder should be this relay's. After an upgrade it isn't,
 # until relay setup runs again, and Cowork goes on using the old one.
+# version_newer <a> <b>: whether release a is later than b. Both are three numbers.
+version_newer() {
+  local a="$1" b="$2" x y i
+  for i in 1 2 3; do
+    x="${a%%.*}" y="${b%%.*}"
+    case "$x$y" in *[!0-9]* | "") return 1 ;; esac
+    [ "$x" -le "$y" ] || return 0
+    [ "$x" -ge "$y" ] || return 1
+    case "$a" in *.*) a="${a#*.}" ;; *) a=0 ;; esac
+    case "$b" in *.*) b="${b#*.}" ;; *) b=0 ;; esac
+  done
+  return 1
+}
+
+# cowork_skill_version: the release Cowork's copy of the relay's skills says it is for.
+cowork_skill_version() {
+  sed -n 's/^This skill is for relay \([0-9][0-9.]*[0-9]\)\.$/\1/p' "$SKILLS_DIR/remote-pair-run/SKILL.md" 2>/dev/null | head -n 1
+}
+
+# The state "a newer relay's" is for a second Mac on the same account that has a later release.
+# Its skills are left where they are: putting this Mac's older ones over them would take away
+# what Cowork had learned, and the other Mac would only put them back.
 check_own_skill() {
-  local s f
+  local s f theirs
   OWN_SKILL_STATE="this relay's"
   for s in $OWN_SKILLS; do
     if [ ! -f "$SKILLS_DIR/$s/SKILL.md" ]; then
       OWN_SKILL_STATE=missing
-      say_warn "Cowork doesn't have the $s skill yet. Run: $(typed "relay start")" >&2
+      say_warn_err "Cowork doesn't have the $s skill yet. Run: $(typed_err "relay start")"
       return 0
     fi
     for f in "$REPO/cowork/$s"/*; do
       if ! can_read "$SKILLS_DIR/$s/$(basename "$f")"; then
         OWN_SKILL_STATE="unreadable from this terminal app"
-        say_warn "This terminal app can't read Cowork's copy of the $s skill, so the relay can't tell if it's current. $UNREADABLE_WHY" >&2
+        say_warn_err "This terminal app can't read Cowork's copy of the $s skill, so the relay can't tell if it's current. $UNREADABLE_WHY"
         return 0
       fi
       if ! cmp -s "$f" "$SKILLS_DIR/$s/$(basename "$f")"; then
+        theirs="$(cowork_skill_version)"
+        if [ -n "$theirs" ] && version_newer "$theirs" "$RELAY_VERSION"; then
+          OWN_SKILL_STATE="a newer relay's"
+          say_warn_err "Cowork's skills are from a newer relay, $theirs, and this Mac has $RELAY_VERSION. Another Mac of yours put them there. Upgrade this one: $(typed_err "brew update && brew upgrade llm-relay")"
+          return 0
+        fi
         OWN_SKILL_STATE="not this relay's"
-        say_warn "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: $(typed "relay start")" >&2
+        say_warn_err "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: $(typed_err "relay start")"
         return 0
       fi
     done
@@ -3026,7 +3067,7 @@ sync_skills() {
     [ -n "$name" ] || continue
     case "$name" in
       remote-pair-run | relay-field-test | relay-answer | .* | *[!A-Za-z0-9._-]*)
-        say_warn "skill $name: not a name the relay can copy" >&2
+        say_warn_err "skill $name: not a name the relay can copy"
         rc=1
         continue
         ;;
@@ -3034,7 +3075,7 @@ sync_skills() {
     skill_state "$name"
     case "$SKILL_STATE" in
       nosource)
-        say_warn "skill $name: there's no $SKILLS_FROM/$name/SKILL.md, so nothing was copied" >&2
+        say_warn_err "skill $name: there's no $SKILLS_FROM/$name/SKILL.md, so nothing was copied"
         rc=1
         continue
         ;;
@@ -3044,39 +3085,39 @@ sync_skills() {
         ;;
       foreign)
         if [ "$mode" = setup ]; then
-          say_warn "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone." >&2
+          say_warn_err "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone."
           echo "  To have the relay keep it in step with yours:" >&2
-          echo "  1. See how it differs from yours: $(typed "diff -r \"$SKILLS_FROM/$name\" \"$SKILLS_DIR/$name\"")" >&2
+          echo "  1. See how it differs from yours: $(typed_err "diff -r \"$SKILLS_FROM/$name\" \"$SKILLS_DIR/$name\"")" >&2
           echo "  2. Your own skill's text goes to Cowork whatever you do here. Only text that's in Cowork's copy and not in yours is at stake: it's gone from Cowork once you move the folder. To keep any of it, put it in $SKILLS_FROM/$name/COWORK.md, and the relay adds it to its copy. Otherwise skip this step." >&2
-          echo "  3. Move that folder out of Cowork's skills folder, and run $(typed "relay setup") again." >&2
+          echo "  3. Move that folder out of Cowork's skills folder, and run $(typed_err "relay setup") again." >&2
         else
-          say_warn "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. $(typed "relay setup") says what to do." >&2
+          say_warn_err "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. $(typed_err "relay setup") says what to do."
         fi
         rc=1
         continue
         ;;
       unreadable)
-        say_warn "skill $name: this terminal app can't read Cowork's copy, so it's left as it is. $UNREADABLE_WHY" >&2
+        say_warn_err "skill $name: this terminal app can't read Cowork's copy, so it's left as it is. $UNREADABLE_WHY"
         rc=1
         continue
         ;;
       edited)
         if [ "$mode" != setup ]; then
-          say_warn "skill $name: Cowork's copy was changed in OneDrive, so it wasn't updated. $(typed "relay setup") shows the difference." >&2
+          say_warn_err "skill $name: Cowork's copy was changed in OneDrive, so it wasn't updated. $(typed_err "relay setup") shows the difference."
           rc=1
           continue
         fi
         ;;
     esac
     if ! why="$(adapt_skill "$name")"; then
-      say_warn "skill $name: not copied, because $why" >&2
+      say_warn_err "skill $name: not copied, because $why"
       rc=1
       continue
     fi
     if [ "$SKILL_STATE" = edited ]; then
       show_skill_change "$name"
       if [ "$AT_TERMINAL" != yes ]; then
-        say_warn "skill $name: left as it is. Run $(typed "relay setup") at a terminal to choose." >&2
+        say_warn_err "skill $name: left as it is. Run $(typed_err "relay setup") at a terminal to choose."
         rc=1
         continue
       fi
@@ -3091,7 +3132,7 @@ sync_skills() {
       esac
     fi
     if ! { rm -rf "${SKILLS_DIR:?}/$name" && mkdir -p "$SKILLS_DIR" && cp -R "$SKILL_TMP/copy" "$SKILLS_DIR/$name"; }; then
-      say_warn "skill $name: couldn't write Cowork's copy to $SKILLS_DIR" >&2
+      say_warn_err "skill $name: couldn't write Cowork's copy to $SKILLS_DIR"
       rc=1
       continue
     fi
@@ -3133,7 +3174,7 @@ cmd_skills() {
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     "") ;;
-    *) die "relay skills takes no arguments. Name the skills to copy with: relay setup --skills NAME:NAME" ;;
+    *) die_usage "relay skills takes no arguments. Name the skills to copy with: relay setup --skills NAME:NAME" ;;
   esac
   if [ -z "$SKILLS" ]; then
     echo "No skills are named. Name some with: $(typed "relay setup --skills NAME:NAME")"
@@ -3308,6 +3349,18 @@ tool_hint() {
 # needs_tool <command> <tool>: stops with how to get a tool the command can't do without.
 needs_tool() { command -v "$2" >/dev/null 2>&1 || die "relay $1 needs $2: $(tool_hint "$2")"; }
 
+# clones_folder_there: whether any folder the clones are looked for under exists.
+clones_folder_there() {
+  local d old_ifs="$IFS"
+  IFS=:
+  for d in $CLONES_DIRS; do
+    IFS="$old_ifs"
+    [ ! -d "$d" ] || return 0
+  done
+  IFS="$old_ifs"
+  return 1
+}
+
 # feature_lines: a line for each thing the relay does, saying it's ready or what it needs.
 # With "shown" it is for the terminal, and may have marks and colour. Without, it is the plain
 # lines that go in the note Cowork reads.
@@ -3415,7 +3468,7 @@ cmd_start() {
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     "") ;;
-    *) die "relay start takes no arguments" ;;
+    *) die_usage "relay start takes no arguments" ;;
   esac
   begin_session start
 }
@@ -3426,7 +3479,7 @@ cmd_practice() {
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     --clean)
-      [ $# -eq 1 ] || die "relay practice --clean takes nothing else"
+      [ $# -eq 1 ] || die_usage "relay practice --clean takes nothing else"
       clean_practice
       return 0
       ;;
@@ -3446,6 +3499,9 @@ begin_session() {
     "this relay's") ;;
     unreadable*)
       echo "This terminal app can't read Cowork's copy of the relay's skills, so the relay can't tell if they're current. $UNREADABLE_WHY" >&2
+      ;;
+    "a newer relay's")
+      say_warn "Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Another Mac of yours put them there. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
       ;;
     *)
       install_own_skills "$ONEDRIVE" >/dev/null
@@ -3471,6 +3527,10 @@ begin_session() {
   printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
   printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
   printf '  %s changes any of them.\n' "$(typed "relay setup")"
+  # Reviews and plans are made when the first is saved. Clones have to be there already.
+  if ! clones_folder_there; then
+    say_warn "$(tilde "$CLONES_DIRS") isn't there, so a merge request's clone won't be found. Say where your clones are: $(typed "relay setup --clones FOLDER")"
+  fi
   case "${TERM_PROGRAM:-}" in
     Apple_Terminal) ;;
     *)
@@ -3542,12 +3602,12 @@ cmd_field_test() {
   case "${1:-}" in
     -h | --help) usage; return 0 ;;
     --clean)
-      [ $# -eq 1 ] || die "relay field-test --clean takes nothing else"
+      [ $# -eq 1 ] || die_usage "relay field-test --clean takes nothing else"
       clean_field_test
       return 0
       ;;
     --asks)
-      [ $# -eq 1 ] || die "relay field-test --asks takes nothing else"
+      [ $# -eq 1 ] || die_usage "relay field-test --asks takes nothing else"
       field_asks
       return $?
       ;;
@@ -3652,33 +3712,33 @@ cmd_setup() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --dir)
-        [ -n "${2:-}" ] || die "--dir needs your OneDrive folder"
+        [ -n "${2:-}" ] || die_usage "--dir needs your OneDrive folder"
         dir="$2"
         shift 2
         ;;
       --reviews)
-        [ -n "${2:-}" ] || die "--reviews needs a folder"
+        [ -n "${2:-}" ] || die_usage "--reviews needs a folder"
         reviews="$2"
         shift 2
         ;;
       --clones)
-        [ -n "${2:-}" ] || die "--clones needs a folder"
+        [ -n "${2:-}" ] || die_usage "--clones needs a folder"
         clones="$2"
         shift 2
         ;;
       --plans)
-        [ -n "${2:-}" ] || die "--plans needs a folder"
+        [ -n "${2:-}" ] || die_usage "--plans needs a folder"
         plans="$2"
         shift 2
         ;;
       --skills)
-        [ -n "${2:-}" ] || die "--skills needs the names of your skills, separated by colons, or none"
+        [ -n "${2:-}" ] || die_usage "--skills needs the names of your skills, separated by colons, or none"
         skills="$(printf '%s' "$2" | tr ',' ':')"
         named=1
         shift 2
         ;;
       --skills-from)
-        [ -n "${2:-}" ] || die "--skills-from needs the folder your skills are in"
+        [ -n "${2:-}" ] || die_usage "--skills-from needs the folder your skills are in"
         skills_from="$2"
         shift 2
         ;;
@@ -3704,12 +3764,18 @@ copying them, and removes the copies. --skills-from is where your skills live, i
 EOF
         return 0
         ;;
-      *) die "setup: unknown option $1. Try relay setup --help" ;;
+      *) die_usage "setup: unknown option $1. Try relay setup --help" ;;
     esac
   done
   [ -n "$dir" ] || dir="$(onedrive_folder)" || exit 1
   [ -d "$dir" ] || die "no such folder: $dir"
-  install_own_skills "$dir"
+  SKILLS_DIR="$dir/Documents/Cowork/skills"
+  check_own_skill 2>/dev/null
+  if [ "$OWN_SKILL_STATE" = "a newer relay's" ]; then
+    say_warn "Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Another Mac of yours put them there. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
+  else
+    install_own_skills "$dir"
+  fi
   refresh_claude_skill
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
@@ -3805,7 +3871,7 @@ _llm_relay() {
 complete -F _llm_relay relay relay.sh ./relay.sh
 EOF
       ;;
-    *) die "completion takes zsh or bash" ;;
+    *) die_usage "completion takes zsh or bash" ;;
   esac
 }
 
@@ -4080,23 +4146,23 @@ cmd_ask() {
         return 0
         ;;
       --from)
-        [ -n "${2:-}" ] || die "--from needs a file that holds the question"
+        [ -n "${2:-}" ] || die_usage "--from needs a file that holds the question"
         from="$2"
         shift 2
         ;;
       --file)
-        [ -n "${2:-}" ] || die "--file needs a file to send with the question"
+        [ -n "${2:-}" ] || die_usage "--file needs a file to send with the question"
         files="$files$2
 "
         shift 2
         ;;
       --scan)
-        [ -n "${2:-}" ] || die "--scan needs a repository for Cowork to read"
+        [ -n "${2:-}" ] || die_usage "--scan needs a repository for Cowork to read"
         scans="$scans$2
 "
         shift 2
         ;;
-      -*) die "relay ask: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay ask: unknown option $1. Try relay --help" ;;
       *)
         question="$question${question:+ }$1"
         shift
@@ -4112,7 +4178,7 @@ cmd_ask() {
     [ -f "$from" ] || die "--from: no such file: $from"
     question="$(cat "$from")" || die "--from: can't read $from"
   fi
-  [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || die "relay ask needs a question: relay ask \"what does the uploader retry on?\" --scan ~/code/thing"
+  [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || die_usage "relay ask needs a question: relay ask \"what does the uploader retry on?\" --scan ~/code/thing"
   # Cowork is about to be asked for something, so say if it hasn't this relay's skills to answer with.
   if [ -z "$SKILLS_CHECKED" ]; then
     SKILLS_CHECKED=1
@@ -4212,7 +4278,7 @@ any_key() { ask_key "$1" || die "stopped. relay ask --setup takes up where this 
 # and never sees them.
 ask_setup() {
   local to="$HOME/.claude/skills/relay-ask/SKILL.md" fresh=no item what
-  [ $# -eq 0 ] || die "relay ask --setup takes nothing else"
+  [ $# -eq 0 ] || die_usage "relay ask --setup takes nothing else"
   needs_terminal "ask --setup"
   needs_tool "ask --setup" security
   needs_tool "ask --setup" curl
@@ -4229,6 +4295,8 @@ ask_setup() {
   check_own_skill 2>/dev/null
   if [ "$OWN_SKILL_STATE" = "this relay's" ]; then
     say_ok "Cowork's folder has this relay's skills."
+  elif [ "$OWN_SKILL_STATE" = "a newer relay's" ]; then
+    say_warn "Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
   else
     install_own_skills "$ONEDRIVE" >/dev/null
     fresh=yes
@@ -4279,7 +4347,7 @@ ask_setup() {
     return 0
   fi
   echo
-  say_warn "It isn't working yet. What the wait said above is the place to start, and docs/using.md has \"When no answer comes\". $(typed "relay ask --setup") can be run again: it skips what is done." >&2
+  say_warn_err "It isn't working yet. What the wait said above is the place to start, and docs/using.md has \"When no answer comes\". $(typed_err "relay ask --setup") can be run again: it skips what is done."
   return 1
 }
 
@@ -4288,9 +4356,9 @@ cmd_answer() {
   while [ $# -gt 0 ]; do
     case "$1" in
       -h | --help) usage; return 0 ;;
-      -*) die "relay answer: unknown option $1. Try relay --help" ;;
+      -*) die_usage "relay answer: unknown option $1. Try relay --help" ;;
       *)
-        [ -z "$id" ] || die "relay answer takes one ask at a time"
+        [ -z "$id" ] || die_usage "relay answer takes one ask at a time"
         id="$1"
         shift
         ;;
@@ -4527,7 +4595,7 @@ esac
 
 ONEDRIVE=""
 if [ "${1:-}" = --dir ]; then
-  [ -n "${2:-}" ] || die "--dir needs your OneDrive folder"
+  [ -n "${2:-}" ] || die_usage "--dir needs your OneDrive folder"
   ONEDRIVE="$2"
   shift 2
 fi

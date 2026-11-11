@@ -146,7 +146,7 @@ eval "$(relay completion zsh)"
 
 Open a new terminal afterwards. A Homebrew install already does this for you.
 
-**Exit codes.** For a script that runs the relay: 0 is done, and 1 is something that failed or that you refused. 75 is "not now, try later": a wait ran out, as when `relay run` gives up on OneDrive or `relay answer` gets no answer in time, and the same command may well work in a while. An unknown command prints the usage and exits 2.
+**Exit codes.** For a script that runs the relay: 0 is done, and 1 is something that failed or that you refused. 2 is a command called wrongly: an unknown command or option, or an argument that is missing. 75 is "not now, try later": a wait ran out, as when `relay run` gives up on OneDrive or `relay answer` gets no answer in time, and the same command may well work in a while.
 
 **Colour.** With `NO_COLOR` set to anything, the relay prints plain words with no colour, as it does when its output is piped or sent to a file. `LLM_RELAY_STYLE=off` does the same for the relay alone. `LLM_RELAY_STYLE=on` turns colour on where it would be off, for a pager such as `less -R`, and wins over `NO_COLOR`. With nobody at a terminal the output is plain whatever these say, since an assistant is reading it. Where the locale isn't UTF-8, the tick is a `+`.
 
@@ -434,6 +434,10 @@ Each entry is what you see, then what to do. `relay start` is a good first step 
 - A skill copy that couldn't be read is left as it is.
 
 **A scan ends with "Then tell Cowork", not "Now tell Cowork".** Cowork doesn't have the relay's skills yet, so it couldn't use the scan. Run `relay start`, wait until the time it gives, and then tell Cowork.
+
+**"Cowork's skills are from a newer relay".** You have another Mac on the same work account with a later release, and it put its skills in OneDrive. This Mac leaves them alone, since its own are older. Upgrade this one with `brew update && brew upgrade llm-relay`, then run `relay start`.
+
+**`relay start` says your clones folder isn't there.** The relay looks for a merge request's clone under `~/dev` unless you have said otherwise. Tell it where your clones are with `relay setup --clones FOLDER`.
 
 **Cowork has an old copy of a skill, or doesn't see a new one.** You see Cowork using a skill that doesn't match your change, or a review that warns it came from an older copy. Cowork's copy lags OneDrive by up to 10 minutes.
 

@@ -890,7 +890,7 @@ rl_expect "with nothing named, it uses the newest" 0 "Deliverable: t1/d1"
 rl y a/b/c
 rl_expect "a badly named deliverable is refused" 1 "name a deliverable as TASK-FOLDER/DELIVERABLE"
 rl y --nope
-rl_expect "an unknown option is refused" 1 "unknown option --nope"
+rl_expect "an unknown option is refused, as a usage error" 2 "unknown option --nope"
 sleep 1
 rl_new t8 d8 'should_install && echo INSTALLING
 result "fine" 0
@@ -1991,6 +1991,56 @@ lacks "and nothing once setup has run" "remote-pair-run" vscan
 expect "once Cowork has the skill, the scan ends with Now tell Cowork" "Now tell Cowork: read Documents/Cowork/relay/scans/" vscan
 echo '# an older copy' >>"$VO/Documents/Cowork/skills/remote-pair-run/runlib.sh"
 expect "and says when Cowork's copy isn't this relay's" "Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay start" vscan
+# A warning goes to standard error, so it is styled as standard error is. At a terminal with
+# only the errors sent to a file, the file has no colour code in it.
+styled "" env HOME="$VH" sh -c '"$1" --dir "$2" scan "$3" --no-wiki 2>"$4"' sh "$W" "$VO" "$T/skill-repo" "$T/scan-errors.txt" >"$T/scan-shown.txt"
+check "a warning sent to a file says what it says" grep -q "isn't this relay's, so it may be out of date" "$T/scan-errors.txt"
+if grep -q "$ESC_BYTE" "$T/scan-errors.txt"; then bad "and has no colour code, though the terminal has"; elif grep -q "$ESC_BYTE" "$T/scan-shown.txt"; then ok "and has no colour code, though the terminal has"; else bad "and has no colour code, though the terminal has" "$(cat "$T/scan-shown.txt")"; fi
+out="$(styled "" env HOME="$VH" "$W" --dir "$VO" scan "$T/skill-repo" --no-wiki)"
+case "$out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Cowork's copy of the remote-pair-run skill"*"${ESC_BYTE}[36mrelay start${ESC_BYTE}[0m"*) ok "at a terminal the same warning has its mark, and the command in cyan" ;; *) bad "at a terminal the same warning has its mark, and the command in cyan" "$out" ;; esac
+
+# Two Macs on one account, on different releases. The older one leaves the newer one's skills.
+VB="$T/version-bin"
+mkdir -p "$VB"
+printf '#!/bin/sh\ncat >/dev/null\n' >"$VB/pbcopy"
+chmod +x "$VB/pbcopy"
+vstart() { env HOME="$VH" PATH="$VB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$VO" start 2>&1; }
+VSK="$VO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
+vstart >/dev/null
+sed -i.bak 's/^This skill is for relay .*/This skill is for relay 99.0.0./' "$VSK" && rm -f "$VSK.bak"
+out="$(vstart)"
+case "$out" in *"Cowork's skills are from a newer relay, 99.0.0, and this Mac has "*", so they were left as they are."*"brew update && brew upgrade llm-relay"*) ok "relay start leaves the skills of a newer relay, and says to upgrade this Mac" ;; *) bad "relay start leaves the skills of a newer relay, and says to upgrade this Mac" "$out" ;; esac
+check "the newer copy is still there" grep -q '^This skill is for relay 99.0.0.$' "$VSK"
+check "and the note tells Cowork which side is behind" grep -q "^the relay's own skills in Cowork's folder: a newer relay's\$" "$VO/Documents/Cowork/relay/start/note.txt"
+case "$out" in *"Cowork takes up to 10 minutes to see its new skills"*) bad "nothing new was copied, so there is no wait" "$out" ;; *) ok "nothing new was copied, so there is no wait" ;; esac
+expect "a scan says the same, and names the upgrade" "Cowork's skills are from a newer relay, 99.0.0" vscan
+out="$(env HOME="$VH" "$W" setup --dir "$VO" </dev/null 2>&1)"
+case "$out" in *"from a newer relay, 99.0.0"*"left as they are"*) ok "relay setup leaves them too" ;; *) bad "relay setup leaves them too" "$out" ;; esac
+check "and they are still the newer ones" grep -q '^This skill is for relay 99.0.0.$' "$VSK"
+check "Cowork's skill knows the case where the Mac is the one behind" grep -q "a newer relay's" "$SK/SKILL.md"
+sed -i.bak 's/^This skill is for relay .*/This skill is for relay 0.0.1./' "$VSK" && rm -f "$VSK.bak"
+out="$(vstart)"
+case "$out" in *"newer relay"*) bad "an older relay's skills are replaced, as before" "$out" ;; *"Cowork takes up to 10 minutes to see its new skills"*) ok "an older relay's skills are replaced, as before" ;; *) bad "an older relay's skills are replaced, as before" "$out" ;; esac
+check "with this relay's" cmp -s "$REPO/cowork/remote-pair-run/SKILL.md" "$VSK"
+
+# The folder clones are looked for under has to be there already.
+out="$(vstart)"
+case "$out" in *"/version-clones isn't there, so a merge request's clone won't be found. Say where your clones are: relay setup --clones FOLDER"*) ok "relay start says when the clones folder isn't there" ;; *) bad "relay start says when the clones folder isn't there" "$out" ;; esac
+mkdir -p "$T/version-clones"
+out="$(vstart)"
+case "$out" in *"isn't there"*) bad "and says nothing once it is" "$out" ;; *) ok "and says nothing once it is" ;; esac
+
+# Called wrongly is exit 2, so a script can tell it from something that failed.
+env HOME="$VH" "$W" --dir "$VO" scan --nope >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "an unknown option exits 2" || bad "an unknown option exits 2" "exit $rc"
+env HOME="$VH" "$W" --dir "$VO" ask --from >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "a flag with no value exits 2" || bad "a flag with no value exits 2" "exit $rc"
+env HOME="$VH" "$W" --dir "$VO" ticket >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "a command with its argument missing exits 2" || bad "a command with its argument missing exits 2" "exit $rc"
+env HOME="$VH" "$W" nonsense >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "and so does an unknown command" || bad "and so does an unknown command" "exit $rc"
+env HOME="$VH" "$W" --dir "$T/no-such-onedrive" scan >/dev/null 2>&1; rc=$?
+[ "$rc" = 1 ] && ok "something that failed still exits 1" || bad "something that failed still exits 1" "exit $rc"
 out="$(vscan)"
 case "$out" in *"Scanned skill-repo"*) ok "the scan still goes ahead" ;; *) bad "the scan still goes ahead" "$out" ;; esac
 

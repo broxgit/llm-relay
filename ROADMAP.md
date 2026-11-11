@@ -46,11 +46,16 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### Conventions version 2, and the last two gaps (2026-11-11)
+
+- **Why:** llm-wiki merged version 2 of the shared guide, with the three changes the relay asked for. And the audit had left two gaps.
+- **What changed:** The relay's copy of `docs/conventions.md` and its helper block are version 2. Its 25 warnings on standard error use `say_warn_err`, so `2>errors.log` at a terminal no longer puts colour codes in the file. A command called wrongly exits 2: an unknown option, a flag with no value, a missing argument, as an unknown command already did. `relay start` says when the folder clones are looked for under isn't there. When Cowork's skills are from a newer relay, put there by another Mac on the same account, this Mac leaves them and says to upgrade, where it used to put its older ones over them. In 0.2.24.
+
 ### The relay says what is missing at the moment it matters (2026-11-11)
 
 - **Why:** An audit of every command on a Mac that had never been set up, then an upgrade and a half-made webhook. Most paths said what to do. Five didn't.
 - **What changed:** "Have Claude Code ask Cowork" reads ready only with the webhook and Claude Code's skill, where the webhook alone was enough. `relay ask` says when Cowork has no skill to answer with, as `relay scan` does. A scan made before Cowork has the skill ends by sending the user to `relay start`, not to Cowork. With no webhook, `relay ask` names `relay ask --setup`. And a stale or missing skill says `relay start`, the command everything else names, where it said `relay setup`. In 0.2.23.
-- **Left:** a folder in "Where things are" that doesn't exist is listed without comment. Two Macs on different releases replace each other's copy of Cowork's skills, and the older one wins if it runs last.
+- **The two left then were done in 0.2.24:** see "Conventions version 2, and the last two gaps".
 
 ### A wait that runs out exits 75 (2026-11-11)
 
