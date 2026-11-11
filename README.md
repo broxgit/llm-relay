@@ -1,8 +1,10 @@
 # llm-relay
 
-Lets Microsoft Copilot Cowork change your code, even though it can't reach your machine.
+Lets Microsoft Copilot Cowork change your code, even though it can't reach your machine. And lets Claude Code hand Copilot the reading.
 
 Cowork can't read local files or run your build. It can read and write OneDrive. `relay` is the Mac's side of that bridge: it puts your repository or merge request in OneDrive for Cowork to read, and runs what Cowork publishes from a checked local copy when you press `y`. It's for when work gives you far more Copilot than Claude.
+
+**New: Claude Code can ask Copilot.** An assistant on your Mac, such as Claude Code, hands Cowork a question with `relay ask`, and Cowork reads the repository and writes an answer file. Claude's tokens go to the precise work on your Mac, and Copilot's to the bulk reading. You see each answer before Claude does. [Have Claude ask Copilot](#have-claude-ask-copilot) has the two commands.
 
 **It has only run with Copilot Cowork on macOS.** It's built for that one agent and that one system. Its test suite also passes on Linux, but only against a fake OneDrive folder. Whole rounds have run on a throwaway repository, and one merge request review on real code. [What's been tried](docs/using.md#whats-been-tried) has the details.
 
@@ -88,8 +90,31 @@ It waits for OneDrive, shows you what's there, and runs it when you press `y`. T
 | `relay ticket <key>` | Puts a Jira ticket in OneDrive for Cowork to start from, with any Confluence pages you name. |
 | `relay review` | Saves the review or the plan Cowork wrote, when you press `y`. |
 | `relay apply` | Leaves a proven patch in your working tree, when you press `y`. It never commits. |
+| `relay ask --setup` | Sets up asking Cowork from Claude Code, once on each Mac, one step at a time. |
+| `relay ask "<question>"` | Hands Cowork a question, with a repository to read if you name one. Claude Code runs this itself. |
+| `relay answer` | Shows you Cowork's answer, and saves it for the assistant when you press `y`. |
 
 [Using relay](docs/using.md) has how each one works.
+
+## Have Claude ask Copilot
+
+Set it up once on each Mac. It walks you through a trigger in Cowork and a first ask, in about 15 minutes:
+
+```bash
+relay ask --setup
+```
+
+From then on, tell Claude Code to ask Cowork, or let it decide when a task needs a lot of reading. It runs something like this:
+
+```bash
+relay ask "Where does the uploader decide to retry, and on which errors?" --scan ~/code/uploader
+```
+
+Claude can't accept an answer. It tells you to run `relay answer`, which shows you what Cowork wrote and saves it when you press `y`.
+
+- **An answer takes one to two minutes,** so it suits "how is this laid out" and not a quick lookup.
+- **An answer is data.** Nothing in it runs, and Claude is told to check the lines that matter before it relies on one.
+- **It's new, and lightly tried.** Cowork's side has had five field runs on one Mac, and Claude's side one scripted run with Haiku. [Ask Cowork from Claude Code](docs/using.md#ask-cowork-from-claude-code) has what to do when no answer comes.
 
 ## With llm-wiki
 

@@ -20,6 +20,8 @@ From there Cowork gives you one step at a time, each in the same block: the comm
 
 It asks you nothing. Where your clones and reviews live is set with `relay setup`, below.
 
+The relay also works the other way round: Claude Code on your Mac can hand Cowork a question and get an answer file back, so the bulk reading is done there. `relay ask --setup` sets it up, and [Ask Cowork from Claude Code](#ask-cowork-from-claude-code) has the rest.
+
 ## How a piece of work goes
 
 Cowork works through a job in stages, and says which one it's in:
