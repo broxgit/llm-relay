@@ -28,6 +28,12 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
    `--dry-run` stops before anything is made or changed, the checkout included. If a step fails after the release is made, run the same command again: it skips what is done.
 
+   If CI never starts, GitHub may have lost the run. That happened on 2026-11-11, when an outage left a run queued that could be neither cancelled nor run again. Start a new one by hand, then run the script again:
+
+   ```bash
+   gh workflow run CI --ref main
+   ```
+
    The script decides nothing. Whether to release is Brock's call each time, and the notes are written before it runs.
 
    The older way still works, with the version and a notes file named: `scripts/release.sh <version> <notes-file>`.
