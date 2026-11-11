@@ -7,7 +7,7 @@ description: |
 
 # Relay ask
 
-This skill is for relay 0.2.20.
+This skill is for relay 0.2.21.
 
 Cowork can read a whole repository cheaply. You can't see what it reads, and it can't see this machine. `relay ask` carries a question to it through the user's OneDrive, and an answer file comes back. The user sees the answer before you do.
 
