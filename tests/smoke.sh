@@ -3260,6 +3260,8 @@ expect "and the old name, --check, still does the same" "these don't say 9.9.9" 
 if grep -n '"\$RS"' "$REPO/tests/smoke.sh" | grep -v -e 'RELEASE_LATEST=' -e '"\$RS" --help' -e 'grep -' | grep -q .; then bad "no test runs the release script bare"; else ok "no test runs the release script bare"; fi
 # The files CI skips are listed in the workflow and in the script, and have to be the same.
 if [ "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml" | sed -n 's/^ *- "\(.*\)"$/\1/p' | LC_ALL=C sort -u | tr '\n' ' ')" = "AGENTS.md CLAUDE.md LICENSE README.md ROADMAP.md design-and-decisions/** docs/** releases/** " ] && grep -qF "DOCS_ONLY='^(design-and-decisions/|docs/|releases/|README\.md\$|ROADMAP\.md\$|AGENTS\.md\$|CLAUDE\.md\$|LICENSE\$)'" "$RS"; then ok "the script and CI agree on which files are only documents"; else bad "the script and CI agree on which files are only documents" "$(sed -n '/paths-ignore:/,/^$/p' "$REPO/.github/workflows/ci.yml")"; fi
+check "CI can be started by hand, for a run GitHub lost" grep -q '^  workflow_dispatch:$' "$REPO/.github/workflows/ci.yml"
+check "and the releasing guide says how" grep -q '^   gh workflow run CI --ref main$' "$REPO/docs/releasing.md"
 check "the releasing guide gives the script, with nothing to type after it" grep -q '^   scripts/release.sh$' "$REPO/docs/releasing.md"
 check "the notes of a release are kept out of git" grep -qx 'releases/latest' "$REPO/.gitignore"
 check "the log of releases has a line for each" grep -q '^| 0.2.23 | 2026-11-11 | da5f73c |$' "$REPO/releases/log.md"

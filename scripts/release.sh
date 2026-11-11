@@ -119,7 +119,7 @@ while :; do
 done
 waited=0
 while [ "$run_status" != completed ]; do
-  [ "$waited" -lt 1800 ] || die "CI run $run_id is still going after 30 minutes. Run this again when it ends."
+  [ "$waited" -lt 1800 ] || die "CI run $run_id is still going after 30 minutes. Run this again when it ends. If it never starts, GitHub may have lost it. Start another: gh workflow run CI --ref main"
   if [ $((waited % 60)) = 0 ]; then echo "run $run_id is $run_status, ${waited}s so far. It takes about seven minutes."; fi
   sleep 20
   waited=$((waited + 20))

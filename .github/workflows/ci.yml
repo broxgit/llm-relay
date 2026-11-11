@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # By hand, for when a run is lost: an outage at GitHub can leave one queued for good, and such
+  # a run can't be cancelled or run again. gh workflow run CI --ref main
+  workflow_dispatch:
   # The two paths-ignore lists must stay the same. cowork/ is left out on purpose: the tests read its SKILL.md.
   push:
     branches: [main]
