@@ -2721,6 +2721,28 @@ case "$out" in *"4 of 6."*) bad "and asks for no address or secret" "$out" ;; *)
 # A first ask that gets no answer.
 out="$(env HOME="$SUH" USER=tester PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" RELAY_WAIT=2 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$SUO" ask --setup 2>&1)"; rc=$?
 case "$rc:$out" in 0:*) bad "with no answer to the first ask it says it isn't working yet" "$out" ;; *"It isn't working yet."*"it skips what is done"*) ok "with no answer to the first ask it says it isn't working yet" ;; *) bad "with no answer to the first ask it says it isn't working yet" "exit $rc: $out" ;; esac
+# After an upgrade, relay start brings Claude Code's copy of the skill up to date, as it does
+# Cowork's. It never puts one where there was none.
+CS="$SUH/.claude/skills/relay-ask/SKILL.md"
+su_start() { env HOME="${1:-$SUH}" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$SUK" TERM_PROGRAM=Apple_Terminal "$W" --dir "$SUO" start 2>&1; }
+out="$(su_start)"
+case "$out" in *"relay-ask skill"*) bad "relay start says nothing of a Claude Code skill that is current" "$out" ;; *) ok "relay start says nothing of a Claude Code skill that is current" ;; esac
+sed -i.bak 's/^This skill is for relay .*/This skill is for relay 0.0.1./' "$CS" && rm -f "$CS.bak"
+out="$(su_start)"
+case "$out" in *"Claude Code's relay-ask skill was an older relay's, so it was updated. A new Claude Code session has it."*) ok "relay start updates a Claude Code skill left by an older relay" ;; *) bad "relay start updates a Claude Code skill left by an older relay" "$out" ;; esac
+check "and the copy is this relay's again" cmp -s "$REPO/claude/relay-ask/SKILL.md" "$CS"
+sed -i.bak 's/^This skill is for relay .*/This skill is for relay 0.0.1./' "$CS" && rm -f "$CS.bak"
+expect "relay setup does the same" "so it was updated" env HOME="$SUH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" "$W" setup --dir "$SUO" --reviews "$T/su-reviews" --clones "$T/su-clones"
+check "and leaves it current" cmp -s "$REPO/claude/relay-ask/SKILL.md" "$CS"
+echo "My own notes on asking Cowork." >"$CS"
+out="$(su_start)"
+case "$out" in *"isn't the relay's own, so it was left as it is."*"relay ask --skill"*) ok "a file of that name the relay didn't write is left alone, and said" ;; *) bad "a file of that name the relay didn't write is left alone, and said" "$out" ;; esac
+check "with its text untouched" grep -qx 'My own notes on asking Cowork.' "$CS"
+cp "$REPO/claude/relay-ask/SKILL.md" "$CS"
+mkdir -p "$T/no-claude-skill-home"
+out="$(su_start "$T/no-claude-skill-home")"
+refuse "where Claude Code has no relay-ask skill, relay start doesn't add one" test -e "$T/no-claude-skill-home/.claude"
+check "the user guide says relay start keeps the Claude Code skill current" grep -q "Claude Code's copy of the relay-ask skill" "$REPO/docs/using.md"
 check "the user guide leads with it" grep -q '^relay ask --setup$' "$REPO/docs/using.md"
 check "and says what to do when no answer comes" grep -q '^### When no answer comes$' "$REPO/docs/using.md"
 
@@ -2903,6 +2925,36 @@ rm -f "$UR"
 check "the guided test says where the unattended asks fit" grep -q 'relay field-test --asks' "$FS/SKILL.md"
 check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.md"
 check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"
+
+section "The user guide keeps up"
+# docs/using.md has to cover everything the relay can do. These fail when a command, a flag or
+# a setting is added and the guide doesn't have it yet.
+UG="$REPO/docs/using.md"
+missing=""
+for f in $({ "$W" --help; "$W" setup --help; } 2>/dev/null | grep -oE -- '--[a-z][a-z-]+' | LC_ALL=C sort -u); do
+  grep -q -- "$f" "$UG" || missing="$missing $f"
+done
+[ -z "$missing" ] && ok "every flag in relay --help is in the user guide" || bad "every flag in relay --help is in the user guide" "missing:$missing"
+EVERY="$(sed -n '/^## Every command$/,/^## What.s been tried$/p' "$UG")"
+missing=""
+for c in start practice setup skills field-test scan run review apply mr branch ticket ask answer completion; do
+  printf '%s\n' "$EVERY" | grep -qx "### \`$c\`" || missing="$missing $c"
+done
+[ -z "$missing" ] && ok "every command has an entry under Every command" || bad "every command has an entry under Every command" "missing:$missing"
+# A command the dispatch takes that the list above doesn't have would slip by, so hold the two together.
+KNOWN_COMMANDS=" start practice setup skills field-test scan run review apply mr branch ticket ask answer "
+for c in $(sed -n 's/^  start | practice | \(.*\))$/start practice \1/p' "$W" | tr -d '|'); do
+  case "$KNOWN_COMMANDS" in *" $c "*) ;; *) bad "a command the relay takes is in the test's list: $c" ;; esac
+done
+ok "the test's list of commands is the relay's"
+missing=""
+for v in WAIT POLL READ_LIMIT CHECK_LIMIT ASK_AGAIN ASK_STALL ASK_PARTIAL; do
+  d="$(sed -n "s/^$v=\"\${RELAY_$v:-\([0-9]*\)}\"\$/\1/p" "$W")"
+  [ -n "$d" ] && grep -q "^| \`RELAY_$v\` | $d |" "$UG" || missing="$missing RELAY_$v"
+done
+[ -z "$missing" ] && ok "each setting the guide gives has the default the code has" || bad "each setting the guide gives has the default the code has" "wrong or missing:$missing"
+check "the guide has a contents list" grep -q '^- \[Start here\](#start-here)' "$UG"
+check "and a place for when something goes wrong" grep -q '^## When something goes wrong$' "$UG"
 
 section "Releasing"
 # scripts/release.sh does the steps of docs/releasing.md. What it refuses is tested here. The

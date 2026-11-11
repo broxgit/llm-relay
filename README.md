@@ -93,6 +93,7 @@ It waits for OneDrive, shows you what's there, and runs it when you press `y`. T
 | `relay ask --setup` | Sets up asking Cowork from Claude Code, once on each Mac, one step at a time. |
 | `relay ask "<question>"` | Hands Cowork a question, with a repository to read if you name one. Claude Code runs this itself. |
 | `relay answer` | Shows you Cowork's answer, and saves it for the assistant when you press `y`. |
+| `relay completion zsh` | Prints tab completion for zsh, or `bash`. Add it to your shell's startup file. |
 
 [Using relay](docs/using.md) has how each one works.
 
