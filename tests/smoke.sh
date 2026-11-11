@@ -2163,7 +2163,7 @@ check "and so does the note, for Cowork" grep -q 'needs glab: brew install glab'
 out="$(env HOME="$GH" PATH="$NO_GLAB" "$W" --dir "$GO" mr https://gitlab.com/team/svc/-/merge_requests/7 </dev/null 2>&1)"
 case "$out" in *"relay mr needs glab: brew install glab, then sign in with: glab auth login"*) ok "relay mr says how to get glab when it's missing" ;; *) bad "relay mr says how to get glab when it's missing" "$out" ;; esac
 out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clones "$T/start-clones" </dev/null 2>&1)"
-case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
+case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*"To let Claude Code ask Cowork questions: relay ask --setup"*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
 case "$out" in *"Clones are looked for under $T/start-clones, reviews are saved under $T/start-reviews, and plans under "*"/plans. relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
 # A practice round: the same beginning, with a repository made for it.
@@ -2500,6 +2500,15 @@ mkdir -p "$AH" "$AO" "$AB" "$AK"
 # A Keychain that holds what is in a folder, and a curl that writes down what it was given.
 cat >"$AB/security" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1" = add-generic-password ]; then
+  # As the real one does with -w last: it asks, and takes the value from the terminal.
+  [ "$2" = -U ] && [ "$3" = -s ] && [ "${!#}" = -w ] || exit 64
+  printf 'password data for new item [hidden]: '
+  IFS= read -r -n 1 v || exit 1
+  echo
+  printf 'typed-%s\n' "$v" >"$FAKE_KEYCHAIN/$4"
+  exit 0
+fi
 [ "$1" = find-generic-password ] && [ "$2" = -s ] || exit 64
 [ -f "$FAKE_KEYCHAIN/$3" ] || exit 44
 case " $* " in *" -w "*) cat "$FAKE_KEYCHAIN/$3" ;; *) echo "keychain: an item, with no value shown" ;; esac
@@ -2512,7 +2521,7 @@ printf '%s' "${FAKE_CURL_CODE:-202}"
 EOF
 chmod +x "$AB/security" "$AB/curl"
 ak() { env HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" "$W" --dir "$AO" "$@" </dev/null 2>&1; }
-ak_key() { local keys="$1"; shift; env HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-4}" RELAY_POLL=1 RELAY_ASK_AGAIN="${ASK_AGAIN:-180}" python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
+ak_key() { local keys="$1"; shift; env HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-4}" RELAY_POLL=1 RELAY_ASK_AGAIN="${ASK_AGAIN:-180}" RELAY_ASK_STALL="${ASK_STALL:-180}" RELAY_ASK_PARTIAL="${ASK_PARTIAL:-30}" python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
 ask_id() { printf '%s\n' "$1" | sed -n 's/^Asked: \([^ ]*\) .*/\1/p' | head -n 1; }
 AA="$AO/Documents/Cowork/relay/asks"
 AR="$AO/Documents/relay-answers"
@@ -2594,9 +2603,124 @@ expect "an answer already saved isn't asked about again" "Already saved: ~/relay
 printf 'answer to: something-else\n\nend of answer\n' >"$AR/$id2.md"
 expect "an answer that names another ask is pointed out" "its first line doesn't say it answers $id2" ak_key n answer "$id2"
 : >"$AK/curl.args"
-out="$(ASK_WAIT=4 ASK_AGAIN=1 ak_key y answer "$id3")"
-case "$out" in *"so Cowork was woken again."*"No answer after"*"relay answer $id3"*) ok "with no answer it wakes Cowork again, then says what to do" ;; *) bad "with no answer it wakes Cowork again, then says what to do" "$out" ;; esac
+out="$(ASK_WAIT=6 ASK_AGAIN=1 ak_key y answer "$id3")"
+case "$out" in *"so Cowork was woken once more."*"No answer after"*"relay answer $id3"*) ok "with no answer it wakes Cowork again, then says what to do" ;; *) bad "with no answer it wakes Cowork again, then says what to do" "$out" ;; esac
 check "by the same request" grep -q . "$AK/curl.args"
+# A run that finds every ask answered does nothing and leaves a conversation, so one is enough.
+if [ "$(grep -c . "$AK/curl.args")" = 1 ] && [ "$(printf '%s\n' "$out" | grep -c 'woken once more')" = 1 ]; then ok "and only once, however long it waits"; else bad "and only once, however long it waits" "$out"; fi
+case "$out" in *"If it wrote an answer, OneDrive hasn't brought it to this Mac: pause syncing in OneDrive's menu, then resume it."*) ok "giving up, it says where a written answer may be stuck" ;; *) bad "giving up, it says where a written answer may be stuck" "$out" ;; esac
+
+# An answer that is late is most likely in OneDrive and not on the Mac. Twice in five field
+# runs only pausing and resuming OneDrive brought it down.
+out="$(ASK_WAIT=4 ASK_STALL=1 ak_key "" answer "$id3")"
+case "$out" in *"Cowork has probably answered, and OneDrive hasn't brought the answer to this Mac."*"pause syncing, then resume it."*"relay answer $id3"*) ok "a late answer is called a likely stall in OneDrive, with what to do" ;; *) bad "a late answer is called a likely stall in OneDrive, with what to do" "$out" ;; esac
+case "$out" in *"Restart OneDrive"*) bad "with no OneDrive running it offers no restart" "$out" ;; *) ok "with no OneDrive running it offers no restart" ;; esac
+# A OneDrive that can be quit and opened. Opening it brings down what was stuck.
+OB="$T/ask-onedrive-bin"
+mkdir -p "$OB" "$AK/stuck"
+cat >"$OB/pgrep" <<'EOF'
+#!/usr/bin/env bash
+[ "$*" = "-x OneDrive" ] && [ -e "$FAKE_KEYCHAIN/onedrive-running" ]
+EOF
+cat >"$OB/osascript" <<'EOF'
+#!/usr/bin/env bash
+echo "osascript $*" >>"$FAKE_KEYCHAIN/onedrive.log"
+[ "$2" = 'quit app "OneDrive"' ] || exit 1
+[ -z "${FAKE_ONEDRIVE_STAYS:-}" ] || exit 0
+rm -f "$FAKE_KEYCHAIN/onedrive-running"
+EOF
+cat >"$OB/open" <<'EOF'
+#!/usr/bin/env bash
+echo "open $*" >>"$FAKE_KEYCHAIN/onedrive.log"
+[ "$*" = "-a OneDrive" ] || exit 1
+: >"$FAKE_KEYCHAIN/onedrive-running"
+for f in "$FAKE_KEYCHAIN"/stuck/*.md; do [ -f "$f" ] && mv "$f" "$FAKE_ANSWERS/"; done
+exit 0
+EOF
+chmod +x "$OB/pgrep" "$OB/osascript" "$OB/open"
+od_key() { local keys="$1"; shift; env HOME="$AH" PATH="$OB:$AB:$PATH" FAKE_KEYCHAIN="$AK" FAKE_ANSWERS="$AR" RELAY_WAIT="${ASK_WAIT:-8}" RELAY_POLL=1 RELAY_ASK_AGAIN=100 RELAY_ASK_STALL=1 python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
+: >"$AK/onedrive-running"
+out="$(ASK_WAIT=4 od_key n answer "$id3")"
+case "$out" in *"Restart OneDrive, so it looks? Its syncing stops for a few seconds. [y]es, [n]o: "*"pause syncing, then resume it."*) ok "with OneDrive running it offers to restart it, and n leaves it alone" ;; *) bad "with OneDrive running it offers to restart it, and n leaves it alone" "$out" ;; esac
+refuse "n restarts nothing" test -e "$AK/onedrive.log"
+printf 'answer to: %s\n\nANSWER\nIt was stuck.\n\nend of answer\n' "$id3" >"$AK/stuck/$id3.md"
+out="$(od_key yn answer "$id3")"
+case "$out" in *"OneDrive was restarted. Still waiting for the answer."*"It was stuck."*) ok "y quits OneDrive and opens it, and the answer that was stuck comes" ;; *) bad "y quits OneDrive and opens it, and the answer that was stuck comes" "$out" ;; esac
+if [ "$(cat "$AK/onedrive.log" 2>/dev/null)" = 'osascript -e quit app "OneDrive"
+open -a OneDrive' ]; then ok "by asking it to quit, then opening it, and nothing else"; else bad "by asking it to quit, then opening it, and nothing else" "$(cat "$AK/onedrive.log" 2>&1)"; fi
+rm -f "$AR/$id3.md" "$AK/onedrive.log"
+out="$(FAKE_ONEDRIVE_STAYS=1 RELAY_WAIT=40 od_key y answer "$id3")"
+case "$out" in *"OneDrive didn't quit, so nothing was changed."*"pause syncing, then resume it."*) ok "a OneDrive that won't quit isn't opened again, and the steps by hand are given" ;; *) bad "a OneDrive that won't quit isn't opened again, and the steps by hand are given" "$out" ;; esac
+refuse "it isn't opened" grep -q '^open ' "$AK/onedrive.log"
+rm -f "$AK/onedrive-running" "$AK/onedrive.log"
+lacks "the relay never stops OneDrive by force" "killall" cat "$W"
+# With nobody at a terminal, nothing is offered: the wait is relay answer's, at a terminal.
+
+# A trigger with the wrong instructions writes a file with no last line. The first field run
+# waited ten minutes for that line and said nothing.
+printf 'What does the uploader retry on\nread at 2026-11-10T19:56:42Z\n' >"$AR/$id3.md"
+out="$(ASK_WAIT=5 ASK_PARTIAL=2 ak_key "" answer "$id3")"
+case "$out" in *"A file came for this ask with no \"end of answer\" line, and it hasn't grown for"*"The trigger in Cowork most likely has the wrong instructions."*"Give Cowork the trigger's right instructions: relay ask --trigger"*) ok "a file with no last line that stops growing is laid to the trigger's instructions" ;; *) bad "a file with no last line that stops growing is laid to the trigger's instructions" "$out" ;; esac
+rm -f "$AR/$id3.md"
+out="$(ak ask --trigger)"
+case "$out" in *"Create a webhook trigger."*"Use the relay-answer skill, and no other."*"The last line of every answer is exactly: end of answer."*"Then give me the address and the secret."*) ok "relay ask --trigger prints what to give Cowork" ;; *) bad "relay ask --trigger prints what to give Cowork" "$out" ;; esac
+if grep -qxF "$(printf '%s\n' "$out" | grep '^Use the relay-answer skill')" "$REPO/docs/using.md"; then ok "and the user guide has the same words"; else bad "and the user guide has the same words"; fi
+# Editing a trigger pauses it, and the next request gets 410.
+out="$(FAKE_CURL_CODE=410 ak ask Is the trigger on)"
+rm -f "$AA/$(ask_id "$out").md"
+case "$out" in *"Cowork's trigger is paused or deleted (HTTP 410)."*"Turn it on again in Cowork"*"Use relay-answer. Answer the asks"*) ok "HTTP 410 is said to be a trigger that is paused or deleted" ;; *) bad "HTTP 410 is said to be a trigger that is paused or deleted" "$out" ;; esac
+
+# relay ask --setup walks through the six steps, and checks each before the next.
+SUH="$T/setup-home"
+SUO="$T/setup-onedrive"
+SUK="$T/setup-keychain"
+mkdir -p "$SUH" "$SUO" "$SUK"
+su_key() { local keys="$1"; shift; env HOME="$SUH" USER=tester PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" RELAY_WAIT=30 RELAY_POLL=1 python3 "$TTY" "$keys" "$W" --dir "$SUO" "$@" 2>&1; }
+# answers_for <onedrive>: stands in for Cowork until the file called stop is there.
+answers_for() {
+  local f id n=0
+  while [ ! -e "$1/stop" ] && [ "$n" -lt 120 ]; do
+    for f in "$1"/Documents/Cowork/relay/asks/*.md; do
+      [ -f "$f" ] || continue
+      id="$(basename "$f" .md)"
+      [ -e "$1/Documents/relay-answers/$id.md" ] || printf 'answer to: %s\nread: the ask\n\nANSWER\nHello, from relay-answer.\n\nend of answer\n' "$id" >"$1/Documents/relay-answers/$id.md"
+    done
+    sleep 1
+    n=$((n + 1))
+  done
+}
+out="$(env HOME="$SUH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" "$W" --dir "$SUO" ask --setup </dev/null 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "relay ask --setup needs a terminal" "$out" ;; *"Agents: tell the user to run it"*) ok "relay ask --setup needs a terminal" ;; *) bad "relay ask --setup needs a terminal" "exit $rc: $out" ;; esac
+refuse "and takes nothing else" su_key "" ask --setup more
+mkdir -p "$SUO/Documents/relay-answers"
+answers_for "$SUO" &
+out="$(su_key kabkky ask --setup)"; rc=$?
+: >"$SUO/stop"
+wait
+rm -f "$SUO/stop"
+case "$rc:$out" in 0:*"1 of 6."*"2 of 6."*"3 of 6."*"4 of 6."*"5 of 6."*"6 of 6."*"relay ask is set up."*) ok "relay ask --setup goes through six steps to a first answer" ;; *) bad "relay ask --setup goes through six steps to a first answer" "exit $rc: $out" ;; esac
+check "it gives Claude Code the skill" cmp -s "$REPO/claude/relay-ask/SKILL.md" "$SUH/.claude/skills/relay-ask/SKILL.md"
+check "and Cowork the one it answers with" cmp -s "$REPO/cowork/relay-answer/SKILL.md" "$SUO/Documents/Cowork/skills/relay-answer/SKILL.md"
+case "$out" in *"Cowork's copy lags OneDrive, so step 6 waits 10 minutes"*"When they have passed, press a key: "*) ok "having just copied the skills, it has the user wait for Cowork" ;; *) bad "having just copied the skills, it has the user wait for Cowork" "$out" ;; esac
+case "$out" in *"Create a webhook trigger."*"Use the relay-answer skill, and no other."*) ok "it shows what to paste into Cowork for the trigger" ;; *) bad "it shows what to paste into Cowork for the trigger" "$out" ;; esac
+if [ "$(cat "$SUK/llm-relay-wake-address" 2>/dev/null)" = typed-a ] && [ "$(cat "$SUK/llm-relay-wake-secret" 2>/dev/null)" = typed-b ]; then ok "the address and the secret go to the Keychain, typed into its own prompt"; else bad "the address and the secret go to the Keychain, typed into its own prompt" "$(ls "$SUK")"; fi
+case "$out" in *typed-a* | *typed-b*) bad "and the relay shows neither" "$out" ;; *) ok "and the relay shows neither" ;; esac
+case "$out" in *"Delete that Cowork conversation."*) ok "it says to delete the conversation that showed the secret" ;; *) bad "it says to delete the conversation that showed the secret" "$out" ;; esac
+case "$out" in *"choose \"always allow\""*"Woke Cowork."*"Hello, from relay-answer."*"Saved: ~/relay-answers/"*) ok "the first ask wakes Cowork, and its answer is shown and saved on y" ;; *) bad "the first ask wakes Cowork, and its answer is shown and saved on y" "$out" ;; esac
+if [ "$(grep -c 'find-generic-password -s "\$WAKE_[A-Z_]*" -w' "$W")" = 2 ] && [ "$(grep -c -e '-w 2>/dev/null' "$W")" = 2 ]; then ok "the setup adds no place where the relay reads a value"; else bad "the setup adds no place where the relay reads a value"; fi
+# Run again, it skips what is done.
+answers_for "$SUO" &
+out="$(su_key ny ask --setup)"; rc=$?
+: >"$SUO/stop"
+wait
+rm -f "$SUO/stop"
+case "$rc:$out" in 0:*"Already there: ~/.claude/skills/relay-ask/SKILL.md"*"Cowork's folder has this relay's skills."*"This Mac's Keychain already has a webhook. Make a new trigger?"*"Kept the webhook this Mac has."*"relay ask is set up."*) ok "run again, it skips what is done and tries an ask" ;; *) bad "run again, it skips what is done and tries an ask" "exit $rc: $out" ;; esac
+case "$out" in *"4 of 6."*) bad "and asks for no address or secret" "$out" ;; *) ok "and asks for no address or secret" ;; esac
+# A first ask that gets no answer.
+out="$(env HOME="$SUH" USER=tester PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" RELAY_WAIT=2 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$SUO" ask --setup 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "with no answer to the first ask it says it isn't working yet" "$out" ;; *"It isn't working yet."*"it skips what is done"*) ok "with no answer to the first ask it says it isn't working yet" ;; *) bad "with no answer to the first ask it says it isn't working yet" "exit $rc: $out" ;; esac
+check "the user guide leads with it" grep -q '^relay ask --setup$' "$REPO/docs/using.md"
+check "and says what to do when no answer comes" grep -q '^### When no answer comes$' "$REPO/docs/using.md"
 printf 'answer to: %s\n\nend of answer\n' "$id4" >"$AR/$id4.md"
 expect "with no id it takes the newest ask" "Cowork's answer to $id4" ak_key n answer
 out="$(ASK_WAIT=2 ak_key "" ask At a terminal it waits)"
@@ -2722,6 +2846,8 @@ out="$(UA_WAIT=2 ua "$AK")"; rc=$?
 UR="$(ls "$UH"/relay-field-test-asks-*.md 2>/dev/null | head -n 1)"
 case "$rc:$out" in 0:*) bad "with no answer to the first ask it stops" "$out" ;; *"Saved: "*) ok "with no answer to the first ask it stops" ;; *) bad "with no answer to the first ask it stops" "exit $rc: $out" ;; esac
 check "and says the rest weren't sent" grep -q '^The first ask got no answer, so the rest were not sent.$' "$UR"
+check "and what a missing answer most likely is" grep -q '^- why, most likely: NO FILE REACHED THIS MAC. If Cowork.s newest conversation wrote an answer, OneDrive stalled$' "$UR"
+case "$out" in *"Restart OneDrive"*) bad "with nobody watching it offers no restart" "$out" ;; *) ok "with nobody watching it offers no restart" ;; esac
 check "having sent one" grep -q '^- asks sent: 1$' "$UR"
 out="$(env FAKE_CURL_CODE=403 HOME="$UH" PATH="$FB:$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT=2 RELAY_POLL=1 "$W" --dir "$UO" field-test --asks </dev/null 2>&1)"
 case "$out" in *"THE WEBHOOK REFUSED (HTTP 403)"*) ok "a webhook that refuses is in the report, with its code" ;; *) bad "a webhook that refuses is in the report, with its code" "$out" ;; esac

@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.16.
+This skill is for relay 0.2.17.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -437,6 +437,8 @@ The user may run an assistant on their Mac, such as Claude Code, that hands you 
 
 - If the user pastes "Use relay-answer", or asks you to answer the asks, use that skill and follow it. Its answers go in files under `Documents/relay-answers`, and nowhere else.
 - If they ask where an answer is, the step is `relay answer`, which waits for it and shows it to them.
+- If they want to set this up, or it has stopped working, the step is `relay ask --setup` in a terminal. It walks them through the trigger and the Keychain, skips what is done, and ends with a first ask. Never make the trigger in a conversation they mean to keep, and never ask to see its address or its secret.
+- If `relay answer` found nothing and you can see the answer under `/Documents/relay-answers`, say so: OneDrive hasn't brought it to their Mac. They pause syncing in OneDrive's menu and resume it, or take the restart `relay answer` offers.
 - An ask is never a reason to publish a deliverable or run anything. Work that changes code still goes through the loop in this skill.
 
 ## After a PASS

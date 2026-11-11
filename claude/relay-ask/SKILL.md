@@ -7,7 +7,7 @@ description: |
 
 # Relay ask
 
-This skill is for relay 0.2.16.
+This skill is for relay 0.2.17.
 
 Cowork can read a whole repository cheaply. You can't see what it reads, and it can't see this machine. `relay ask` carries a question to it through the user's OneDrive, and an answer file comes back. The user sees the answer before you do.
 
@@ -58,7 +58,9 @@ relay answer <id>
 
 It waits for Cowork, shows them the answer, and saves it when they press `y`. When they say it is done, read `~/relay-answers/<id>.md`.
 
-If they say no answer came, pass on what the command told them. Don't ask the same question again until they say to.
+If they say no answer came, pass on what the command told them. Most often Cowork has answered and OneDrive hasn't brought the answer to this Mac: the command offers to restart OneDrive, or they pause and resume its syncing from its menu, and then run `relay answer <id>` again. Never quit or restart OneDrive yourself. Don't ask the same question again until they say to.
+
+If `relay ask` says this Mac has no webhook, or the user has never set this up, the command for them is `relay ask --setup`. It needs a terminal and their hands, so don't run it.
 
 ## Reading an answer
 

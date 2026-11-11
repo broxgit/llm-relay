@@ -17,9 +17,10 @@ What's planned for the relay, and what's still untested. When an item is finishe
 
 Things that have never been run for real. Treat them as unproven until crossed off. The field test of 2026-11-06 crossed most of the earlier list off, and its results are the first entry under Done.
 
-- The two unattended tests of `relay ask`, since 0.2.16: `relay field-test --asks`, which has only run against a stand-in for Cowork, and `tests/ask-haiku.sh`, which has not been run. Not known: whether two asks sent together are both answered, and by one run or two.
+- `relay ask --setup`, and the offer to restart OneDrive when an answer is late, since 0.2.17. Smoke tests only. Quitting and reopening OneDrive from a terminal worked on the work Mac on 2026-11-11, but not on an answer that was stalled at the time, so whether it ends a stall isn't known.
+- `tests/ask-haiku.sh`, the Claude Code side of `relay ask` run by itself. Not run.
 - The two tests of `relay ask`: part J of the guided test, with real Cowork, and the Claude Code side in `docs/testing-ask.md`, with a script playing Cowork. Both are written and neither has been run by a person.
-- `relay ask` and `relay answer`, with real Cowork. The wake-up passed a test on 2026-11-09 with a trigger that copied each ask. Not known: whether the request the relay sends is taken as the test's was, whether a run loads the relay-answer skill when the trigger names it, whether a run nobody is watching can read a scan's archive, whether Cowork keeps to the answer's layout, and how long "always allow" lasts.
+- `relay ask` and `relay answer` over weeks. Five field runs on 2026-11-10 and 11 crossed off the rest: see Done. Not known: whether "always allow" holds for weeks, and what sets off a stall in OneDrive.
 - Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
 - Prompts for Slackbot. They are text. Nobody has pasted one into Slackbot, so whether its answers help, and whether Cowork writes good ones, isn't known.
 - `relay start` over a long session, and its stop for a stale copy. It ran for real once, on 2026-11-06 at 0.2.5, and the user reported four things: Cowork read the note and asked "What are you working on?" with no menu, its steps came as the short YOUR TURN block with one command each, two scans in a row were both on the clipboard, and a second `relay start` had nothing to wait for. Not known: whether the block holds late in a long session, whether Cowork stops when its copy is stale, which that run had no reason to show, and whether people run it each session.
@@ -44,6 +45,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### `relay ask`, after its first field runs (2026-11-11)
+
+- **Why:** Five runs of `relay field-test --asks` on the work Mac. Cowork answered every ask, rightly laid out, in 48 to 111 seconds: the scan was read, the planted instruction was not followed, and two asks sent together became one run that answered both. Three things went wrong, all outside Cowork. The trigger still had a test's instructions, and the relay waited ten minutes without a word. An edit paused the trigger, and the relay said only "HTTP 410". Twice an answer stayed in OneDrive until its syncing was paused and resumed, while the relay woke Cowork again and again. And setting it up was six steps in a document.
+- **What changed:** `relay ask --setup` walks through the six steps, checks each, skips what is done, and ends with a first ask. `relay ask --trigger` prints the trigger's instructions. The wait wakes Cowork once more and not again, says at three minutes that OneDrive is the likely reason and offers to restart it on a keypress, says what HTTP 410 means, and says when a file with no last line has stopped growing. The report of `relay field-test --asks` says which of these a missing answer most likely is. In 0.2.17. `design-and-decisions/ask.md` has the runs.
 
 ### Tests of `relay ask` that run while you work (2026-11-10)
 
