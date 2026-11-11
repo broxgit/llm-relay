@@ -46,6 +46,16 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### A user guide that covers everything, and is easier to use (2026-11-11)
+
+- **Why:** The guide had every command and all but two flags, but no contents, no way from a task to its command, nowhere to look up a flag, no settings, and its troubleshooting was scattered.
+- **What changed:** `docs/using.md` has a contents list, a "What do you want to do?" table, a Settings section with the environment variables and shell completion, "When something goes wrong", and "Every command" with each flag. Tests fail when a flag, a command or a setting's default is in the relay and not in the guide.
+
+### `relay start` keeps Claude Code's skill current (2026-11-11)
+
+- **Why:** The relay-ask skill is in `~/.claude/skills`, where every Claude Code session on the Mac has it. Nothing brought it up to date after an upgrade but `relay ask --setup`, so on the work Mac it stayed an older relay's across two releases, and didn't know what the relay had learned to say.
+- **What changed:** `relay start` and `relay setup` update that copy when it is there and is an older relay's. They never add it where there was none, and they leave a file of that name the relay didn't write. In 0.2.19.
+
 ### A release is one command (2026-11-11)
 
 - **Why:** Every release was the same eight steps done by hand, by an agent, and one of them had gone wrong: a clone of the tap that couldn't push.

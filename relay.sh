@@ -41,7 +41,7 @@ die() {
 }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.18"
+RELAY_VERSION="0.2.19"
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -3399,6 +3399,7 @@ begin_session() {
       ;;
   esac
   SKILLS_CHECKED=1
+  refresh_claude_skill
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   trap cleanup EXIT
   SKILL_TMP="$WORK/skills"
@@ -3659,6 +3660,7 @@ EOF
   [ -n "$dir" ] || dir="$(onedrive_folder)" || exit 1
   [ -d "$dir" ] || die "no such folder: $dir"
   install_own_skills "$dir"
+  refresh_claude_skill
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
   [ -z "$plans" ] || relay_setting plans "$plans" "$HOME/plans" ""
@@ -3875,6 +3877,25 @@ say_stall() {
     esac
   fi
   echo "In OneDrive's menu, in the menu bar, pause syncing, then resume it. This goes on waiting. Or stop it with Ctrl-C, and later run: $(typed "relay answer $id")"
+}
+
+# refresh_claude_skill: brings Claude Code's copy of the relay-ask skill up to date after an
+# upgrade, as relay start does for Cowork's skills. Only a copy that is there and is the
+# relay's: nobody gets a skill in their Claude Code setup that they didn't ask for, and a
+# file of that name the relay didn't write is left alone.
+refresh_claude_skill() {
+  local to="$HOME/.claude/skills/relay-ask/SKILL.md" from="$REPO/claude/relay-ask/SKILL.md"
+  [ -f "$to" ] && [ -f "$from" ] || return 0
+  ! cmp -s "$from" "$to" || return 0
+  if ! grep -q '^This skill is for relay [0-9]' "$to" 2>/dev/null; then
+    say_warn "$(tilde "$to") isn't the relay's own, so it was left as it is. $(typed "relay ask --skill") replaces it."
+    return 0
+  fi
+  if cp "$from" "$to" 2>/dev/null; then
+    say_ok "Claude Code's relay-ask skill was an older relay's, so it was updated. A new Claude Code session has it."
+  else
+    say_warn "Claude Code's relay-ask skill is an older relay's, and couldn't be updated: $(tilde "$to")"
+  fi
 }
 
 # install_claude_skill: the skill that tells an assistant on this Mac how to ask.
