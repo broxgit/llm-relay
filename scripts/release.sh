@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Makes a release of llm-relay: the steps of docs/releasing.md, in one command.
 #
-#   scripts/release.sh VERSION NOTES-FILE [--check]
+#   scripts/release.sh VERSION NOTES-FILE [--dry-run]
 #
 # It releases the commit that main is at, and only if that commit is what GitHub has, the five
 # version lines say VERSION, and CI passed on it. Then it makes the release, points the
-# Homebrew formula at it, and checks the formula the way a user gets it. --check stops before
+# Homebrew formula at it, and checks the formula the way a user gets it. --dry-run stops before
 # anything is made. Run again after a failure, it skips what is already done.
 #
 # It decides nothing: whether to release, and what the notes say, are settled before it runs.
@@ -23,13 +23,14 @@ step() { echo "== $*"; }
 version="" notes="" check=""
 for a in "$@"; do
   case "$a" in
-    --check) check=1 ;;
+    # --dry-run is the name docs/conventions.md gives it. --check is the old one.
+    --dry-run | --check) check=1 ;;
     -h | --help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option $a" ;;
     *) if [ -z "$version" ]; then version="$a"; elif [ -z "$notes" ]; then notes="$a"; else die "too many arguments"; fi ;;
   esac
 done
-[ -n "$version" ] && [ -n "$notes" ] || die "usage: scripts/release.sh VERSION NOTES-FILE [--check]"
+[ -n "$version" ] && [ -n "$notes" ] || die "usage: scripts/release.sh VERSION NOTES-FILE [--dry-run]"
 printf '%s\n' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || die "a version looks like 0.2.18, with no v in front: $version"
 [ -s "$notes" ] || die "no release notes at $notes"
 tag="v$version"
@@ -88,7 +89,7 @@ done
 echo "run $run_id passed"
 
 if [ -n "$check" ]; then
-  echo "== Checked. Nothing was made, because of --check."
+  echo "== Checked. Nothing was made, because of --dry-run."
   exit 0
 fi
 

@@ -81,7 +81,11 @@ wait_draw() {
 wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.21"
+RELAY_VERSION="0.2.22"
+
+# The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
+# where the same command may well work in a while. 1 is for something that failed.
+EXIT_LATER=75
 
 COWORK=""
 WAIT="${RELAY_WAIT:-600}"
@@ -433,7 +437,7 @@ wait_for_deliverable() {
         say_warn "Still not ready after ${waited}s, at $(now), so nothing ran and no report was sent."
         echo "Paste this output to Cowork. If your OneDrive allows it, in Finder, right-click the task's output folder, choose Always Keep on This Device, and run the same command again."
       } >&2
-      return 1
+      return "$EXIT_LATER"
     fi
     sleep "$POLL"
   done
@@ -561,7 +565,7 @@ cmd_run() {
   # macOS has refused one terminal app and not another, so a run says which it's in.
   say_dim "Relay run started at $(now), in ${TERM_PROGRAM:-an unnamed terminal app}."
   RUN_STARTED=1
-  wait_for_deliverable "$named" "$copy" || return 1
+  wait_for_deliverable "$named" "$copy" || return $?
 
   version="$(_runlib_manifest_version "$copy/manifest.txt")"
   a="${SRC%/*}"
@@ -2049,7 +2053,7 @@ cmd_review() {
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
   RUNLIB_NEEDS=""
-  wait_for_deliverable "$named" "$copy" || return 1
+  wait_for_deliverable "$named" "$copy" || return $?
   version="$(_runlib_manifest_version "$copy/manifest.txt")"
   a="${SRC%/*}"
   task="$(basename "${a%/*}")"
@@ -2135,7 +2139,7 @@ cmd_apply() {
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
   RUNLIB_NEEDS=""
-  wait_for_deliverable "$named" "$copy" || return 1
+  wait_for_deliverable "$named" "$copy" || return $?
   version="$(_runlib_manifest_version "$copy/manifest.txt")"
   a="${SRC%/*}"
   task="$(basename "${a%/*}")"
@@ -3996,7 +4000,7 @@ wait_for_answer() {
         fi
         echo "Then run: relay answer $id"
       } >&2
-      return 1
+      return "$EXIT_LATER"
     fi
     # The first request can go out before OneDrive has uploaded the ask. One more finds it.
     # Only one: a run that finds every ask answered does nothing, and leaves a conversation.
@@ -4026,7 +4030,7 @@ wait_for_answer() {
 # answer came from the cloud, so nothing on this Mac reads it until someone has seen it.
 take_answer() {
   local id="$1" size
-  wait_for_answer "$id" || return 1
+  wait_for_answer "$id" || return $?
   # What is shown and saved has no control characters in it, so an answer can't drive the
   # terminal it is shown in.
   LC_ALL=C tr -d '\000-\010\013-\037\177' <"$WORK/answer.md" >"$WORK/answer.clean"

@@ -46,6 +46,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### A wait that runs out exits 75 (2026-11-11)
+
+- **Why:** The conventions shared with llm-wiki give 75 for "not now, try later". The relay exited 1 whether something had failed or a wait had only run out, so a script couldn't tell which.
+- **What changed:** `relay run`, `review` and `apply` exit 75 when they give up waiting for OneDrive, and `relay answer` and `relay ask` when no answer comes in time. 1 is still a failure, or a no from the user. `scripts/release.sh` takes `--dry-run`, the conventions' name, and `--check` still works. In 0.2.22.
+
 ### Every command looks the same (2026-11-11)
 
 - **Why:** Four commands had the new look and the rest printed as before, so a session moved between two styles.
