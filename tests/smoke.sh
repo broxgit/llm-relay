@@ -911,7 +911,7 @@ git -C "$SR" commit -qm one
 printf 'two\n' >>"$SR/a.txt"
 echo secret >"$SR/untracked.env"
 sc() { env HOME="$RH" "$W" scan "$@"; }
-expect "relay scan says what it sent" "Now tell Cowork: read Documents/Cowork/relay/scans/scan-me.txt" sc "$SR"
+expect "relay scan says what it sent" "tell Cowork: read Documents/Cowork/relay/scans/scan-me.txt" sc "$SR"
 SD="$OD/Documents/Cowork/relay/scans"
 check "the note names the commit" grep -q "^commit: $(git -C "$SR" rev-parse HEAD)$" "$SD/scan-me.txt"
 check "the note names the branch" grep -q '^branch: main$' "$SD/scan-me.txt"
@@ -1980,11 +1980,17 @@ VH="$T/version-home"
 VO="$T/version-onedrive"
 mkdir -p "$VH" "$VO"
 vscan() { env HOME="$VH" "$W" --dir "$VO" scan "$T/skill-repo" --no-wiki 2>&1; }
-expect "a scan says when Cowork has no skill yet" "Cowork doesn't have the remote-pair-run skill yet. Run: relay setup" vscan
+expect "a scan says when Cowork has no skill yet" "Cowork doesn't have the remote-pair-run skill yet. Run: relay start" vscan
+# With no skill in Cowork's folder, telling Cowork to read the scan would get nowhere, so the
+# last lines send the user to relay start first.
+out="$(vscan 2>&1)"
+case "$out" in *"Cowork can't use this yet: it doesn't have the relay's skills. Run: relay start, which says when Cowork has them."*"Then tell Cowork: read Documents/Cowork/relay/scans/"*) ok "and doesn't send the user to Cowork before it has the skill" ;; *) bad "and doesn't send the user to Cowork before it has the skill" "$out" ;; esac
+case "$out" in *"Now tell Cowork"*) bad "so there is no Now tell Cowork yet" "$out" ;; *) ok "so there is no Now tell Cowork yet" ;; esac
 env HOME="$VH" "$W" setup --dir "$VO" --reviews "$T/version-reviews" --clones "$T/version-clones" </dev/null >/dev/null 2>&1
 lacks "and nothing once setup has run" "remote-pair-run" vscan
+expect "once Cowork has the skill, the scan ends with Now tell Cowork" "Now tell Cowork: read Documents/Cowork/relay/scans/" vscan
 echo '# an older copy' >>"$VO/Documents/Cowork/skills/remote-pair-run/runlib.sh"
-expect "and says when Cowork's copy isn't this relay's" "Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay setup" vscan
+expect "and says when Cowork's copy isn't this relay's" "Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay start" vscan
 out="$(vscan)"
 case "$out" in *"Scanned skill-repo"*) ok "the scan still goes ahead" ;; *) bad "the scan still goes ahead" "$out" ;; esac
 
@@ -2712,6 +2718,9 @@ check "the answers folder is made, outside Documents/Cowork" test -d "$AR"
 case "$out" in *"This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"*"Use relay-answer. Answer the asks in Documents/Cowork/relay/asks in my OneDrive."*) ok "with no webhook it gives a line to paste" ;; *) bad "with no webhook it gives a line to paste" "$out" ;; esac
 refuse "and makes no request" test -f "$AK/curl.args"
 case "$out" in *"Tell them to run this in a terminal, and wait for them:"*"relay answer $id"*) ok "an assistant is told the user has to see the answer first" ;; *) bad "an assistant is told the user has to see the answer first" "$out" ;; esac
+case "$out" in *"To have the relay wake Cowork itself, set it up once: relay ask --setup"*) ok "with no webhook it says how to get one" ;; *) bad "with no webhook it says how to get one" "$out" ;; esac
+# An ask is no use if Cowork has no skill to answer with, so relay ask says so, as a scan does.
+case "$out" in *"Cowork doesn't have the remote-pair-run skill yet. Run: relay start"*"Asked: "*) ok "relay ask says when Cowork has no skill to answer with" ;; *) bad "relay ask says when Cowork has no skill to answer with" "$out" ;; esac
 
 # The webhook. Its address and its secret are the one thing the relay reads from the Keychain.
 printf 'https://hooks.example/wake/abc123\n' >"$AK/llm-relay-wake-address"
@@ -2936,7 +2945,10 @@ out="$(st "$T/no-keychain")"
 case "$out" in *"$ESC"*) bad "piped, relay start has no colour codes" "$out" ;; *) ok "piped, relay start has no colour codes" ;; esac
 case "$out" in *"  Have Claude Code ask Cowork"*"set up with: relay ask --setup"*) ok "the list says Claude Code can ask Cowork, and how to set it up" ;; *) bad "the list says Claude Code can ask Cowork, and how to set it up" "$out" ;; esac
 check "and the note for Cowork has the line" grep -q '^  Have Claude Code ask Cowork  *set up with: relay ask --setup$' "$GN"
-expect "with the webhook in the Keychain it is ready" "Have Claude Code ask Cowork                    ready" st "$AK"
+# Ready means all of it. A webhook with no skill for Claude Code is still to set up.
+expect "with a webhook and no skill for Claude Code, it is still to set up" "Have Claude Code ask Cowork                    set up with: relay ask --setup" st "$AK"
+env HOME="$GH" "$W" --dir "$GO" ask --skill >/dev/null 2>&1
+expect "with the webhook and the skill it is ready" "Have Claude Code ask Cowork                    ready" st "$AK"
 if printf '%s\n' "$out" | grep -qE "pre-commit +(ready|needs)"; then ok "a long line in the list keeps a space before its state"; else bad "a long line in the list keeps a space before its state" "$out"; fi
 rm -f "$T/clipboard"
 out="$(st_tty "$AK")"
@@ -3064,7 +3076,7 @@ fake_cowork() {
   done
 }
 out="$(ua "$T/no-keychain")"; rc=$?
-case "$rc:$out" in 0:*) bad "field-test --asks needs the webhook" "$out" ;; *"needs the webhook that wakes Cowork"*) ok "field-test --asks needs the webhook" ;; *) bad "field-test --asks needs the webhook" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*) bad "field-test --asks needs the webhook" "$out" ;; *"needs the webhook that wakes Cowork"*"Set it up with: relay ask --setup"*) ok "field-test --asks needs the webhook, and says how to get it" ;; *) bad "field-test --asks needs the webhook, and says how to get it" "exit $rc: $out" ;; esac
 refuse "and --asks takes nothing else" env HOME="$UH" "$W" --dir "$UO" field-test --asks more
 : >"$AK/curl.args"
 mkdir -p "$UO/Documents/relay-answers"

@@ -46,6 +46,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### The relay says what is missing at the moment it matters (2026-11-11)
+
+- **Why:** An audit of every command on a Mac that had never been set up, then an upgrade and a half-made webhook. Most paths said what to do. Five didn't.
+- **What changed:** "Have Claude Code ask Cowork" reads ready only with the webhook and Claude Code's skill, where the webhook alone was enough. `relay ask` says when Cowork has no skill to answer with, as `relay scan` does. A scan made before Cowork has the skill ends by sending the user to `relay start`, not to Cowork. With no webhook, `relay ask` names `relay ask --setup`. And a stale or missing skill says `relay start`, the command everything else names, where it said `relay setup`. In 0.2.23.
+- **Left:** a folder in "Where things are" that doesn't exist is listed without comment. Two Macs on different releases replace each other's copy of Cowork's skills, and the older one wins if it runs last.
+
 ### A wait that runs out exits 75 (2026-11-11)
 
 - **Why:** The conventions shared with llm-wiki give 75 for "not now, try later". The relay exited 1 whether something had failed or a wait had only run out, so a script couldn't tell which.

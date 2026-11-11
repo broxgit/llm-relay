@@ -433,6 +433,8 @@ Each entry is what you see, then what to do. `relay start` is a good first step 
 - Use Apple's Terminal, and keep to one tab. `relay start` says which terminal app you are in.
 - A skill copy that couldn't be read is left as it is.
 
+**A scan ends with "Then tell Cowork", not "Now tell Cowork".** Cowork doesn't have the relay's skills yet, so it couldn't use the scan. Run `relay start`, wait until the time it gives, and then tell Cowork.
+
 **Cowork has an old copy of a skill, or doesn't see a new one.** You see Cowork using a skill that doesn't match your change, or a review that warns it came from an older copy. Cowork's copy lags OneDrive by up to 10 minutes.
 
 - Wait 10 minutes after `relay setup`, `relay start` or a skill change, and start a new Cowork session. `relay start` says the time to start.
