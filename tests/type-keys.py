@@ -16,7 +16,7 @@ import signal
 import sys
 import time
 
-PROMPTS = (b"[n]o: ", b"]: ")
+PROMPTS = (b"[n]o: ", b"]: ", b"press a key: ")
 LIMIT = 300
 
 

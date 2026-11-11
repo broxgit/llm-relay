@@ -236,6 +236,21 @@ Run from a terminal yourself, `relay ask` goes straight on to wait for the answe
 
 ### Set it up, once on each Mac
 
+One command walks you through it, and checks each step before the next:
+
+```bash
+relay ask --setup
+```
+
+It takes about 15 minutes, most of it one wait for Cowork to have its skill.
+
+- **It skips what is done.** Run it again when something isn't working: it goes straight to the step that is missing, and ends by sending a first ask.
+- **It shows you what to paste into Cowork** to make the trigger, and puts it on your clipboard.
+- **macOS asks for the address and the secret,** and doesn't show them. The relay starts that prompt and never sees what you type.
+- **Its last step is a real ask.** If no answer comes, it says what most likely went wrong.
+
+The steps it takes are below, for doing by hand or for seeing what it does.
+
 **1. Give Claude Code the skill** that tells it when and how to ask:
 
 ```bash
@@ -282,6 +297,16 @@ It sends six asks, one after another, waits for each answer, and takes about 8 m
 - **What it leaves out:** every word of the answers. It reads each one only to check its shape, and saves none. An answer is kept only by `relay answer`, on your keypress.
 - **What it needs:** the webhook, set up as above. If this Mac has never had an answer, Cowork's first run stops to ask for the write, so look at Cowork once, a minute in.
 
+### When no answer comes
+
+An answer takes one to two minutes. The relay says what it sees while it waits, and three things account for nearly every answer that doesn't come.
+
+- **OneDrive hasn't brought it to this Mac.** Cowork wrote the answer, and OneDrive on the Mac hasn't heard. This has come on the first ask after the Mac sat idle. After three minutes the relay says so and offers to restart OneDrive, which stops its syncing for a few seconds. Press `n` to leave OneDrive alone, and then in OneDrive's menu, in the menu bar, pause syncing and resume it. The relay can't see OneDrive in the cloud, so it is guessing: the newest conversation in Cowork says whether an answer was written.
+- **The trigger is paused.** `Cowork's trigger is paused or deleted (HTTP 410)` means the request was refused. Editing a trigger pauses it. Turn it on again in Cowork, then run `relay answer`.
+- **The trigger has the wrong instructions.** A file came with no `end of answer` line and stopped growing. `relay ask --trigger` prints the right instructions, to give to Cowork.
+
+The relay wakes Cowork once more after two minutes, in case a run missed the ask, and not again: a run that finds nothing to answer still leaves a conversation behind.
+
 This is the one place the relay reads a secret. It reads the two Keychain items at the moment it wakes Cowork, and nowhere else. It never prints them, never writes them to a file, and takes them from no flag or variable. The request it sends holds no question: it only says "go", so someone who had the address and the secret could start a run and couldn't tell Cowork what to do.
 
 Every ask starts a new Cowork conversation, and they stay until you clear them.
@@ -290,5 +315,5 @@ Every ask starts a new Cowork conversation, and they stay until you clear them.
 
 - Four test sessions with Cowork, on a throwaway repository, led to this. On 2026-11-04, whole rounds ran from Apple's Terminal with nothing attached and no Always Keep: a fresh publish, a real failure, its fix, and pressing `n`. Scans worked at up to 50 MB.
 - A merge request review ran once on a real merge request, on 2026-11-04, before the checks and the Coverage section were added. In that review, a run on the Mac proved a build failure that Cowork had only rated Low from reading the code.
-- The wake-up behind `relay ask` was tested on 2026-11-09 with a test trigger: a webhook from the Mac started a run in a new conversation, and an answer file was on the Mac 46 to 58 seconds later, five times out of five. `relay ask` itself, and the relay-answer skill, have only run in smoke tests.
+- The wake-up behind `relay ask` was tested on 2026-11-09 with a test trigger: a webhook from the Mac started a run in a new conversation, and an answer file was on the Mac 46 to 58 seconds later, five times out of five. Five runs of `relay field-test --asks` on 2026-11-10 and 11 then had real answers from the relay-answer skill, each rightly laid out, in 48 to 111 seconds. Twice an answer stayed in OneDrive until its syncing was paused and resumed. `relay ask --setup`, and the offer to restart OneDrive, have only run in smoke tests.
 - All of that ran as `wiki relay`, inside llm-wiki. The standalone `relay` command has only run in its smoke tests, against a fake OneDrive folder.

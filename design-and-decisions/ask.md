@@ -181,8 +181,17 @@ Waking Cowork again doesn't help with a stall. The relay woke it 3 times in run 
 - **Say what HTTP 410 means:** the trigger is paused or deleted, and is turned on again in Cowork.
 - **Say when a file has come without its last line and isn't growing.** That is a trigger with the wrong instructions, as in run 1.
 
+### What was built from it
+
+At 0.2.17.
+
+- **The wait** wakes Cowork once more at 2 minutes and never again. At 3 minutes with no file it says OneDrive is the likely reason. A file with no last line that hasn't grown for 30 seconds is laid to the trigger's instructions. HTTP 410 is said to be a paused or deleted trigger.
+- **Restarting OneDrive is offered, on a keypress.** Brock asked whether the relay could fix a stall itself. OneDrive on the Mac has no command for pause and resume, and scripting its menu needs Accessibility permission. Quitting and reopening it needs none, and worked from a terminal on the work Mac, though not on an answer that was stalled at the time. It interrupts whatever else OneDrive is syncing, and the relay is only guessing at a stall, so the user decides. The relay asks OneDrive to quit, waits until it has, opens it, and never stops it by force. With nobody at a terminal nothing is offered.
+- **`relay ask --setup`** does the six steps of the setup, checking each. The address and the secret are typed into the prompt of `security add-generic-password`, which the relay starts and never reads from, so the rule on secrets is as it was: two reads, both in the request.
+- **`relay ask --trigger`** prints the trigger's instructions. A test holds them to the words in `docs/using.md`.
+
 ## Next
 
-1. Build the changes above, and a walkthrough of the setup, `relay ask --setup`.
+1. On the work Mac, the next time an answer is late, take the restart the relay offers, and bring back whether the answer came.
 2. Run `tests/ask-haiku.sh`, for the Claude Code side.
 3. Leave the trigger running for a day of real asks, and count requests against runs and answers.
