@@ -94,7 +94,7 @@ wait_draw() {
 wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.24"
+RELAY_VERSION="0.2.25"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -164,6 +164,7 @@ usage() {
 Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay [--dir ONEDRIVE_FOLDER] practice [--clean]
        relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
+       relay setup --forget FOLDER
        relay [--dir ONEDRIVE_FOLDER] skills
        relay [--dir ONEDRIVE_FOLDER] field-test [--clean | --asks]
        relay completion zsh|bash
@@ -951,14 +952,39 @@ remember_scan() {
   remember_clone "$1"
 }
 
-# clone_lines: the clones the relay remembers that are still there, for the start note.
+# clone_lines: the clones the relay remembers that are still there, for the start note, each with
+# the day it was last used. A line from a relay before 0.2.25 has no day.
 clone_lines() {
-  local key path
+  local key path day
   [ -f "$KNOWN_CLONES" ] || return 0
-  while IFS="$(printf '\t')" read -r key path; do
+  while IFS="$(printf '\t')" read -r key path day; do
     [ -n "$path" ] && [ -d "$path/.git" ] || continue
-    echo "  ${key#*/}: $(tilde "$path")"
+    case "$day" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) day="last used $day" ;;
+      *) day="last used: not recorded" ;;
+    esac
+    echo "  ${key#*/}: $(tilde "$path") ($day)"
   done <"$KNOWN_CLONES"
+}
+
+# forget_clone <folder>: drops a clone from the ones the relay remembers. Nothing in the folder
+# is touched. It takes the folder as it was remembered, or as it is on disk.
+forget_clone() {
+  local want="${1%/}" real="" tmp n
+  # shellcheck disable=SC2088
+  case "$want" in "~") want="$HOME" ;; "~/"*) want="$HOME/${want#"~/"}" ;; esac
+  [ ! -d "$want" ] || real="$(cd "$want" 2>/dev/null && pwd -P)"
+  [ -f "$KNOWN_CLONES" ] || die "the relay doesn't remember any clones yet"
+  n="$(awk -F '\t' -v a="$want" -v b="$real" '$2 == a || (b != "" && $2 == b)' "$KNOWN_CLONES" | wc -l | tr -d ' ')"
+  if [ "$n" = 0 ]; then
+    say_warn_err "The relay doesn't remember a clone at $(tilde "$want"). The ones it does:"
+    awk -F '\t' '{ print "  " $2 }' "$KNOWN_CLONES" >&2
+    exit 1
+  fi
+  tmp="$KNOWN_CLONES.$$"
+  awk -F '\t' -v a="$want" -v b="$real" '!($2 == a || (b != "" && $2 == b))' "$KNOWN_CLONES" >"$tmp" &&
+    mv -f "$tmp" "$KNOWN_CLONES" || { rm -f "$tmp"; die "couldn't write $KNOWN_CLONES"; }
+  say_ok "Forgot the clone at $(tilde "$want"). The folder is as it was, and the relay remembers it again the next time you use it."
 }
 
 # scan_name <repository>: the name its scan gets in OneDrive. A scan is named after its folder,
@@ -1314,8 +1340,8 @@ is_clone_of() {
   [ "$u" = "$MR_HOST/$MR_PROJECT" ]
 }
 
-# remember_clone <path>: keeps where this project's clone is, one line per project, so --repo is
-# needed once at most. It never stops the command: if the file can't be written, nothing is kept.
+# remember_clone <path>: keeps where this project's clone is and the day it was used, one line per
+# project, so --repo is needed once at most. It never stops the command: if the file can't be written, nothing is kept.
 remember_clone() {
   local key="$MR_HOST/$MR_PROJECT" tmp
   mkdir -p "$(dirname "$KNOWN_CLONES")" 2>/dev/null || return 0
@@ -1324,7 +1350,7 @@ remember_clone() {
     if [ -f "$KNOWN_CLONES" ]; then
       awk -F '\t' -v k="$key" '$1 != k' "$KNOWN_CLONES"
     fi
-    printf '%s\t%s\n' "$key" "$1"
+    printf '%s\t%s\t%s\n' "$key" "$1" "$(date +%Y-%m-%d)"
   } >"$tmp" 2>/dev/null && mv -f "$tmp" "$KNOWN_CLONES" 2>/dev/null
   rm -f "$tmp" 2>/dev/null
   return 0
@@ -3564,6 +3590,7 @@ begin_session() {
       echo "clones are looked for under: $(tilde "$CLONES_DIRS")"
       echo "clones the relay has used, to put in a command in place of a folder to change to:"
       clone_lines
+      echo "one last used long ago may not be what this work is about. To drop one: relay setup --forget FOLDER"
     else
       echo "clones are looked for under: $(tilde "$CLONES_DIRS")"
       echo "clones the relay has used: none yet"
@@ -3707,7 +3734,7 @@ relay_setting() {
 
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0
+  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -3731,6 +3758,11 @@ cmd_setup() {
         plans="$2"
         shift 2
         ;;
+      --forget)
+        [ -n "${2:-}" ] || die_usage "--forget needs the folder of a clone the relay remembers"
+        forget="$2"
+        shift 2
+        ;;
       --skills)
         [ -n "${2:-}" ] || die_usage "--skills needs the names of your skills, separated by colons, or none"
         skills="$(printf '%s' "$2" | tr ',' ':')"
@@ -3746,6 +3778,7 @@ cmd_setup() {
         cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
+       relay setup --forget FOLDER
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
 Microsoft Copilot Cowork. It finds OneDrive under ~/Library/CloudStorage. --dir names the
@@ -3755,6 +3788,9 @@ folder if there are several, or it syncs elsewhere. Run it again to update the s
 looks for your clones, with several folders separated by colons. At a terminal, it asks
 for each the first time. --plans is where relay review saves a plan Cowork wrote, and
 where relay branch looks for one. It's ~/plans unless you say otherwise.
+
+--forget drops one clone from the ones the relay remembers and tells Cowork about, and
+does nothing else. The folder isn't touched. relay start lists them.
 
 --skills names your own Claude skills to copy to Cowork too, separated by colons, such as
 mr-review:simple-english. Each copy is your skill with a note on top saying what to do
@@ -3767,6 +3803,10 @@ EOF
       *) die_usage "setup: unknown option $1. Try relay setup --help" ;;
     esac
   done
+  if [ -n "$forget" ]; then
+    forget_clone "$forget"
+    return 0
+  fi
   [ -n "$dir" ] || dir="$(onedrive_folder)" || exit 1
   [ -d "$dir" ] || die "no such folder: $dir"
   SKILLS_DIR="$dir/Documents/Cowork/skills"
@@ -3815,7 +3855,7 @@ cmd_complete() {
   shift
   [ "$i" -le 1 ] || prev="$(eval "printf '%s' \"\${$((i - 1)):-}\"")"
   case "$prev" in
-    --repo | --dir | --also | --clones | --reviews | --plans | --skills-from | --scan) echo __dirs__; return 0 ;;
+    --repo | --dir | --also | --clones | --reviews | --plans | --skills-from | --scan | --forget) echo __dirs__; return 0 ;;
   esac
   # --dir FOLDER can come first.
   sub="${1:-}"
@@ -3826,7 +3866,7 @@ cmd_complete() {
     return 0
   fi
   case "$sub" in
-    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n' ;;
+    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--forget\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
