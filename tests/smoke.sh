@@ -3283,6 +3283,12 @@ case "$(sed -n 2p "$REPO/ui.sh")" in *"Kit version ${kv%% *}, for docs/conventio
 check "relay.sh sources the kit" grep -q '^\. "\$REPO/ui.sh"$' "$W"
 check "with its own variable" grep -qx '  STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}"' "$W"
 if ! grep -q '^style_set() {' "$W" && ! grep -q '^die() {' "$W"; then ok "and no style helpers of its own"; else bad "and no style helpers of its own"; fi
+# The gallery: what the relay's commands print at a terminal, as kept in tests/gallery. Made on
+# macOS, the relay's home, where some messages differ from Linux's.
+if [ "$(uname -s)" != Darwin ]; then
+  printf 'note  %s\n' "the gallery is checked on macOS only"
+elif out="$("$REPO/scripts/gallery.sh" --check 2>&1)"; then ok "the gallery is current: $out"
+else bad "the gallery is current" "$out"; fi
 # The lint is a report until every command has moved to the kit. relay mr is the first.
 if out="$("$REPO/tests/ui-lint.sh" --functions)"; then
   case "$out" in *cmd_mr* | *pack_mr* | *want_checks* | *run_check* | *finish_prompts* | *print_prompts*) bad "relay mr prints through the kit alone" "$out" ;; *) ok "relay mr prints through the kit alone" ;; esac

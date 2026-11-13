@@ -1,0 +1,24 @@
+relay <version>
+
+[1mWhat you can do on this Mac:[0m
+  [32m✓[0m Try a practice round first                     ready
+  [32m✓[0m Change code with Cowork                        ready
+  [32m✓[0m Review a merge request                         ready
+  [32m✓[0m Review a branch before the merge request       ready
+  [1m[33m![0m Start from a Jira ticket                       needs acli: [36mbrew tap atlassian/homebrew-acli && brew install acli[0m, then sign in with: [36macli auth login[0m
+  [32m✓[0m Run Go checks in a review                      ready
+  [32m✓[0m Lint a review with the repository's pre-commit ready
+  [1m[33m![0m Send a repository's wiki with it               needs wiki: optional, from github.com/broxgit/llm-wiki
+  [1m[33m![0m Have Claude Code ask Cowork                    set up with: [36mrelay ask --setup[0m
+
+[1mWhere things are:[0m
+  [2mclones[0m   ~/dev
+  [2mreviews[0m  ~/mr-reviews
+  [2mplans[0m    ~/plans
+  [2mcolours[0m  palette default, theme auto
+  [36mrelay setup[0m changes any of them.
+
+This is a terminal app that gives no name, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply: macOS has refused other terminal apps on OneDrive files.
+
+[32m✓[0m A prompt for Cowork is on your clipboard.
+[1m[36mNext:[0m open a new Cowork session and paste it.

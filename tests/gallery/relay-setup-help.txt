@@ -1,0 +1,28 @@
+Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
+                   [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
+                   [--palette default|colorblind] [--theme auto|dark|light]
+       relay setup --forget FOLDER
+
+Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
+Microsoft Copilot Cowork. It finds OneDrive under ~/Library/CloudStorage. --dir names the
+folder if there are several, or it syncs elsewhere. Run it again to update the skill.
+
+--reviews is where relay review saves merge request reviews. --clones is where relay mr
+looks for your clones, with several folders separated by colons. At a terminal, it asks
+for each the first time. --plans is where relay review saves a plan Cowork wrote, and
+where relay branch looks for one. It's ~/plans unless you say otherwise.
+
+--palette colorblind uses blue and magenta for ok and an error, in place of green and red,
+which stay apart for most kinds of colour blindness. --theme light suits a terminal with a
+light background; auto reads the terminal's word for it where it gives one, and is dark
+otherwise. At a terminal, it asks for each the first time. LLM_PALETTE and LLM_THEME, which
+llm-wiki reads too, win over both for one shell.
+
+--forget drops one clone from the ones the relay remembers and tells Cowork about, and
+does nothing else. The folder isn't touched. relay start lists them.
+
+--skills names your own Claude skills to copy to Cowork too, separated by colons, such as
+mr-review:simple-english. Each copy is your skill with a note on top saying what to do
+differently in Cowork, and is made again whenever your skill changes. --skills none stops
+copying them, and removes the copies. --skills-from is where your skills live, if it isn't
+~/.claude/skills. relay skills shows where each one stands.
