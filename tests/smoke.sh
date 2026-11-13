@@ -1205,7 +1205,7 @@ KC="$RH/.config/llm-relay/clones"
 rm -f "$KC"
 out="$(mr "$MRO" --repo "$MC" 2>&1)"
 case "$out" in *"Remembered where team/other is, so --repo isn't needed for it next time."*) ok "the first --repo run says the relay remembered the clone" ;; *) bad "the first --repo run says the relay remembered the clone" "$out" ;; esac
-check "the known clones file has a line for it" grep -q "^gitlab.com/team/other	$MC\$" "$KC"
+check "the known clones file has a line for it, with the day" grep -Eq "^gitlab.com/team/other	$MC	[0-9]{4}-[0-9]{2}-[0-9]{2}\$" "$KC"
 expect "the same merge request then works with no --repo" "Packed team/other !7" mr "$MRO"
 out="$(mr "$MRO" --repo "$MC" 2>&1)"
 case "$out" in *Remembered*) bad "naming the same clone again says nothing more" "$out" ;; *) ok "naming the same clone again says nothing more" ;; esac
@@ -2709,8 +2709,35 @@ refuse "a repository with no origin gets no origin lines" grep -q -e "^origin's 
 nsc start >/dev/null
 NN="$NO/Documents/Cowork/relay/start/note.txt"
 check "the start note says where clones are looked for" grep -q '^clones are looked for under: ' "$NN"
-check "and names a clone the relay has scanned, by its project" grep -q '^  team/one: ~/code/one$' "$NN"
+check "and names a clone the relay has scanned, by its project, with the day it was used" grep -Eq '^  team/one: ~/code/one \(last used [0-9]{4}-[0-9]{2}-[0-9]{2}\)$' "$NN"
+check "and says how to drop one" grep -q '^one last used long ago may not be what this work is about. To drop one: relay setup --forget FOLDER$' "$NN"
 refuse "with no path that names this Mac's user" grep -q -e "$NH" "$NN"
+# A clone stays remembered until its folder goes, so a session months later was offered one from
+# old work. The note now gives the day each was used, and one can be dropped.
+NKC="$NH/.config/llm-relay/clones"
+cp "$NKC" "$T/clones-kept"
+awk -F '\t' '{ print $1 "\t" $2 }' "$T/clones-kept" >"$NKC"
+nsc start >/dev/null
+check "a clone remembered by an older relay has no day" grep -q '^  team/one: ~/code/one (last used: not recorded)$' "$NN"
+cp "$T/clones-kept" "$NKC"
+printf 'example.com/team/kept\t%s\t2026-01-01\n' "$NH/code/kept" >>"$NKC"
+out="$(nsc setup --forget "$NH/code/one/" 2>&1)"; rc=$?
+case "$rc:$out" in 0:*"Forgot the clone at ~/code/one. The folder is as it was"*) ok "setup --forget drops a clone, with no OneDrive needed" ;; *) bad "setup --forget drops a clone, with no OneDrive needed" "exit $rc: $out" ;; esac
+[ -d "$NH/code/one/.git" ] && ok "and leaves the folder alone" || bad "and leaves the folder alone"
+refuse "and takes it out of what is remembered" grep -q "	$NH/code/one	" "$NKC"
+check "and keeps the others" grep -q "	$NH/code/kept	" "$NKC"
+nsc start >/dev/null
+refuse "so the start note no longer names it" grep -q 'team/one' "$NN"
+out="$(nsc setup --forget "$NH/code/one" 2>&1)"; rc=$?
+case "$rc:$out" in 1:*"The relay doesn't remember a clone at ~/code/one. The ones it does:"*"$NH/code/kept"*) ok "forgetting one it doesn't remember is refused, with the ones it does" ;; *) bad "forgetting one it doesn't remember is refused, with the ones it does" "exit $rc: $out" ;; esac
+out="$(nsc setup --forget 2>&1)"; rc=$?
+case "$rc:$out" in 2:*"--forget needs the folder of a clone the relay remembers"*) ok "--forget with no folder is a wrong call" ;; *) bad "--forget with no folder is a wrong call" "exit $rc: $out" ;; esac
+nsc scan "$NH/code/one" --no-wiki >/dev/null
+nsc start >/dev/null
+check "a forgotten clone is remembered again when it is used" grep -q '^  team/one: ~/code/one (last used ' "$NN"
+check "the skill tells Cowork to ask for everything in one message" grep -q 'Ask for everything the work needs in that one message' "$SK/SKILL.md"
+check "and to start from the merge request for someone else's change" grep -q "Give no \`relay scan\` for the repository the merge request is in" "$SK/SKILL.md"
+check "and to treat a listed clone as a hint" grep -q 'never assume the work is about a clone because it is the only one listed' "$SK/SKILL.md"
 rm -rf "$NH/code/one"
 nsc start >/dev/null
 refuse "a clone that has gone is left out" grep -q 'team/one' "$NN"

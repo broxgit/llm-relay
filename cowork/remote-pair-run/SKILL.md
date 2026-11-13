@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.24.
+This skill is for relay 0.2.25.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -30,10 +30,13 @@ Keep the user's job to this: run one command, press a key, tell you "done", and 
 
 Their first message asks you to read `Documents/Cowork/relay/start/note.txt`. Do these in order.
 
-1. **Read the note,** with nothing attached. It says which relay their Mac has, what the Mac is set up for, and where their own skills stand. It also lists the clones the relay has used, and the folder clones are looked for under.
+1. **Read the note,** with nothing attached. It says which relay their Mac has, what the Mac is set up for, and where their own skills stand. It also lists the clones the relay has used, each with the day it was last used, and the folder clones are looked for under.
 2. **Check your copies.** Compare the note's `relay:` line with the version at the top of this skill. Compare its `runlib:` line with the line that sets `RUNLIB_VERSION` in your `runlib.sh`. If either differs, your copy is stale, and what you hand over could be wrong. Say so, ask them to wait five minutes and start a new session, and stop. Your copy of a skill can lag OneDrive by several minutes. One case is the other way round: if the note says `the relay's own skills in Cowork's folder: a newer relay's`, their Mac is the one behind, because another Mac of theirs has a later relay. Then the step is theirs: `brew update && brew upgrade llm-relay`, then `relay start` again.
 3. **Ask one thing: "What are you working on?"** Under it, give four short starters the user can answer with, one line each: a ticket's key, a merge request's address, a repository to change or fix, a branch to review before pushing. Put nothing else in that message. If the note says `runs on this Mac so far: 0`, add two lines. One: you'll give one step at a time, and nothing runs on their Mac until they press a key there. Two: if they'd like to try it on code that doesn't matter first, they can run `relay practice`, which takes about ten minutes.
 4. **Give the first step,** as a block. To change or fix code, that is `relay scan` with the repository's folder. If the note lists the clone, put its folder in the command, such as `relay scan ~/code/thing`, and never tell the user to change folder first. If it isn't listed, ask where it is, or give the command with a placeholder for them to fill in. To review a merge request, it is `relay mr` with its address. To review a branch before there's a merge request, it is `relay branch`, run in the repository. To start from a Jira ticket, it is `relay ticket` with the ticket's key. If the note says what they want `needs` a tool, the first step is the install line the note gives. If you can't tell what they want, ask one more question. Whatever it is, it begins at stage 1 of "How a piece of work goes", below, unless they say they're further along.
+   **Ask for everything the work needs in that one message.** When what they said names more than one thing to fetch, such as a ticket, a merge request and a repository, give every command at once: a numbered list under `DO THIS`, one command to a block, each with a line on what it brings. Don't hand over one and keep the rest for later, because each round costs them a wait. Write a placeholder such as `<ticket key>` or `<the tool's folder>` for each value you don't have, and say which to fill in. Each command asks its own questions, and one that is refused doesn't stop the others. `THEN TELL ME` is still one `done`, once they have run them all.
+   **Testing or reviewing someone else's change starts from its merge request.** If they say a colleague's change, a ticket to test, or a branch that isn't theirs, and give no merge request, ask whether there is one before you give any command. When there is, the commands are `relay ticket` with the key, `relay mr` with its address, and `relay scan` for any other repository the work needs, such as a tool for testing it. Give no `relay scan` for the repository the merge request is in: `relay mr` brings that repository at the merge request's commit, and a scan would bring whatever branch their clone is on, which may not be the change.
+   **A clone in the note is a hint, not the answer.** Put its folder in a command when what they said names that repository. When they didn't name it, ask, and never assume the work is about a clone because it is the only one listed. One last used weeks ago is probably from other work. If they say a clone is stale or they're done with it, `relay setup --forget` with its folder drops it from the note.
    The note's line `Have Claude Code ask Cowork` is not a way to start work with you. It says whether an assistant on their Mac can hand you questions with `relay ask`. Leave it out of the starters. If it says `set up with: relay ask --setup` and the user asks about it, that command is the step, in a terminal, and "Asks from an assistant on the Mac" below has the rest.
 5. **Name the session.** The first line of your first reply once you know the work is a short title, such as `ABC-123: add retry to the uploader` or `Review: project!42`. Sessions otherwise all look alike in their list.
 
@@ -88,7 +91,7 @@ Every time the user has to do something, give it as this block:
 ---
 ```
 
-- **One command to a block.** Before it, two or three lines at most, on what it's for and what it will change.
+- **One command to a block.** Before it, two or three lines at most, on what it's for and what it will change. When a step needs several commands, as the first step often does, number them under `DO THIS`, each in its own block.
 - **Leave `EXPECT` out** unless there's a wait, a question or a key. The relay asks `Run it?` before a run, `Save it?` before it saves a review, and `Apply it, uncommitted?` before an apply. It may also ask before it sends code that looks like it holds secrets. Name each key in bold, such as **y**, and say that **v** shows the files first.
 - **`THEN TELL ME` is usually one word,** `done`. The relay's last lines say what to tell you, so ask for pasted output only when a command didn't end as you said it would.
 - **When you need nothing from them,** start your message with `✅ NOTHING FOR YOU TO DO YET`, and say what you're doing and about how long it takes.

@@ -95,6 +95,8 @@ The skill also says which relay it is for, as the test's skill does, so a stale 
 
 The start step said to ask "What are you working on?" and give no list of choices. After a real ticket run that was reversed: the open question stays, and four short starters go under it (a ticket's key, a merge request's address, a repository to change or fix, a branch to review), because a bare question left the user guessing what Cowork could take. The start note now also lists the clones the relay has used, so the first scan command can carry a folder and the user never changes folder first. Scan notes already carried a path. The note's old line, that it holds no paths, is no longer true.
 
+A later session showed two gaps in that step. The user named a colleague's ticket, a tool and a service, and Cowork handed over `relay ticket` alone, keeping the scans for later rounds. It also offered the one clone the note listed, which was from work months earlier. So the first step now asks for everything at once, one command to a block, with a placeholder for what Cowork doesn't know. Work on someone else's change starts from its merge request, because `relay mr` brings the repository at the change's commit and a scan brings whatever branch the clone is on. The note gives the day each clone was last used, Cowork treats a listed clone as a hint, and `relay setup --forget` drops one. The list itself was kept: it is what lets a command carry a folder.
+
 ## Keeping it current
 
 Brock's rule, from 2026-11-06: as features are added, the guided way in is updated to reflect them. A guide that lists last month's features is worse than none, because people trust it.

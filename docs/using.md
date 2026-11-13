@@ -54,7 +54,7 @@ It's the only command you need to know to begin, and it's worth running at the s
 - **It keeps Claude Code's copy of the relay-ask skill current too,** if you have set up asking Cowork. It never adds that skill where there was none.
 - **It says what this Mac is set up for.** Each thing the relay does is listed as ready, or with the tool it needs and how to get it. A review needs `glab`, for one. The last line says whether Claude Code can ask Cowork, or that `relay ask --setup` sets it up.
 - **At a terminal it has colour.** A green mark is done or ready, a bold yellow one needs something, a command you can type is in one colour, and the last line is what to do next. Piped or sent to a file, or with `NO_COLOR` set, it is plain words, and the words are the same either way. Every command looks this way. What the relay writes for Cowork, such as a note or a prompt, never has colour in it.
-- **It puts a prompt for Cowork on your clipboard.** Paste it into a new Cowork session. Cowork reads a short note about your setup, which lists the clones the relay has used, checks that its copy of the skill is current, and asks what you're working on.
+- **It puts a prompt for Cowork on your clipboard.** Paste it into a new Cowork session. Cowork reads a short note about your setup, which lists the clones the relay has used and when, checks that its copy of the skill is current, and asks what you're working on.
 
 Cowork asks what you're working on, with four starters to answer with: a ticket's key, a merge request's address, a repository to change or fix, or a branch to review before pushing. If it knows your clone, it puts its folder in the scan command. It begins its first reply with a short title, such as `ABC-123: add retry to the uploader`, so your sessions are easy to tell apart. However the work started, it also offers a prompt for Slackbot, written for this work, once it has read what it was given. That is optional, and you can skip it for something small. Paste Slackbot's answer back, and Cowork reads it as what people said, not as fact about the code.
 
@@ -125,6 +125,8 @@ Most of the relay needs no settings. These are the ones you can change.
 - **`--skills` and `--skills-from`:** the skills of your own that Cowork gets a copy of, and where they live. [Your own skills in Cowork](#your-own-skills-in-cowork) has them.
 
 At a terminal, `setup` asks about reviews and clones the first time, with the default in brackets. Pressing Return takes it. The flags answer for you. The relay also remembers, in the same folder, the clones it has used, the test command you named for a repository with `--test`, and the repositories where you said yes to the secrets question.
+
+**The clones it remembers.** Each time you scan a repository or `relay mr` finds a clone, the relay keeps where it is and the day you used it. `relay start` gives Cowork that list, so it can put a folder in a command for you. A clone stays on the list until its folder is gone. To drop one you're done with, so Cowork stops offering it: `relay setup --forget ~/code/thing`. Nothing in the folder changes, and the relay remembers it again the next time you use it.
 
 **Environment variables.** Set one for a single command, such as `RELAY_WAIT=1800 relay run`. Times are in seconds.
 
@@ -504,6 +506,7 @@ Copies the relay's skills to `Documents/Cowork/skills` in your work OneDrive, an
 
 ```bash
 relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
+relay setup --forget FOLDER
 ```
 
 - `--dir ONEDRIVE_FOLDER`: the OneDrive folder, if there are several or it syncs elsewhere.
@@ -512,6 +515,7 @@ relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--pla
 - `--plans FOLDER`: where `relay review` saves a plan Cowork wrote, and where `relay branch` looks for one. Default `~/plans`.
 - `--skills NAMES`: your own Claude skills to copy to Cowork too, separated by colons, such as `mr-review:simple-english`. `none` stops copying them and removes the copies.
 - `--skills-from FOLDER`: where your skills live, if it isn't `~/.claude/skills`.
+- `--forget FOLDER`: drops one clone from the ones the relay remembers, and does nothing else. The folder isn't touched.
 
 [Setup](#setup) and [Settings](#settings) have the rest.
 
