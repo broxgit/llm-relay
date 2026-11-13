@@ -993,7 +993,6 @@ cmd_scan() {
   if [ "$many" -gt 1 ]; then
     while IFS= read -r d; do
       [ -n "$d" ] || continue
-      say_head "== $d"
       (cmd_scan "$d" ${want:+--branch "$want"} ${no_wiki:+--no-wiki} ${SECRETS_ASK:+--ask}) || failed=$((failed + 1))
       echo
     done <<EOF
@@ -1096,29 +1095,29 @@ EOF
   cp "$WORK/$name.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
   cp "$WORK/$name.txt" "$dest/" || die "couldn't copy the note to $dest"
   [ -z "${RELAY_SCAN_NAME_OUT:-}" ] || printf '%s\n' "$name" >"$RELAY_SCAN_NAME_OUT"
-  [ "$name" = "$plain" ] || echo "Another repository's scan is already called $plain, so this one is called $name."
   if [ -n "$want" ]; then
-    say_ok "Scanned $name: $want at $commit, from $SCAN_SOURCE, ${S_DIM}$size bytes${S_OFF}, uncommitted changes left out"
+    ui_stage SCANNED "$name: $want at $commit, from $SCAN_SOURCE" "$size bytes" "uncommitted changes left out"
   else
-    say_ok "Scanned $name: ${branch:-detached HEAD} at $commit, ${S_DIM}$size bytes${S_OFF}, uncommitted changes: $dirty"
+    ui_stage SCANNED "$name: ${branch:-detached HEAD} at $commit" "$size bytes" "uncommitted changes: $dirty"
     case "$behind" in
       "" | "level with"*) ;;
-      *) say_warn "Check this is what you mean to send: $behind. To send origin's $def without switching branch: $(typed "relay scan $(tilde "$root") --branch $def")" ;;
+      *) ui_item warn "Check this is what you mean to send: $behind. To send origin's $def without switching branch: $(typed "relay scan $(tilde "$root") --branch $def")" ;;
     esac
   fi
-  [ -z "$WIKI_PART" ] || say_ok "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
+  [ "$name" = "$plain" ] || ui_detail "Another repository's scan is already called $plain, so this one is called $name."
+  [ -z "$WIKI_PART" ] || ui_item ok "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
   size_warning "$size"
-  say_ok "Sent to OneDrive: Documents/Cowork/relay/scans/$name.txt and $name.tar.gz"
-  # A scan made for relay mr is named in that command's own prompt.
-  if [ -z "${RELAY_SCAN_NAME_OUT:-}" ] && clip_scan "Documents/Cowork/relay/scans/$name.txt"; then
-    echo "That's on your clipboard to paste, with any other scan from the last two minutes."
-  fi
-  if [ "$OWN_SKILL_STATE" = missing ] && [ -z "${RELAY_SCAN_NAME_OUT:-}" ]; then
-    # Cowork has no skill to read a scan with, so telling it now would get nowhere.
-    say_warn "Cowork can't use this yet: it doesn't have the relay's skills. Run: $(typed "relay start"), which says when Cowork has them."
-    echo "Then tell Cowork: read Documents/Cowork/relay/scans/$name.txt"
+  ui_stage SENT "OneDrive: Documents/Cowork/relay/scans/$name.txt and $name.tar.gz"
+  # A scan made for relay mr is part of that command's timeline, and named in its own prompt.
+  [ -z "${RELAY_SCAN_NAME_OUT:-}" ] || return 0
+  ui_turn
+  ! clip_scan "Documents/Cowork/relay/scans/$name.txt" || ui_detail "That's on your clipboard to paste, with any other scan from the last two minutes."
+  if [ "$OWN_SKILL_STATE" = missing ]; then
+    # Copilot Cowork has no skill to read a scan with, so telling it now would get nowhere.
+    ui_item warn "Copilot Cowork can't use this yet: it doesn't have the relay's skills. Run: $(typed "relay start"), which says when Copilot Cowork has them."
+    ui_next "then tell Copilot Cowork: read Documents/Cowork/relay/scans/$name.txt"
   else
-    echo "Now tell Cowork: read Documents/Cowork/relay/scans/$name.txt"
+    ui_next "tell Copilot Cowork: read Documents/Cowork/relay/scans/$name.txt"
   fi
 }
 
@@ -1182,7 +1181,7 @@ send_also() {
   dest="$COWORK/relay/scans"
   mkdir -p "$dest" && cp "$t/$name.tar.gz" "$dest/" && cp "$t/$name.txt" "$dest/" || { rm -rf "$t"; die "--also: couldn't copy to $dest"; }
   rm -rf "$t"
-  echo "Scanned the $sub folder of $(basename "$root"): $branch at $commit, from $SCAN_SOURCE, $size bytes" >&2
+  ui_stage SCANNED "the $sub folder of $(basename "$root"): $branch at $commit, from $SCAN_SOURCE" "$size bytes" >&2
   echo "Documents/Cowork/relay/scans/$name.txt"
 }
 
@@ -2615,10 +2614,10 @@ EOF
   mkdir -p "$dest" || die "can't create $dest"
   cp "$WORK/$key.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
   cp "$note" "$dest/" || die "couldn't copy the note to $dest"
-  say_ok "Packed $key: $counts, Confluence pages $got, ${S_DIM}$size bytes${S_OFF}"
-  [ "$missed" -eq 0 ] || say_warn "$missed pages couldn't be read. The note says which."
-  [ "$got" -gt 0 ] || [ "$missed" -gt 0 ] || say_warn "No Confluence page went with it. Jira lists a ticket's pages under Confluence content, but acli doesn't return them, so name any that matter: $(typed "relay ticket $key --page ADDRESS")"
-  say_ok "Sent to OneDrive: Documents/Cowork/relay/tickets/$key.txt and $key.tar.gz"
+  ui_stage PACKED "$key: $counts, Confluence pages $got" "$size bytes"
+  [ "$missed" -eq 0 ] || ui_item warn "$missed pages couldn't be read. The note says which."
+  [ "$got" -gt 0 ] || [ "$missed" -gt 0 ] || ui_item warn "No Confluence page went with it. Jira lists a ticket's pages under Confluence content, but acli doesn't return them, so name any that matter: $(typed "relay ticket $key --page ADDRESS")"
+  ui_stage SENT "OneDrive: Documents/Cowork/relay/tickets/$key.txt and $key.tar.gz"
   prompt="Use remote-pair-run, and start from this ticket, following the skill's section on tickets. With nothing attached, read Documents/Cowork/relay/tickets/$key.txt from my OneDrive, and get the archive it names. Tell me in your own words what it asks for, what you'd need to see to do it, and what isn't clear. Don't change anything yet."
   ttl="$(sed -n "1s/^# $key: //p" "$WORK/ticket/ticket.md")"
   finish_prompts "$prompt" "$(slack_prompt "$key" "$ttl" "$linked")"
@@ -2709,9 +2708,9 @@ cmd_branch() {
   if [ -n "$test_cmd" ]; then
     remember_test "$test_cmd"
     if [ "$test_cmd" = none ]; then
-      say_ok "Forgot how to test $repo."
+      ui_item ok "Forgot how to test $repo."
     else
-      say_ok "Remembered how to test $repo, so --test isn't needed for it next time: $test_cmd"
+      ui_item ok "Remembered how to test $repo, so --test isn't needed for it next time: $test_cmd"
     fi
   fi
   ticket="$(ticket_in "$branch")"
@@ -2799,13 +2798,14 @@ cmd_branch() {
   mkdir -p "$dest" || die "can't create $dest"
   cp "$WORK/$name.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
   cp "$note" "$dest/" || die "couldn't copy the note to $dest"
-  say_ok "Packed branch $branch of $repo against $against: $commits commits, $changed changed files, ${S_DIM}$size bytes${S_OFF}"
-  [ -z "$WIKI_PART" ] || say_ok "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
-  [ -z "$plan" ] || say_ok "Included the plan, $(tilde "$plan")"
-  echo "Checks: $CHECKS_LINE"
-  [ "$existing" = none ] || say_ok "Included your earlier review, $REVIEWS_DIR/$review"
+  ui_stage PACKED "branch $branch of $repo against $against: $commits commits, $changed changed files" "$size bytes"
+  [ -z "$WIKI_PART" ] || ui_item ok "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
+  [ -z "$plan" ] || ui_item ok "Included the plan, $(tilde "$plan")"
+  # When they ran, the CHECKS stage above says how they went.
+  case "$CHECKS_LINE" in "not run"*) ui_detail "Checks: $CHECKS_LINE" ;; esac
+  [ "$existing" = none ] || ui_item ok "Included your earlier review, $REVIEWS_DIR/$review"
   size_warning "$size"
-  say_ok "Sent to OneDrive: Documents/Cowork/relay/branches/$name.txt and $name.tar.gz"
+  ui_stage SENT "OneDrive: Documents/Cowork/relay/branches/$name.txt and $name.tar.gz"
   prompt="Use remote-pair-run to review my branch before I open a merge request, following its section on merge requests, with the two passes stage 5 asks for: the code, and then the code against the plan. With no attachment, read Documents/Cowork/relay/branches/$name.txt from my OneDrive, and get the archive it names. If I have a skill for reviewing merge requests, follow all of it for the review and the file it writes. Finish with a verdict: is this ready to push, and what has to change first? Say what you didn't cover."
   finish_prompts "$prompt"
 }

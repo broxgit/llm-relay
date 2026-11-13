@@ -925,7 +925,7 @@ git -C "$SR" commit -qm one
 printf 'two\n' >>"$SR/a.txt"
 echo secret >"$SR/untracked.env"
 sc() { env HOME="$RH" "$W" scan "$@"; }
-expect "relay scan says what it sent" "tell Cowork: read Documents/Cowork/relay/scans/scan-me.txt" sc "$SR"
+expect "relay scan says what it sent" "tell Copilot Cowork: read Documents/Cowork/relay/scans/scan-me.txt" sc "$SR"
 SD="$OD/Documents/Cowork/relay/scans"
 check "the note names the commit" grep -q "^commit: $(git -C "$SR" rev-parse HEAD)$" "$SD/scan-me.txt"
 check "the note names the branch" grep -q '^branch: main$' "$SD/scan-me.txt"
@@ -946,7 +946,7 @@ git -C "$SR" checkout -q --detach
 expect "a detached HEAD can be scanned" "detached HEAD" sc "$SR"
 check "with nothing uncommitted, it says so" grep -q '^uncommitted changes: no, uncommitted.patch is empty$' "$SD/scan-me.txt"
 out="$(cd "$SR/sub" && env HOME="$RH" "$W" scan 2>&1)"
-case "$out" in *"Scanned scan-me"*) ok "scan defaults to the repository you're in" ;; *) bad "scan defaults to the repository you're in" "$out" ;; esac
+case "$out" in *"SCANNED  scan-me"*) ok "scan defaults to the repository you're in" ;; *) bad "scan defaults to the repository you're in" "$out" ;; esac
 check "a repository with no wiki says so" grep -q '^wiki: none covers this repository$' "$SD/scan-me.txt"
 check "and its archive has no wiki" bash -c "! tar -tzf '$SD/scan-me.tar.gz' | grep -q repo-wiki"
 # How a scan looks at a terminal: the same words, with a mark and a colour, and no code in what
@@ -959,8 +959,8 @@ sty_scan() { styled "" env HOME="$RH" PATH="$STB:$PATH" "$W" scan "$@"; }
 unsize() { sed 's/, [0-9][0-9]* bytes//'; }
 sty_out="$(sty_scan "$SR")"
 same_kit_words "a styled scan says what a piped one says" "$(printf '%s\n' "$sty_out" | plain_words | grep -v 'on your clipboard' | unsize)" "$(sc "$SR" 2>&1 | unsize)"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive:"*) ok "a styled scan marks what it sent" ;; *) bad "a styled scan marks what it sent" "$sty_out" ;; esac
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Scanned scan-me:"*"${ESC_BYTE}[2m"*" bytes${ESC_BYTE}[0m"*) ok "and dims its size" ;; *) bad "and dims its size" "$sty_out" ;; esac
+case "$sty_out" in *" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive:"*) ok "a styled scan marks what it sent" ;; *) bad "a styled scan marks what it sent" "$sty_out" ;; esac
+case "$sty_out" in *" SCANNED ${ESC_BYTE}[0m  ${ESC_BYTE}[1mscan-me:"*"${ESC_BYTE}[2m"*" bytes"*) ok "a scan is a SCANNED stage, its size muted" ;; *) bad "a scan is a SCANNED stage, its size muted" "$sty_out" ;; esac
 no_codes_in "a styled scan writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard-sty"
 check "nor into the scan's own note inside the archive" bash -c "! tar -xzOf '$SD/scan-me.tar.gz' scan.txt | grep -q '$ESC_BYTE'"
 
@@ -1247,14 +1247,14 @@ git clone -q "$MP/repo.bundle" "$MP/clone" 2>/dev/null
 check "with its files" bash -c "git -C '$MP/clone' show HEAD:a.txt | grep -q change && git -C '$MP/clone' show origin/master:newer.txt | grep -q newer"
 
 # --also: a whole repository, a branch of it, and one folder of it, from origin.
-expect "--also sends a repository" "Scanned svc: master at $MR_TIP" mr "$MRU" --also "$MC"
+expect "--also sends a repository" "SCANNED  svc: master at $MR_TIP" mr "$MRU" --also "$MC"
 check "as a scan of its own" grep -q "^commit: $MR_TIP$" "$SD/svc.txt"
 check "with no wiki of its own" grep -q '^wiki: left out with --no-wiki$' "$SD/svc.txt"
 check "and the MR's note names it" grep -q '^  Documents/Cowork/relay/scans/svc.txt$' "$MD/svc-7.txt"
 out="$(mr "$MRU" --also "$MC@ABC-12-work" 2>&1)"
 case "$out" in *"ABC-12-work at $MR_HEAD"*) ok "--also can name a branch" ;; *) bad "--also can name a branch" "$out" ;; esac
 out="$(mr "$MRU" --also "$MC/deploy/prod" --also "$MC" 2>&1)"
-case "$out" in *"Scanned the deploy/prod folder of svc: master"*) ok "--also can send one folder" ;; *) bad "--also can send one folder" "$out" ;; esac
+case "$out" in *"SCANNED  the deploy/prod folder of svc: master"*) ok "--also can send one folder" ;; *) bad "--also can send one folder" "$out" ;; esac
 check "with only that folder" bash -c "tar -tzf '$SD/svc-deploy-prod.tar.gz' | grep -q 'deploy/prod/values.yaml' && ! tar -tzf '$SD/svc-deploy-prod.tar.gz' | grep -q a.txt"
 check "the MR's note names both" bash -c "grep -q 'scans/svc-deploy-prod.txt' '$MD/svc-7.txt' && grep -q 'scans/svc.txt' '$MD/svc-7.txt'"
 refuse "--also needs a repository" mr "$MRU" --also "$T/not-a-repo-yet"
@@ -1756,11 +1756,11 @@ out="$(xk x "$XR")"
 case "$out" in *"Nothing from secret-repo was sent."*) ok "any key but y is a no" ;; *) bad "any key but y is a no" "$out" ;; esac
 check "still nothing" test ! -e "$SD/secret-repo.txt"
 out="$(xk y "$XR")"
-case "$out" in *"Now tell Cowork: read Documents/Cowork/relay/scans/secret-repo.txt"*) ok "y sends it" ;; *) bad "y sends it" "$out" ;; esac
+case "$out" in *"Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/secret-repo.txt"*) ok "y sends it" ;; *) bad "y sends it" "$out" ;; esac
 check "and the note says the user chose to" grep -q '^secrets check: places that looked like secrets: 4, and the user chose to send them. Never repeat a credential you find here$' "$SD/secret-repo.txt"
 # Asked every time, people stop reading. A yes is kept until what's found changes.
 out="$(xk "" "$XR")"; rc=$?
-case "$rc:$out" in 0:*"the same as when you said to send it. Sending."*"Now tell Cowork: read"*) ok "a second scan of the same repository isn't asked again, and says why" ;; *) bad "a second scan of the same repository isn't asked again, and says why" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"the same as when you said to send it. Sending."*"Next: tell Copilot Cowork: read"*) ok "a second scan of the same repository isn't asked again, and says why" ;; *) bad "a second scan of the same repository isn't asked again, and says why" "exit $rc: $out" ;; esac
 check "its note says the answer was an earlier one" grep -q '^secrets check: places that looked like secrets: 4, the same as when the user chose to send them before' "$SD/secret-repo.txt"
 out="$(xk n "$XR" --ask)"
 case "$out" in *"Send secret-repo to OneDrive anyway? [y]es, [n]o: "*"Nothing from secret-repo was sent."*) ok "--ask asks again" ;; *) bad "--ask asks again" "$out" ;; esac
@@ -1796,7 +1796,7 @@ out="$(xsc "$XR2" </dev/null 2>&1)"
 case "$out" in *"conf.yaml:2: a line that looks like it sets a password or key, in your uncommitted changes"*"needs a terminal"*) ok "a secret in uncommitted changes is caught too" ;; *) bad "a secret in uncommitted changes is caught too" "$out" ;; esac
 check "and not sent" test ! -e "$SD/secret-patch.txt"
 git -C "$XR2" checkout -q -- conf.yaml
-expect "the same repository without it goes" "Now tell Cowork: read Documents/Cowork/relay/scans/secret-patch.txt" xsc "$XR2"
+expect "the same repository without it goes" "Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/secret-patch.txt" xsc "$XR2"
 # The other ways code leaves: a folder named with --also, and a merge request's own branch.
 out="$(xmr "$MRU" --also "$XR/deploy@$XB" 2>&1)"; rc=$?
 case "$rc:$out" in 0:*) bad "--also asks about a folder that looks like it holds secrets" "$out" ;; *"secret-repo-deploy has places that look like they hold secrets"*"needs a terminal"*) ok "--also asks about a folder that looks like it holds secrets" ;; *) bad "--also asks about a folder that looks like it holds secrets" "$out" ;; esac
@@ -1827,13 +1827,13 @@ for r in "$N1" "$N2"; do
   git -C "$r" add -A
   git -C "$r" commit -qm one
 done
-expect "the first of two repositories with one folder name gets the plain name" "Now tell Cowork: read Documents/Cowork/relay/scans/twin.txt" xsc "$N1"
+expect "the first of two repositories with one folder name gets the plain name" "Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/twin.txt" xsc "$N1"
 out="$(xsc "$N2" 2>&1)"
-case "$out" in *"Another repository's scan is already called twin, so this one is called deploy-twin."*"Now tell Cowork: read Documents/Cowork/relay/scans/deploy-twin.txt"*) ok "the second takes its parent folder's name in front, and says so" ;; *) bad "the second takes its parent folder's name in front, and says so" "$out" ;; esac
+case "$out" in *"Another repository's scan is already called twin, so this one is called deploy-twin."*"Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/deploy-twin.txt"*) ok "the second takes its parent folder's name in front, and says so" ;; *) bad "the second takes its parent folder's name in front, and says so" "$out" ;; esac
 check "the first one's scan is still its own" grep -q "^path: .*/names/code/twin\$" "$SD/twin.txt"
 check "and the second has its own" grep -q "^path: .*/names/deploy/twin\$" "$SD/deploy-twin.txt"
-expect "the second keeps its name the next time" "Now tell Cowork: read Documents/Cowork/relay/scans/deploy-twin.txt" xsc "$N2"
-expect "and so does the first" "Now tell Cowork: read Documents/Cowork/relay/scans/twin.txt" xsc "$N1"
+expect "the second keeps its name the next time" "Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/deploy-twin.txt" xsc "$N2"
+expect "and so does the first" "Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/twin.txt" xsc "$N1"
 N2B="$(git -C "$N2" symbolic-ref --short HEAD)"
 xmr "$MRU" --also "$N2@$N2B" >/dev/null 2>&1
 check "--also names the note the scan really got" grep -q 'Documents/Cowork/relay/scans/deploy-twin.txt' "$MD/svc-7.txt"
@@ -1906,7 +1906,7 @@ case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m review: your s
 git init -q "$T/skill-repo" && git -C "$T/skill-repo" commit -q --allow-empty -m first
 kscan() { env HOME="$KH" "$W" --dir "$KO" scan "$T/skill-repo" --no-wiki 2>&1; }
 out="$(kscan)"
-case "$out" in *"skill review: Copilot Cowork's copy was out of date, so it was made again"*"Scanned skill-repo"*) ok "relay scan makes the copy again first" ;; *) bad "relay scan makes the copy again first" "$out" ;; esac
+case "$out" in *"skill review: Copilot Cowork's copy was out of date, so it was made again"*"SCANNED  skill-repo"*) ok "relay scan makes the copy again first" ;; *) bad "relay scan makes the copy again first" "$out" ;; esac
 kbody "$KC/review/SKILL.md" | cmp -s - "$KS/review/SKILL.md" && ok "and it matches the skill again" || bad "and it matches the skill again"
 lacks "a scan says nothing when the copies are in step" "skill " kscan
 echo 'Ask me before a second pass.' >"$KS/review/COWORK.md"
@@ -2030,11 +2030,11 @@ expect "a scan says when Cowork has no skill yet" "Copilot Cowork doesn't have t
 # With no skill in Cowork's folder, telling Cowork to read the scan would get nowhere, so the
 # last lines send the user to relay start first.
 out="$(vscan 2>&1)"
-case "$out" in *"Cowork can't use this yet: it doesn't have the relay's skills. Run: relay start, which says when Cowork has them."*"Then tell Cowork: read Documents/Cowork/relay/scans/"*) ok "and doesn't send the user to Cowork before it has the skill" ;; *) bad "and doesn't send the user to Cowork before it has the skill" "$out" ;; esac
-case "$out" in *"Now tell Cowork"*) bad "so there is no Now tell Cowork yet" "$out" ;; *) ok "so there is no Now tell Cowork yet" ;; esac
+case "$out" in *"Copilot Cowork can't use this yet: it doesn't have the relay's skills. Run: relay start, which says when Copilot Cowork has them."*"Next: then tell Copilot Cowork: read Documents/Cowork/relay/scans/"*) ok "and doesn't send the user to Cowork before it has the skill" ;; *) bad "and doesn't send the user to Cowork before it has the skill" "$out" ;; esac
+case "$out" in *"Next: tell Copilot Cowork"*) bad "so there is no telling Copilot Cowork to read it yet" "$out" ;; *) ok "so there is no telling Copilot Cowork to read it yet" ;; esac
 env HOME="$VH" "$W" setup --dir "$VO" --reviews "$T/version-reviews" --clones "$T/version-clones" </dev/null >/dev/null 2>&1
 lacks "and nothing once setup has run" "remote-pair-run" vscan
-expect "once Cowork has the skill, the scan ends with Now tell Cowork" "Now tell Cowork: read Documents/Cowork/relay/scans/" vscan
+expect "once Copilot Cowork has the skill, the scan ends with Next: tell Copilot Cowork" "Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/" vscan
 echo '# an older copy' >>"$VO/Documents/Cowork/skills/remote-pair-run/runlib.sh"
 expect "and says when Copilot Cowork's copy isn't this relay's" "Copilot Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay start" vscan
 # A warning goes to standard error, so it is styled as standard error is. At a terminal with
@@ -2088,7 +2088,7 @@ env HOME="$VH" "$W" nonsense >/dev/null 2>&1; rc=$?
 env HOME="$VH" "$W" --dir "$T/no-such-onedrive" scan >/dev/null 2>&1; rc=$?
 [ "$rc" = 1 ] && ok "something that failed still exits 1" || bad "something that failed still exits 1" "exit $rc"
 out="$(vscan)"
-case "$out" in *"Scanned skill-repo"*) ok "the scan still goes ahead" ;; *) bad "the scan still goes ahead" "$out" ;; esac
+case "$out" in *"SCANNED  skill-repo"*) ok "the scan still goes ahead" ;; *) bad "the scan still goes ahead" "$out" ;; esac
 
 section "A guided field test"
 FS="$REPO/cowork/relay-field-test"
@@ -2170,7 +2170,7 @@ while IFS= read -r line; do
   [ -n "$line" ] || continue
   if grep -qF -- "$line" "$FS/SKILL.md" && grep -qF -- "$line" "$W" "$LIB"; then ok "the skill expects what the relay prints: $line"; else bad "the skill expects what the relay prints: $line"; fi
 done <<'EOF'
-Now tell Cowork: read Documents/Cowork/relay/scans/
+tell Copilot Cowork: read Documents/Cowork/relay/scans/
 Relay run started at
 Nothing ran, and no report was sent.
 Applied, and nothing is committed.
@@ -2260,7 +2260,7 @@ brh() { env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$@" </dev/null 
 BD="$OD/Documents/Cowork/relay/branches"
 rm -f "$T/clipboard"
 out="$(brh "$BC" --no-checks)"; rc=$?
-case "$rc:$out" in 0:*"Packed branch ABC-12-work of svc against master: 1 commits, 1 changed files"*"Sent to OneDrive: Documents/Cowork/relay/branches/svc-ABC-12-work.txt and svc-ABC-12-work.tar.gz"*) ok "relay branch packs the branch against origin's default branch" ;; *) bad "relay branch packs the branch against origin's default branch" "$out" ;; esac
+case "$rc:$out" in 0:*"PACKED  branch ABC-12-work of svc against master: 1 commits, 1 changed files"*"SENT  OneDrive: Documents/Cowork/relay/branches/svc-ABC-12-work.txt and svc-ABC-12-work.tar.gz"*) ok "relay branch packs the branch against origin's default branch" ;; *) bad "relay branch packs the branch against origin's default branch" "$out" ;; esac
 check "the prompt asks for a review before the merge request" grep -q 'review my branch before I open a merge request' "$T/clipboard"
 check "the note names the branch" grep -qx 'branch: ABC-12-work' "$BD/svc-ABC-12-work.txt"
 check "and the target, at its tip" grep -qx "against: master, at $MR_TIP" "$BD/svc-ABC-12-work.txt"
@@ -2289,7 +2289,7 @@ rm -f "$T/clipboard"
 sty_out="$(styled $'\n' env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks)"
 # At a terminal the end asks a question that a pipe doesn't, so styled and plain are compared there.
 same_kit_words "a styled branch says what a plain one does" "$sty_out" "$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" $'\n' "$W" --dir "$OD" branch "$BC" --no-checks 2>&1)"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed branch ABC-12-work of svc"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork"*"Its prompt is on your clipboard."*"[p]${ESC_BYTE}[0m print the prompt  "*"[Enter]${ESC_BYTE}[0m finish  "*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
+case "$sty_out" in *" PACKED ${ESC_BYTE}[0m  ${ESC_BYTE}[1mbranch ABC-12-work of svc"*" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork"*"Its prompt is on your clipboard."*"[p]${ESC_BYTE}[0m print the prompt  "*"[Enter]${ESC_BYTE}[0m finish  "*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
 styled "" env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks >/dev/null
 no_codes_in "a styled branch writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
 check "nor into the note inside the archive" bash -c "! tar -xzOf '$BD/svc-ABC-12-work.tar.gz' branch/diff.patch | grep -q '$ESC_BYTE'"
@@ -2581,7 +2581,7 @@ TD="$TO/Documents/Cowork/relay/tickets"
 tk_unpack() { rm -rf "$T/ticket-unpack" && mkdir -p "$T/ticket-unpack" && tar -xzf "$TD/$1.tar.gz" -C "$T/ticket-unpack"; }
 rm -f "$T/clipboard"
 out="$(tk ABC-12)"; rc=$?
-case "$rc:$out" in 0:*"Packed ABC-12: comments 1, linked tickets 1, attachments 1, Confluence pages 1"*"Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt and ABC-12.tar.gz"*) ok "relay ticket packs a ticket, though acli answered on the error stream" ;; *) bad "relay ticket packs a ticket, though acli answered on the error stream" "$out" ;; esac
+case "$rc:$out" in 0:*"PACKED  ABC-12: comments 1, linked tickets 1, attachments 1, Confluence pages 1"*"SENT  OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt and ABC-12.tar.gz"*) ok "relay ticket packs a ticket, though acli answered on the error stream" ;; *) bad "relay ticket packs a ticket, though acli answered on the error stream" "$out" ;; esac
 check "the prompt for Cowork is on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 # Cowork can't read Slack, so the user carries a prompt to Slackbot. It is printed, and never put on the clipboard.
 case "$out" in *"2  Ask Slackbot, if your team talks in Slack.  Paste its answer into Copilot Cowork with the prompt above."*) ok "relay ticket prints a prompt for Slackbot too" ;; *) bad "relay ticket prints a prompt for Slackbot too" "$out" ;; esac
@@ -2594,7 +2594,7 @@ rm -f "$T/clipboard"
 sty_out="$(styled $'\n' env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12)"
 tkt() { local keys="$1"; shift; env HOME="$TH" PATH="$TB:$FB:$PATH" python3 "$TTY" "$keys" "$W" --dir "$TO" ticket "$@" 2>&1; }
 same_kit_words "a styled ticket says what a plain one does" "$sty_out" "$(tkt $'\n' ABC-12)"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed ABC-12:"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "a styled ticket marks what it packed and sent, and its next step" ;; *) bad "a styled ticket marks what it packed and sent, and its next step" "$sty_out" ;; esac
+case "$sty_out" in *" PACKED ${ESC_BYTE}[0m  ${ESC_BYTE}[1mABC-12:"*" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive: Documents/Cowork/relay/tickets/ABC-12.txt"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "a styled ticket marks what it packed and sent, and its next step" ;; *) bad "a styled ticket marks what it packed and sent, and its next step" "$sty_out" ;; esac
 # At a terminal the prompts stay off the screen. Enter finishes, s swaps in the Slackbot prompt,
 # and p prints both.
 rm -f "$T/clipboard"
@@ -2639,10 +2639,10 @@ check "as plain text, lists and links kept" bash -c "grep -q 'Start in under one
 check "with the text of a code block" grep -q 'go run ./cmd' "$T/ticket-unpack/ticket/pages/123.md"
 check "and as Confluence keeps it, beside that" grep -q '<h1>Goals</h1>' "$T/ticket-unpack/ticket/pages/123.storage.html"
 out="$(FAKE_ACLI_STDOUT=1 tk ABC-12)"
-case "$out" in *"Packed ABC-12: comments 1"*) ok "an answer on standard output is read as well" ;; *) bad "an answer on standard output is read as well" "$out" ;; esac
+case "$out" in *"PACKED  ABC-12: comments 1"*) ok "an answer on standard output is read as well" ;; *) bad "an answer on standard output is read as well" "$out" ;; esac
 # A ticket's links to pages don't come with it, so pages are named.
 out="$(tk ABC-14)"
-case "$out" in *"Packed ABC-14: comments 0, linked tickets 0, attachments 0, Confluence pages 0"*"No Confluence page went with it."*"relay ticket ABC-14 --page ADDRESS"*) ok "with no page, it says how to name one" ;; *) bad "with no page, it says how to name one" "$out" ;; esac
+case "$out" in *"PACKED  ABC-14: comments 0, linked tickets 0, attachments 0, Confluence pages 0"*"No Confluence page went with it."*"relay ticket ABC-14 --page ADDRESS"*) ok "with no page, it says how to name one" ;; *) bad "with no page, it says how to name one" "$out" ;; esac
 check "and the note tells Cowork to ask" grep -q '^Confluence pages: none. A ticket.s links to pages don.t come with it' "$TD/ABC-14.txt"
 tk_unpack ABC-14
 check "a ticket with no description says so" grep -qx 'There is none.' "$T/ticket-unpack/ticket/ticket.md"
@@ -2660,7 +2660,7 @@ case "$rc:$out" in 0:*) bad "a ticket that looks like it holds a secret isn't se
 case "$out" in *hunter2*) bad "and the secret isn't printed" "$out" ;; *) ok "and the secret isn't printed" ;; esac
 check "nothing reached OneDrive" test ! -e "$TD/ABC-15.txt"
 out="$(env HOME="$TH" PATH="$TB:$FB:$PATH" python3 "$TTY" y "$W" --dir "$TO" ticket ABC-15 2>&1)"
-case "$out" in *"Send ticket ABC-15 to OneDrive anyway? [y]es, [n]o: "*"Packed ABC-15"*) ok "at a terminal it asks, and y sends it" ;; *) bad "at a terminal it asks, and y sends it" "$out" ;; esac
+case "$out" in *"Send ticket ABC-15 to OneDrive anyway? [y]es, [n]o: "*"PACKED  ABC-15"*) ok "at a terminal it asks, and y sends it" ;; *) bad "at a terminal it asks, and y sends it" "$out" ;; esac
 # A short Confluence address, the kind the Share button gives, is the page's number written
 # another way. /x/ew is page 123, so the relay reads it with nothing asked of Confluence.
 check "a short Confluence address in a ticket is followed" grep -q '^  pages/123.md: ' "$TD/ABC-15.txt"
@@ -2739,12 +2739,12 @@ done
 git -C "$NH/code/one" config remote.origin.url "https://git.example/team/one.git"
 git -C "$NH/code/one" config "url.$T/several-one.git.insteadOf" "https://git.example/team/one.git"
 out="$(nsc scan "$NH/code/one" "$NH/code/two" --no-wiki)"; rc=$?
-case "$rc:$out" in 0:*"Scanned one: master"*"Scanned two: master"*) ok "relay scan takes several repositories" ;; *) bad "relay scan takes several repositories" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"SCANNED  one: master"*"SCANNED  two: master"*) ok "relay scan takes several repositories" ;; *) bad "relay scan takes several repositories" "exit $rc: $out" ;; esac
 check "each gets its own scan" test -f "$NS/one.txt" -a -f "$NS/two.txt" -a -f "$NS/one.tar.gz" -a -f "$NS/two.tar.gz"
 check "a scan says what origin's default branch is" grep -q "^origin's default branch: master\$" "$NS/one.txt"
 check "and that it is level with origin" grep -q '^against origin: level with origin/master$' "$NS/one.txt"
 out="$(nsc scan "$NH/code/one" "$T/several-nothing-here" "$NH/code/two" --no-wiki)"; rc=$?
-case "$rc:$out" in 0:*) bad "one that can't be scanned doesn't stop the rest, and the command fails" "$out" ;; *"not a git repository"*"Scanned two: master"*"1 of 3 were not scanned"*) ok "one that can't be scanned doesn't stop the rest, and the command fails" ;; *) bad "one that can't be scanned doesn't stop the rest, and the command fails" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*) bad "one that can't be scanned doesn't stop the rest, and the command fails" "$out" ;; *"not a git repository"*"SCANNED  two: master"*"1 of 3 were not scanned"*) ok "one that can't be scanned doesn't stop the rest, and the command fails" ;; *) bad "one that can't be scanned doesn't stop the rest, and the command fails" "exit $rc: $out" ;; esac
 # Origin moves on, and the clone doesn't. The scan fetches, and says so.
 git clone -q -b master "$T/several-two.git" "$T/several-other" 2>/dev/null
 echo newer >>"$T/several-other/file.txt"
@@ -2760,7 +2760,7 @@ out="$(nsc scan "$NH/code/two" --no-wiki)"
 check "a branch origin doesn't have is held against the default branch" grep -q "^against origin: ABC-7-work isn't on origin, and origin/master has 1 commits it doesn't\$" "$NS/two.txt"
 git -C "$NH/code/two" remote set-url origin "$T/gone.git"
 out="$(nsc scan "$NH/code/two" --no-wiki)"; rc=$?
-case "$rc:$out" in 0:*"Scanned two"*) ok "an origin that can't be reached doesn't stop a scan" ;; *) bad "an origin that can't be reached doesn't stop a scan" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"SCANNED  two"*) ok "an origin that can't be reached doesn't stop a scan" ;; *) bad "an origin that can't be reached doesn't stop a scan" "exit $rc: $out" ;; esac
 check "and the note says it is as of the last fetch" grep -q "^against origin: .*, as of your last fetch, because origin couldn't be reached\$" "$NS/two.txt"
 git init -q "$NH/code/alone"
 echo a >"$NH/code/alone/a.txt"
@@ -2900,10 +2900,10 @@ git -C "$AH/asked-repo" add -A
 git -C "$AH/asked-repo" commit -qm first
 out="$(ak ask How is it laid out --scan "$AH/asked-repo")"; rc=$?
 id4="$(ask_id "$out")"
-case "$rc:$out" in 0:*"Scanned asked-repo"*"Asked: "*) ok "--scan sends the repository first" ;; *) bad "--scan sends the repository first" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"SCANNED  asked-repo"*"Asked: "*) ok "--scan sends the repository first" ;; *) bad "--scan sends the repository first" "exit $rc: $out" ;; esac
 check "and the ask names the scan's note" grep -q '^  Documents/Cowork/relay/scans/asked-repo.txt$' "$AA/$id4.md"
 check "which is there with its archive" test -f "$AO/Documents/Cowork/relay/scans/asked-repo.txt" -a -f "$AO/Documents/Cowork/relay/scans/asked-repo.tar.gz"
-case "$out" in *"Now tell Cowork"*) bad "with no word about telling Cowork to read it" "$out" ;; *) ok "with no word about telling Cowork to read it" ;; esac
+case "$out" in *"tell Copilot Cowork: read"*) bad "with no word about telling Cowork to read it" "$out" ;; *) ok "with no word about telling Cowork to read it" ;; esac
 out="$(ak ask How --scan "$T/ask-not-a-repo")"; rc=$?
 case "$rc:$out" in 0:*) bad "a repository that can't be scanned stops the ask" "$out" ;; *"so nothing was asked"*) ok "a repository that can't be scanned stops the ask" ;; *) bad "a repository that can't be scanned stops the ask" "exit $rc: $out" ;; esac
 

@@ -454,7 +454,7 @@ Each entry is what you see, then what to do. `relay start` is a good first step 
 - Use Apple's Terminal, and keep to one tab. `relay start` says which terminal app you are in.
 - A skill copy that couldn't be read is left as it is.
 
-**A scan ends with "Then tell Cowork", not "Now tell Cowork".** Cowork doesn't have the relay's skills yet, so it couldn't use the scan. Run `relay start`, wait until the time it gives, and then tell Cowork.
+**A scan ends with "Next: then tell Copilot Cowork", not "Next: tell Copilot Cowork".** Cowork doesn't have the relay's skills yet, so it couldn't use the scan. Run `relay start`, wait until the time it gives, and then tell Cowork.
 
 **"Cowork's skills are from a newer relay".** You have another Mac on the same work account with a later release, and it put its skills in OneDrive. This Mac leaves them alone, since its own are older. Upgrade this one with `brew update && brew upgrade llm-relay`, then run `relay start`.
 
