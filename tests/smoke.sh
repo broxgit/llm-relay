@@ -1187,7 +1187,9 @@ check "it puts a prompt on the clipboard" grep -q 'Documents/Cowork/relay/mrs/sv
 check "and the prompt asks for a verdict" grep -q 'Finish with a verdict' "$T/clipboard"
 check "and for what wasn't covered" grep -q "Say what you didn't cover" "$T/clipboard"
 out="$(mr "$MRU" 2>&1)"
-case "$out" in *"Paste this into Cowork. It's on your clipboard:"*"Documents/Cowork/relay/mrs/svc-7.txt"*) ok "and prints it" ;; *) bad "and prints it" "$out" ;; esac
+case "$out" in *"Starting a new Copilot Cowork session instead? Paste this. It's on your clipboard:"*"Documents/Cowork/relay/mrs/svc-7.txt"*) ok "and prints it" ;; *) bad "and prints it" "$out" ;; esac
+# Copilot Cowork asked for most runs, and needs only "done", so that is the last line.
+case "$(printf '%s\n' "$out" | tail -n 1)" in "Next: back in Copilot Cowork, reply done") ok "and ends by saying to reply done" ;; *) bad "and ends by saying to reply done" "$out" ;; esac
 # The same prompt for Slackbot as a ticket gets, with the merge request's address in place of a key.
 case "$out" in *"Find the discussions that mention $MRU or \"Fix the thing\", and the tickets ABC-12."*) ok "relay mr prints a prompt for Slackbot too" ;; *) bad "relay mr prints a prompt for Slackbot too" "$out" ;; esac
 out="$(mr "$MRU" --go-prefix github.com/public 2>&1)"
@@ -1299,7 +1301,7 @@ sty_out="$(mrs y "$MRU")"
 same_words "a styled merge request says what a plain one does" "$(printf '%s\n' "$sty_out" | tty_plain)" "$(mrp y "$MRU" | tty_plain)"
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m go build: passed"*) ok "a styled check that passed has a mark" ;; *) bad "a styled check that passed has a mark" "$sty_out" ;; esac
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/mrs/svc-7.txt"*) ok "a styled merge request marks what it sent" ;; *) bad "a styled merge request marks what it sent" "$sty_out" ;; esac
-case "$sty_out" in *"${ESC_BYTE}[1mPaste this into Cowork. It's on your clipboard:${ESC_BYTE}[0m"*) ok "and makes the line above the prompt a heading" ;; *) bad "and makes the line above the prompt a heading" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "and makes the next step stand out" ;; *) bad "and makes the next step stand out" "$sty_out" ;; esac
 no_codes_in "a styled merge request writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
 check "nor into the checks' summary inside the archive" bash -c "! tar -xzOf '$MD/svc-7.tar.gz' mr/checks/summary.txt | grep -q '$ESC_BYTE'"
 sty_out="$(FAKE_GO_FAIL="test" mrs y "$MRU")"
@@ -2239,9 +2241,10 @@ out="$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" n "$W" --dir "$OD" branch 
 case "$out" in *"on a temporary copy of your branch ABC-12-work at $MR_HEAD, by you?"*) ok "at a terminal the question names the branch" ;; *) bad "at a terminal the question names the branch" "$out" ;; esac
 # How a branch looks at a terminal.
 rm -f "$T/clipboard"
-sty_out="$(styled "" env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks)"
-same_words "a styled branch says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(brh "$BC" --no-checks | sed 's/, [0-9][0-9]* bytes//')"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed branch ABC-12-work of svc"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1mPaste this into a new Cowork session. It's on your clipboard:${ESC_BYTE}[0m"*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
+sty_out="$(styled $'\n' env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks)"
+# At a terminal the end asks a question that a pipe doesn't, so styled and plain are compared there.
+same_words "a styled branch says what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" $'\n' "$W" --dir "$OD" branch "$BC" --no-checks 2>&1 | plain_words | sed 's/, [0-9][0-9]* bytes//')"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed branch ABC-12-work of svc"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork"*"Its prompt is on your clipboard."*"Print the prompt [p], or finish [Enter]: "*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
 styled "" env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks >/dev/null
 no_codes_in "a styled branch writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
 check "nor into the note inside the archive" bash -c "! tar -xzOf '$BD/svc-ABC-12-work.tar.gz' branch/diff.patch | grep -q '$ESC_BYTE'"
@@ -2535,16 +2538,30 @@ out="$(tk ABC-12)"; rc=$?
 case "$rc:$out" in 0:*"Packed ABC-12: comments 1, linked tickets 1, attachments 1, Confluence pages 1"*"Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt and ABC-12.tar.gz"*) ok "relay ticket packs a ticket, though acli answered on the error stream" ;; *) bad "relay ticket packs a ticket, though acli answered on the error stream" "$out" ;; esac
 check "the prompt for Cowork is on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 # Cowork can't read Slack, so the user carries a prompt to Slackbot. It is printed, and never put on the clipboard.
-case "$out" in *"And this one is for Slackbot, if your team talks in Slack. Paste its answer into Cowork with the prompt above:"*) ok "relay ticket prints a prompt for Slackbot too" ;; *) bad "relay ticket prints a prompt for Slackbot too" "$out" ;; esac
+case "$out" in *"And this one is for Slackbot, if your team talks in Slack. Paste its answer into Copilot Cowork with the prompt above:"*) ok "relay ticket prints a prompt for Slackbot too" ;; *) bad "relay ticket prints a prompt for Slackbot too" "$out" ;; esac
 case "$out" in *'Find the discussions that mention ABC-12 or "Make the widget faster", and the tickets '*ABC-13*) ok "and it names the ticket, its title and a linked ticket" ;; *) bad "and it names the ticket, its title and a linked ticket" "$out" ;; esac
 case "$out" in *'and the tickets ABC-13, ABC-1. Answer under these headings'*) ok "and the parent" ;; *) bad "and the parent" "$out" ;; esac
 case "$out" in *'THREADS, one line each with its link, channel and date. DECISIONS'*'OPEN QUESTIONS. PEOPLE'*'NOT FOUND'*) ok "and asks for a layout Cowork can read back" ;; *) bad "and asks for a layout Cowork can read back" "$out" ;; esac
 refuse "and the clipboard keeps the prompt for Cowork only" grep -q -e 'Slackbot' -e 'Find the discussions' "$T/clipboard"
 # How a ticket looks at a terminal.
 rm -f "$T/clipboard"
-sty_out="$(styled "" env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12)"
-same_words "a styled ticket says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(tk ABC-12 | sed 's/, [0-9][0-9]* bytes//')"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed ABC-12:"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt"*"${ESC_BYTE}[1mPaste this into Cowork. It's on your clipboard:${ESC_BYTE}[0m"*"${ESC_BYTE}[1mAnd this one is for Slackbot"*) ok "a styled ticket marks what it packed and sent, and heads the two prompts" ;; *) bad "a styled ticket marks what it packed and sent, and heads the two prompts" "$sty_out" ;; esac
+sty_out="$(styled $'\n' env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12)"
+tkt() { local keys="$1"; shift; env HOME="$TH" PATH="$TB:$FB:$PATH" python3 "$TTY" "$keys" "$W" --dir "$TO" ticket "$@" 2>&1; }
+same_words "a styled ticket says what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(tkt $'\n' ABC-12 | plain_words | sed 's/, [0-9][0-9]* bytes//')"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed ABC-12:"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "a styled ticket marks what it packed and sent, and its next step" ;; *) bad "a styled ticket marks what it packed and sent, and its next step" "$sty_out" ;; esac
+# At a terminal the prompts stay off the screen. Enter finishes, s swaps in the Slackbot prompt,
+# and p prints both.
+rm -f "$T/clipboard"
+out="$(tkt $'\n' ABC-12)"
+case "$out" in *"Want Slack context too? Copy the Slackbot prompt [s], print both prompts [p], or finish [Enter]: "*) ok "at a terminal a ticket offers the Slackbot prompt" ;; *) bad "at a terminal a ticket offers the Slackbot prompt" "$out" ;; esac
+case "$out" in *"Find the discussions"* | *"start from this ticket"*) bad "and Enter prints neither prompt" "$out" ;; *) ok "and Enter prints neither prompt" ;; esac
+check "and leaves the prompt for a new session on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
+out="$(tkt s ABC-12)"
+case "$out" in *"Copied the Slackbot prompt. Paste it into Slackbot, and its answer into Copilot Cowork."*) ok "s copies the Slackbot prompt" ;; *) bad "s copies the Slackbot prompt" "$out" ;; esac
+check "onto the clipboard" grep -q 'Find the discussions that mention ABC-12' "$T/clipboard"
+out="$(tkt p ABC-12)"
+case "$out" in *"Paste this. It's on your clipboard:"*"start from this ticket"*"Find the discussions that mention ABC-12"*) ok "p prints both prompts" ;; *) bad "p prints both prompts" "$out" ;; esac
+check "and keeps the prompt for a new session on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 styled "" env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12 >/dev/null
 no_codes_in "a styled ticket writes no code to OneDrive, the home folder or the clipboard" "$TO" "$TH" "$T/clipboard"
 check "nor into the page inside the archive" bash -c "! tar -xzOf '$TD/ABC-12.tar.gz' ticket/ticket.md | grep -q '$ESC_BYTE'"
