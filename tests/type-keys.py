@@ -16,7 +16,8 @@ import signal
 import sys
 import time
 
-PROMPTS = (b"[n]o: ", b"]: ", b"press a key: ")
+# The kit's prompt, from ui_keys, ends in a › (a > where the locale isn't UTF-8), styled or not.
+PROMPTS = (b"[n]o: ", b"]: ", b"press a key: ", "› ".encode(), "›[0m ".encode(), b"  > ", b">[0m ")
 LIMIT = 300
 
 
