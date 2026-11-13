@@ -43,7 +43,7 @@ relay ask "Where does the uploader decide to retry, and on which errors? List ea
 
 The command prints the ask's id, such as `20261110-141500`, and one of these:
 
-- `Woke Cowork.` Nothing more to do on that side.
+- `Woke Copilot Cowork.` Nothing more to do on that side.
 - A line to paste into Cowork. Give the user that line as it is, and say it goes into a Cowork session.
 
 If the command stops and says it needs a terminal, something it would send looks like a secret. Tell the user what it said, and ask them to run the same command themselves. Don't work around it.

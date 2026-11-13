@@ -424,7 +424,7 @@ Run from a terminal yourself, `relay ask` goes straight on to wait for the answe
 An answer takes one to two minutes. The relay says what it sees while it waits, and three things account for nearly every answer that doesn't come.
 
 - **OneDrive hasn't brought it to this Mac.** Cowork wrote the answer, and OneDrive on the Mac hasn't heard. This has come on the first ask after the Mac sat idle. After three minutes the relay says so and offers to restart OneDrive, which stops its syncing for a few seconds. Press `n` to leave OneDrive alone, and then in OneDrive's menu, in the menu bar, pause syncing and resume it. The relay can't see OneDrive in the cloud, so it is guessing: the newest conversation in Cowork says whether an answer was written.
-- **The trigger is paused.** `Cowork's trigger is paused or deleted (HTTP 410)` means the request was refused. Editing a trigger pauses it. Turn it on again in Cowork, then run `relay answer`.
+- **The trigger is paused.** `Copilot Cowork's trigger is paused or deleted (HTTP 410)` means the request was refused. Editing a trigger pauses it. Turn it on again in Copilot Cowork, then run `relay answer`.
 - **The trigger has the wrong instructions.** A file came with no `end of answer` line and stopped growing. `relay ask --trigger` prints the right instructions, to give to Cowork.
 
 The relay wakes Cowork once more after two minutes, in case a run missed the ask, and not again: a run that finds nothing to answer still leaves a conversation behind.
@@ -713,7 +713,7 @@ At a terminal, `ask` goes on to wait for the answer, as `relay answer` does. [As
 
 ### `answer`
 
-Waits for Cowork's answer to an ask, shows it, and saves it to `~/relay-answers` when you press `y`.
+Waits for Copilot Cowork's answer to an ask, shows it, and saves it to `~/relay-answers` when you press `y`.
 
 ```bash
 relay [--dir ONEDRIVE_FOLDER] answer [ID]
