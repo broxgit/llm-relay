@@ -26,6 +26,9 @@ IFS="$old_ifs"
 export HOME="$T/home"
 # The tests read plain words. The ones about colour take this away again.
 export NO_COLOR=1
+# Set, as they would be in the user's shell, so relay setup doesn't ask about colours in every test
+# that runs it at a terminal. The setup tests that ask unset them.
+export LLM_PALETTE=default LLM_THEME=auto
 export WIKIS_DIR="$T/wikis"
 unset XDG_CONFIG_HOME
 mkdir -p "$HOME" "$WIKIS_DIR/global/wiki" "$T/fake-wiki"
@@ -1295,7 +1298,7 @@ check "and the note says so" grep -q '^checks: not run, because the user chose n
 out="$(mr_key y "$MRU")"
 case "$out" in *"go test: passed"*) ok "y runs them" ;; *) bad "y runs them" "$out" ;; esac
 # A real user took a bare "go build: " for a question, and waited to be asked something.
-case "$out" in *"CHECKS  running them now"*"there is nothing more to answer until they finish"*"go build: passed"*) ok "and a check that is running says so, with nothing left to answer" ;; *) bad "and a check that is running says so, with nothing left to answer" "$out" ;; esac
+case "$out" in *"CHECKS  running them now"*"there is nothing more to answer until they finish"*"go build: running..."*"go build: passed"*) ok "and a check that is running says so, with nothing left to answer" ;; *) bad "and a check that is running says so, with nothing left to answer" "$out" ;; esac
 rm -f "$T/go.log"
 out="$(mr_key y "$MRU" --no-checks)"
 case "$out" in *"Run go build"*) bad "--no-checks doesn't ask" "$out" ;; *) ok "--no-checks doesn't ask" ;; esac
@@ -1314,6 +1317,20 @@ case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[43m${ESC_BYTE}[30m ? ${ESC_BYTE}[
 case "$sty_out" in *" CHECKS ${ESC_BYTE}[0m"*" PACKED ${ESC_BYTE}[0m"*" SENT ${ESC_BYTE}[0m"*"◆${ESC_BYTE}[0m ${ESC_BYTE}[1m${ESC_BYTE}[33mYOUR TURN"*) ok "it is a timeline: CHECKS, PACKED and SENT on a rail, then YOUR TURN" ;; *) bad "it is a timeline: CHECKS, PACKED and SENT on a rail, then YOUR TURN" "$sty_out" ;; esac
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m go build: passed"*) ok "a styled check that passed has a mark" ;; *) bad "a styled check that passed has a mark" "$sty_out" ;; esac
 case "$sty_out" in *" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive: Documents/Cowork/relay/mrs/svc-7.txt"*) ok "a styled merge request marks what it sent" ;; *) bad "a styled merge request marks what it sent" "$sty_out" ;; esac
+# The stages are drawn in a subshell, and the rail still runs on from SENT to YOUR TURN.
+between="${sty_out#*" SENT "}"
+between="${between%%YOUR TURN*}"
+case "$between" in *"${ESC_BYTE}[2m│${ESC_BYTE}[0m"*) ok "the rail joins SENT to YOUR TURN" ;; *) bad "the rail joins SENT to YOUR TURN" "$between" ;; esac
+# A check that runs a while has a spinner that turns and a clock that counts, then its result.
+sty_slow="$(FAKE_GO_HANG="test" RELAY_CHECK_LIMIT=1 mrs y "$MRU")"
+case "$sty_slow" in *"⠋${ESC_BYTE}[0m go test: running..."*"⠙${ESC_BYTE}[0m go test: running..."*"go test: stopped after 1s"*) ok "a styled check that runs a while has a spinner that turns" ;; *) bad "a styled check that runs a while has a spinner that turns" "$(printf '%s' "$sty_slow" | tr '\r' '\n' | grep -a 'go test' | head -n 6)" ;; esac
+# With NO_COLOR at a terminal, a running check still says so, in plain words, so it never looks hung.
+plain_slow="$(FAKE_GO_HANG="test" RELAY_CHECK_LIMIT=1 mr_key y "$MRU")"
+case "$plain_slow" in *"go test: running...  "*"go test: stopped after 1s"*) case "$plain_slow" in *"${ESC_BYTE}[3"* | *"${ESC_BYTE}[1m"* | *"${ESC_BYTE}[2m"*) bad "with NO_COLOR at a terminal, a running check says so, with no colour" "$plain_slow" ;; *) ok "with NO_COLOR at a terminal, a running check says so, with no colour" ;; esac ;; *) bad "with NO_COLOR at a terminal, a running check says so, with no colour" "$plain_slow" ;; esac
+# The question about Slack goes to the terminal with its keys, though the output goes to a file.
+out="$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" $'\n' sh -c '"$1" mr "$2" --no-checks >"$3" 2>&1' sh "$W" "$MRU" "$T/mr-redirected.txt" 2>&1)"
+case "$out" in *"? Want Slack context too?"*"[s] copy the Slackbot prompt"*) ok "with the output in a file, the Slack question shows at the terminal with its keys" ;; *) bad "with the output in a file, the Slack question shows at the terminal with its keys" "$out" ;; esac
+if grep -q 'Want Slack context' "$T/mr-redirected.txt"; then bad "and isn't in the file" "$(cat "$T/mr-redirected.txt")"; else ok "and isn't in the file"; fi
 case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "and makes the next step stand out" ;; *) bad "and makes the next step stand out" "$sty_out" ;; esac
 no_codes_in "a styled merge request writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
 check "nor into the checks' summary inside the archive" bash -c "! tar -xzOf '$MD/svc-7.tar.gz' mr/checks/summary.txt | grep -q '$ESC_BYTE'"
@@ -1664,8 +1681,22 @@ rm -f "$AR2/c.txt"
 check "setup records where reviews go" env HOME="$RH" "$W" setup --dir "$OD" --reviews "$T/elsewhere" --clones "$T/c1:$T/c2"
 check "and it's in the settings" grep -q "^reviews=$T/elsewhere$" "$RH/.config/llm-relay/settings"
 check "with the clones" grep -q "^clones=$T/c1:$T/c2$" "$RH/.config/llm-relay/settings"
-out="$(env HOME="$T/fresh-relay-home" python3 "$TTY" $'\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
+out="$(env -u LLM_PALETTE -u LLM_THEME HOME="$T/fresh-relay-home" python3 "$TTY" $'\n\n\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
 case "$out" in *"Where should merge request reviews go?"*"relay setting: reviews=$T/fresh-relay-home/mr-reviews"*) ok "setup asks once at a terminal" ;; *) bad "setup asks once at a terminal" "$out" ;; esac
+case "$out" in *"Colours: default, or colorblind"*"[default]: "*"Your terminal's background: auto, dark or light? [auto]: "*"relay setting: palette=default"*"relay setting: theme=auto"*) ok "and asks for the palette and the theme, with the defaults in brackets" ;; *) bad "and asks for the palette and the theme, with the defaults in brackets" "$out" ;; esac
+check "which go in the settings" grep -qx 'palette=default' "$T/fresh-relay-home/.config/llm-relay/settings"
+check "both of them" grep -qx 'theme=auto' "$T/fresh-relay-home/.config/llm-relay/settings"
+out="$(env -u LLM_PALETTE -u LLM_THEME HOME="$T/fresh-relay-home" python3 "$TTY" '' "$W" setup --dir "$OD" 2>&1)"
+case "$out" in *"Colours:"* | *"background:"*) bad "setup asks only once" "$out" ;; *) ok "setup asks only once" ;; esac
+out="$(env -u LLM_THEME LLM_PALETTE=colorblind HOME="$T/fresh-relay-home2" python3 "$TTY" $'\n\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
+case "$out" in *"Colours:"*) bad "with LLM_PALETTE set, setup doesn't ask about the palette, which the variable decides" "$out" ;; *"background:"*) ok "with LLM_PALETTE set, setup doesn't ask about the palette, which the variable decides" ;; *) bad "with LLM_PALETTE set, setup doesn't ask about the palette, which the variable decides" "$out" ;; esac
+check "--palette and --theme answer for you" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --palette colorblind --theme light
+check "and are recorded" grep -qx 'palette=colorblind' "$T/fresh-relay-home/.config/llm-relay/settings"
+check "both" grep -qx 'theme=light' "$T/fresh-relay-home/.config/llm-relay/settings"
+check "relay.sh gives the kit the settings file for both" grep -q '^  STYLE_THEME_FILE="\$STYLE_PALETTE_FILE"$' "$W"
+case "$(env -u LLM_PALETTE -u LLM_THEME LC_ALL=en_US.UTF-8 bash -c 'STYLE_OVERRIDE=on STYLE_PALETTE_FILE="$1" STYLE_THEME_FILE="$1" COLORTERM=truecolor; . "$2"; ui_item ok x' sh "$T/fresh-relay-home/.config/llm-relay/settings" "$REPO/ui.sh")" in *"38;2;0;114;178m"*) ok "and the kit reads them from it: ok is the colour-blind light theme's blue" ;; *) bad "and the kit reads them from it: ok is the colour-blind light theme's blue" ;; esac
+expect "--palette takes only a palette's name" "--palette needs default or colorblind" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --palette pink
+expect "--theme takes only a theme's name" "--theme needs auto, dark or light" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --theme grey
 printf 'reviews=%s\nclones=%s\n' "$RV" "$T/clones" >"$RH/.config/llm-relay/settings"
 check "the skill reads MR archives" grep -q 'Documents/Cowork/relay/mrs/<repo>-<iid>.txt' "$SK/SKILL.md"
 check "the skill keeps checkouts untouched" grep -q 'must never change the user.s checkout' "$SK/SKILL.md"
@@ -2366,6 +2397,7 @@ out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clon
 case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*"To let Claude Code ask Cowork questions: relay ask --setup"*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
 case "$out" in *"Where things are:"*"  clones   $T/start-clones"*"  reviews  $T/start-reviews"*"  plans    "*"/plans"*"  relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
+case "$out" in *"  colours  palette "*", theme "*"  relay setup changes any of them."*) ok "and the palette and theme" ;; *) bad "and the palette and theme" "$out" ;; esac
 # A practice round: the same beginning, with a repository made for it.
 gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
 rm -f "$T/clipboard"

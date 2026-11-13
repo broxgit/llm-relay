@@ -1547,9 +1547,10 @@ EOF
 run_check() {
   local dir="$1" label="$2" out="$3" start="$SECONDS" rc result
   shift 3
-  ui_wait "$CHECKS_RUN" "$label: running..." "nothing more to answer until the checks finish"
+  ui_wait_start "$label: running..." "nothing more to answer until the checks finish"
   (cd "$dir" && limited "$CHECK_LIMIT" "$@") >"$out" 2>&1
   rc=$?
+  ui_wait_stop
   CHECKS_RUN=$((CHECKS_RUN + 1))
   case "$rc" in
     0) result=passed ;;
@@ -1571,7 +1572,6 @@ run_check() {
     tail -c 1000000 "$out" >"$out.end"
     mv "$out.end" "$out"
   fi
-  ui_wait_clear
   echo "$label: $result ($((SECONDS - start))s)" >>"$CHECKS_DIR/summary.txt"
   case "$result" in
     passed) ui_item ok "$label: $result" "$((SECONDS - start))s" ;;
@@ -1971,6 +1971,9 @@ If I have a skill for reviewing merge requests, follow all of it for the review 
   first_ticket="$(sed -n 2p "$slack_file")"
   rm -f "$slack_file"
   [ "$first_ticket" != no-ticket ] || first_ticket=""
+  # pack_mr drew its stages in a subshell, which took the kit's note that a rail is open with it.
+  # The last was SENT, so the rail goes on to YOUR TURN.
+  _UI_RAIL=yes
   finish_prompts "$prompt" "$(slack_prompt "$first_url" "$first_title" "$first_ticket")"
 }
 
@@ -2453,7 +2456,7 @@ finish_prompts() {
   ui_next "back in Copilot Cowork, reply $(typed "done")"
   ui_detail "Starting a new Copilot Cowork session instead? Its prompt is on your clipboard."
   echo
-  [ -z "$slack" ] || ui_question "Want Slack context too?"
+  [ -z "$slack" ] || ui_question "Want Slack context too?" >/dev/tty
   while :; do
     if [ -n "$slack" ]; then
       ask_key "$(ui_keys "s=copy the Slackbot prompt" "p=print both prompts" "Enter=finish")" || KEY=""
@@ -3554,6 +3557,7 @@ begin_session() {
   printf '  %sclones%s   %s\n' "$S_DIM" "$S_OFF" "$(tilde "$CLONES_DIRS")"
   printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
   printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
+  printf '  %scolours%s  palette %s, theme %s\n' "$S_DIM" "$S_OFF" "$PALETTE" "$THEME"
   printf '  %s changes any of them.\n' "$(typed "relay setup")"
   # Reviews and plans are made when the first is saved. Clones have to be there already.
   if ! clones_folder_there; then
@@ -3734,9 +3738,30 @@ relay_setting() {
   save_setting "$key" "$answer"
 }
 
+# relay_choice <key> <passed> <default> <variable> <question> <name>...: a setting that is one of a
+# few names, asked at a terminal the first time, as relay_setting asks for a folder. An answer
+# that is no name is asked again. With the variable set, such as LLM_PALETTE, it isn't asked: the
+# variable wins over the setting anyway.
+relay_choice() {
+  local key="$1" passed="$2" default="$3" variable="$4" question="$5" answer
+  shift 5
+  answer="$passed"
+  if [ -z "$answer" ] && [ -z "$(setting "$key" "")" ] && [ -z "$(printenv "$variable")" ] && [ "$AT_TERMINAL" = yes ]; then
+    while :; do
+      printf '%s [%s]: ' "$question" "$default" >/dev/tty
+      IFS= read -r answer </dev/tty || answer=""
+      answer="${answer:-$default}"
+      case " $* " in *" $answer "*) break ;; esac
+      printf '  Answer one of: %s.\n' "$*" >/dev/tty
+    done
+  fi
+  [ -n "$answer" ] || return 0
+  save_setting "$key" "$answer"
+}
+
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget=""
+  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget="" palette="" theme=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -3760,6 +3785,14 @@ cmd_setup() {
         plans="$2"
         shift 2
         ;;
+      --palette)
+        case "${2:-}" in default | colorblind) palette="$2" ;; *) die_usage "--palette needs default or colorblind" ;; esac
+        shift 2
+        ;;
+      --theme)
+        case "${2:-}" in auto | dark | light) theme="$2" ;; *) die_usage "--theme needs auto, dark or light" ;; esac
+        shift 2
+        ;;
       --forget)
         [ -n "${2:-}" ] || die_usage "--forget needs the folder of a clone the relay remembers"
         forget="$2"
@@ -3780,6 +3813,7 @@ cmd_setup() {
         cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
+                   [--palette default|colorblind] [--theme auto|dark|light]
        relay setup --forget FOLDER
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
@@ -3790,6 +3824,12 @@ folder if there are several, or it syncs elsewhere. Run it again to update the s
 looks for your clones, with several folders separated by colons. At a terminal, it asks
 for each the first time. --plans is where relay review saves a plan Cowork wrote, and
 where relay branch looks for one. It's ~/plans unless you say otherwise.
+
+--palette colorblind uses blue and magenta for ok and an error, in place of green and red,
+which stay apart for most kinds of colour blindness. --theme light suits a terminal with a
+light background; auto reads the terminal's word for it where it gives one, and is dark
+otherwise. At a terminal, it asks for each the first time. LLM_PALETTE and LLM_THEME, which
+llm-wiki reads too, win over both for one shell.
 
 --forget drops one clone from the ones the relay remembers and tells Cowork about, and
 does nothing else. The folder isn't touched. relay start lists them.
@@ -3822,7 +3862,9 @@ EOF
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
   [ -z "$plans" ] || relay_setting plans "$plans" "$HOME/plans" ""
-  for key in reviews clones plans; do
+  relay_choice palette "$palette" default LLM_PALETTE "Colours: default, or colorblind for blue and magenta in place of green and red?" default colorblind
+  relay_choice theme "$theme" auto LLM_THEME "Your terminal's background: auto, dark or light?" auto dark light
+  for key in reviews clones plans palette theme; do
     value="$(setting "$key" "")"
     [ -z "$value" ] || say_dim "relay setting: $key=$value"
   done
@@ -3868,7 +3910,7 @@ cmd_complete() {
     return 0
   fi
   case "$sub" in
-    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--forget\n' ;;
+    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--palette\n--theme\n--forget\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
