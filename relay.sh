@@ -1995,23 +1995,12 @@ $names
 EOF
   prompt="$prompt
 If I have a skill for reviewing merge requests, follow all of it for the review and the file it writes. Finish with a verdict: are these changes solid, and what has to change before this merges? Say what you didn't cover. When a finding depends on running the code, or you need another repository or config, ask me, with one line on why."
-  echo
-  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    say_head "Paste this into Cowork. It's on your clipboard:"
-  else
-    say_head "Paste this into Cowork:"
-  fi
-  echo
-  printf '%s\n' "$prompt"
   first_url="$(printf '%s' "$urls" | head -n 1)"
   first_title="$(sed -n 1p "$slack_file")"
   first_ticket="$(sed -n 2p "$slack_file")"
   rm -f "$slack_file"
   [ "$first_ticket" != no-ticket ] || first_ticket=""
-  echo
-  say_head "$SLACK_INTRO"
-  echo
-  slack_prompt "$first_url" "$first_title" "$first_ticket"
+  finish_prompts "$prompt" "$(slack_prompt "$first_url" "$first_title" "$first_ticket")"
 }
 
 # ---- review ------------------------------------------------------------------
@@ -2466,7 +2455,7 @@ secret_places_in() {
 # slack_prompt <key> <title> <linked keys>: a prompt for the user to paste into Slackbot, Slack's
 # own assistant, for what the team said about this work. Cowork can't read Slack, so the user
 # carries the answer back. The relay never talks to Slack itself.
-SLACK_INTRO="And this one is for Slackbot, if your team talks in Slack. Paste its answer into Cowork with the prompt above:"
+SLACK_INTRO="And this one is for Slackbot, if your team talks in Slack. Paste its answer into Copilot Cowork with the prompt above:"
 SLACK_LAYOUT="Answer under these headings, so I can hand it to another assistant: THREADS, one line each with its link, channel and date. DECISIONS, each with the thread it came from. OPEN QUESTIONS. PEOPLE, with what each knows about. NOT FOUND, for anything you searched for and found nothing on. Quote the exact words where a decision turns on them."
 slack_prompt() {
   local key="$1" title="$2" linked="$3" p
@@ -2475,6 +2464,66 @@ slack_prompt() {
   [ -z "$title" ] || p="$p or \"$title\""
   [ -z "$linked" ] || p="$p, and the tickets $linked"
   printf '%s\n' "$p. $SLACK_LAYOUT"
+}
+
+# finish_prompts <prompt for a new session> [prompt for Slackbot]: how relay mr, ticket and branch
+# end. Most runs are asked for by a Copilot Cowork session, which knows where the note goes and
+# needs only "done", so that is the next step. The prompt that starts a new session goes on the
+# clipboard for the times the user starts cold. At a terminal, one key copies the Slackbot prompt
+# in its place, or prints both. With no terminal or no clipboard, both are printed.
+finish_prompts() {
+  local prompt="$1" slack="${2:-}" clipped=no
+  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then clipped=yes; fi
+  echo
+  if [ "$AT_TERMINAL" != yes ] || [ "$clipped" != yes ]; then
+    print_prompts "$prompt" "$slack" "$clipped"
+    echo
+    say_next "back in Copilot Cowork, reply $(typed "done")"
+    return 0
+  fi
+  say_next "back in Copilot Cowork, reply $(typed "done")"
+  echo "Starting a new Copilot Cowork session instead? Its prompt is on your clipboard."
+  while :; do
+    if [ -n "$slack" ]; then
+      ask_key "Want Slack context too? Copy the Slackbot prompt [s], print both prompts [p], or finish [Enter]: " || KEY=""
+    else
+      ask_key "Print the prompt [p], or finish [Enter]: " || KEY=""
+    fi
+    case "$KEY" in
+      s | S)
+        [ -n "$slack" ] || continue
+        if printf '%s\n' "$slack" | pbcopy 2>/dev/null; then
+          say_ok "Copied the Slackbot prompt. Paste it into Slackbot, and its answer into Copilot Cowork."
+        else
+          echo
+          printf '%s\n' "$slack"
+        fi
+        return 0
+        ;;
+      p | P)
+        echo
+        print_prompts "$prompt" "$slack" yes
+        return 0
+        ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+# print_prompts <prompt for a new session> <prompt for Slackbot, or empty> <yes if on the clipboard>
+print_prompts() {
+  if [ "$3" = yes ]; then
+    say_head "Starting a new Copilot Cowork session instead? Paste this. It's on your clipboard:"
+  else
+    say_head "Starting a new Copilot Cowork session instead? Paste this:"
+  fi
+  echo
+  printf '%s\n' "$1"
+  [ -n "$2" ] || return 0
+  echo
+  say_head "$SLACK_INTRO"
+  echo
+  printf '%s\n' "$2"
 }
 
 cmd_ticket() {
@@ -2597,19 +2646,8 @@ EOF
   [ "$got" -gt 0 ] || [ "$missed" -gt 0 ] || say_warn "No Confluence page went with it. Jira lists a ticket's pages under Confluence content, but acli doesn't return them, so name any that matter: $(typed "relay ticket $key --page ADDRESS")"
   say_ok "Sent to OneDrive: Documents/Cowork/relay/tickets/$key.txt and $key.tar.gz"
   prompt="Use remote-pair-run, and start from this ticket, following the skill's section on tickets. With nothing attached, read Documents/Cowork/relay/tickets/$key.txt from my OneDrive, and get the archive it names. Tell me in your own words what it asks for, what you'd need to see to do it, and what isn't clear. Don't change anything yet."
-  echo
-  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    say_head "Paste this into Cowork. It's on your clipboard:"
-  else
-    say_head "Paste this into Cowork:"
-  fi
-  echo
-  printf '%s\n' "$prompt"
   ttl="$(sed -n "1s/^# $key: //p" "$WORK/ticket/ticket.md")"
-  echo
-  say_head "$SLACK_INTRO"
-  echo
-  slack_prompt "$key" "$ttl" "$linked"
+  finish_prompts "$prompt" "$(slack_prompt "$key" "$ttl" "$linked")"
 }
 
 # ---- branch ------------------------------------------------------------------
@@ -2795,14 +2833,7 @@ cmd_branch() {
   size_warning "$size"
   say_ok "Sent to OneDrive: Documents/Cowork/relay/branches/$name.txt and $name.tar.gz"
   prompt="Use remote-pair-run to review my branch before I open a merge request, following its section on merge requests, with the two passes stage 5 asks for: the code, and then the code against the plan. With no attachment, read Documents/Cowork/relay/branches/$name.txt from my OneDrive, and get the archive it names. If I have a skill for reviewing merge requests, follow all of it for the review and the file it writes. Finish with a verdict: is this ready to push, and what has to change first? Say what you didn't cover."
-  echo
-  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    say_head "Paste this into a new Cowork session. It's on your clipboard:"
-  else
-    say_head "Paste this into a new Cowork session:"
-  fi
-  echo
-  printf '%s\n' "$prompt"
+  finish_prompts "$prompt"
 }
 
 # ---- skills ------------------------------------------------------------------

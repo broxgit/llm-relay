@@ -94,6 +94,7 @@ Every time the user has to do something, give it as this block:
 - **One command to a block.** Before it, two or three lines at most, on what it's for and what it will change. When a step needs several commands, as the first step often does, number them under `DO THIS`, each in its own block.
 - **Leave `EXPECT` out** unless there's a wait, a question or a key. The relay asks `Run it?` before a run, `Save it?` before it saves a review, and `Apply it, uncommitted?` before an apply. It may also ask before it sends code that looks like it holds secrets. Name each key in bold, such as **y**, and say that **v** shows the files first.
 - **`THEN TELL ME` is usually one word,** `done`. The relay's last lines say what to tell you, so ask for pasted output only when a command didn't end as you said it would.
+- **After `relay mr`, `relay ticket` or `relay branch` that you handed over,** `done` means its note is in OneDrive. Read the newest note, by its `taken:` line, in `Documents/Cowork/relay/mrs/`, `tickets/` or `branches/`. Each of those commands also puts a prompt for a new session on their clipboard: it's for the times they start without you, so don't ask for it.
 - **When you need nothing from them,** start your message with `✅ NOTHING FOR YOU TO DO YET`, and say what you're doing and about how long it takes.
 - **If they send "Use the YOUR TURN block format",** you have drifted from it. Go back to it.
 

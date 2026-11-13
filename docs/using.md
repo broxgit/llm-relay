@@ -239,9 +239,9 @@ relay ticket ABC-123
 - **It looks for secrets first,** as a scan does, and asks before sending. Tickets and pages can hold credentials.
 - A ticket can also hold customer names and incident details. Check what your company allows in OneDrive and through its tenant.
 
-**What you'll see.** A line like `Packed ABC-123: ..., Confluence pages 1, 4210 bytes`, then `Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-123.txt and ABC-123.tar.gz`. If no page went with it, it says so and how to name one. If a page couldn't be read, it says how many, and the note in OneDrive says which. Then it prints the prompt for Cowork, which is on your clipboard, and the Slackbot prompt.
+**What you'll see.** A line like `Packed ABC-123: ..., Confluence pages 1, 4210 bytes`, then `Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-123.txt and ABC-123.tar.gz`. If no page went with it, it says so and how to name one. If a page couldn't be read, it says how many, and the note in OneDrive says which. Then it ends as [mr, ticket and branch end](#how-mr-ticket-and-branch-end) says.
 
-**What to do next.** Paste the prompt into Cowork. Cowork says what the ticket asks for, what it would need to see, and what isn't clear, and changes nothing until you say what to work on. When it needs the code, share it with [`relay scan`](#share-your-code).
+**What to do next.** Reply `done` in the Copilot Cowork session that asked for it, or paste the prompt into a new one. Cowork says what the ticket asks for, what it would need to see, and what isn't clear, and changes nothing until you say what to work on. When it needs the code, share it with [`relay scan`](#share-your-code).
 
 ## Review a branch before the merge request
 
@@ -251,13 +251,13 @@ Use this before you push, to have Cowork review the branch against its target an
 relay branch
 ```
 
-Run it in the repository, on the branch you're about to push, or name the repository's folder. It packs the branch against the one it's meant to merge into, which is origin's default branch unless you add `--against NAME`: the commits, the diff, your uncommitted changes marked as such, the checks if you say yes, the repository's wiki, your earlier review of the branch if there is one, and the plan for its ticket if `relay review` saved one. It looks for secrets first, as a scan does. It puts a prompt on your clipboard for a new Cowork session, which reviews the code and then the code against the plan, and says whether it's ready to push. The review comes back through `relay review`, as a merge request's does.
+Run it in the repository, on the branch you're about to push, or name the repository's folder. It packs the branch against the one it's meant to merge into, which is origin's default branch unless you add `--against NAME`: the commits, the diff, your uncommitted changes marked as such, the checks if you say yes, the repository's wiki, your earlier review of the branch if there is one, and the plan for its ticket if `relay review` saved one. It looks for secrets first, as a scan does. Cowork reviews the code and then the code against the plan, and says whether it's ready to push. It ends as [mr, ticket and branch end](#how-mr-ticket-and-branch-end) says. The review comes back through `relay review`, as a merge request's does.
 
 `--plan FILE` names a plan to send, and `--no-plan` sends none. `--checks`, `--no-checks` and `--test` work as they do for `relay mr`.
 
 **What you'll see.** A line such as `Packed branch ABC-123-retry of thing against main: 3 commits, 5 changed files, 18200 bytes`. Then lines for the wiki, the plan, the checks and your earlier review, each only if there is one, and `Sent to OneDrive: Documents/Cowork/relay/branches/<name>.txt and <name>.tar.gz`. If the branch has nothing its target doesn't, it stops and says there is nothing to review yet. If you're not on a branch, or it can't tell what to merge into, it says so and how to fix it, such as `--against NAME`.
 
-**What to do next.** Paste the prompt into a new Cowork session, and read its verdict. Cowork publishes the review and gives you the `relay review` command to save it, as [Review a merge request](#review-a-merge-request) describes. It packs what the branch is now, so run `relay branch` again after you change it.
+**What to do next.** Reply `done` in the Copilot Cowork session that asked for it, or paste the prompt into a new one, and read its verdict. Cowork publishes the review and gives you the `relay review` command to save it, as [Review a merge request](#review-a-merge-request) describes. It packs what the branch is now, so run `relay branch` again after you change it.
 
 ## Review a merge request
 
@@ -268,7 +268,7 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 ```
 
 - Cowork also looks in your Teams chats, email and SharePoint for the discussion behind a change, and says what it found. That's Cowork's own reach: the relay sends none of it.
-- It sends the merge request's discussions and diff, its source and target branches, your own Go libraries at the versions `go.mod` pins, your earlier review, and the wiki if there is one. It only fetches in your clone, and puts a prompt for Cowork on your clipboard.
+- It sends the merge request's discussions and diff, its source and target branches, your own Go libraries at the versions `go.mod` pins, your earlier review, and the wiki if there is one. It only fetches in your clone. It ends as [mr, ticket and branch end](#how-mr-ticket-and-branch-end) says.
 - `--also` sends another repository at origin's default branch, or only one folder of it, and `PATH@BRANCH` names a branch. Use it as many times as you like.
 - `--go-prefix PREFIX` says which Go modules count as yours, so their versions are sent. Without it, they are the modules that share your own module's host, or on github.com, gitlab.com and bitbucket.org, its owner. Use it as many times as you like.
 - The relay finds your clone in the folder you're in, or under the folders `relay setup --clones` names. If it's somewhere else, name it once with `--repo` and the relay remembers it.
@@ -278,6 +278,22 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 - For a fix you've proven, `relay apply` leaves its patches in your working tree when you press `y`, and never commits.
 
 It's built for GitLab and Go. Cowork still can't see production data, and it reads other services only if it asks or you add `--also`.
+
+## How mr, ticket and branch end
+
+Usually a Copilot Cowork session gave you the command, and it knows where the note goes. So each one ends with:
+
+```
+Next: back in Copilot Cowork, reply done
+```
+
+For the times you start one on your own, the prompt for a new session is on your clipboard. At a terminal, it stays off the screen, and one key does the rest:
+
+- **s** copies the Slackbot prompt in its place, for `relay mr` and `relay ticket`. Paste it into Slackbot, and its answer into Copilot Cowork. It's optional, and something small may not need it.
+- **p** prints the prompts.
+- **Enter** finishes.
+
+When an assistant runs it, or there's no clipboard, it prints both prompts and ends with the same `Next:` line.
 
 ## Have Cowork walk you through a test
 
