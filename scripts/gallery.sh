@@ -36,17 +36,16 @@ rm -rf "$DEST.new" && mkdir -p "$DEST.new"
 
 # The fakes. No wiki command: the relay has to work without llm-wiki.
 export HOME="$T/home" TZ=UTC LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 TERM=xterm COLUMNS=80
-unset XDG_CONFIG_HOME NO_COLOR COLORTERM COLORFGBG LLM_PALETTE LLM_THEME LLM_RELAY_STYLE WIKIS_DIR
+unset XDG_CONFIG_HOME NO_COLOR COLORTERM COLORFGBG LLM_PALETTE LLM_THEME LLM_RELAY_STYLE WIKIS_DIR TERM_PROGRAM
 OD="$HOME/Library/CloudStorage/OneDrive-Example"
 mkdir -p "$OD/Documents/Cowork" "$HOME/.config/llm-relay" "$T/bin" "$HOME/dev"
 printf 'reviews=%s\nclones=%s\npalette=default\ntheme=auto\n' "$HOME/mr-reviews" "$HOME/dev" >"$HOME/.config/llm-relay/settings"
 printf '#!/bin/sh\ncat >"%s/clipboard"\n' "$T" >"$T/bin/pbcopy"
 chmod +x "$T/bin/pbcopy"
-PATH="$T/bin:/usr/bin:/bin"
-for d in /opt/homebrew/bin /usr/local/bin; do
-  [ -x "$d/python3" ] && PATH="$PATH:$d"
-done
-export PATH
+# The same tools on every machine: what the relay reports as ready depends on what it finds, so
+# only git and python3 are on the PATH, and the system's own folders.
+for t in git python3; do ln -s "$(command -v "$t")" "$T/bin/$t"; done
+export PATH="$T/bin:/usr/bin:/bin"
 git config --global user.email gallery@example.test
 git config --global user.name Gallery
 git config --global init.defaultBranch main
@@ -67,7 +66,8 @@ normalize() {
     -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}/YYYY-MM-DD/g' -e 's/[0-9]{2}:[0-9]{2}(:[0-9]{2})?/HH:MM/g' \
     -e 's/[0-9a-f]{40}/<sha>/g' -e 's/(^|[^0-9a-zA-Z])[0-9a-f]{7,12}([^0-9a-zA-Z]|$)/\1<short-sha>\2/g' \
     -e 's/[0-9]+ bytes/<n> bytes/g' -e 's/([^0-9])[0-9]+s([^a-z])/\1<n>s\2/g' \
-    -e "s/relay $(sed -n 's/^RELAY_VERSION="\(.*\)"$/\1/p' "$R")/relay <version>/g"
+    -e "s/relay(:?) $(sed -n 's/^RELAY_VERSION="\(.*\)"$/\1/p' "$R")/relay\1 <version>/g" \
+    -e 's/^(system|bash): .*/\1: <this machine>/' -e 's/^(  [a-z0-9-]+): .*[0-9]+[.][0-9]+.*/\1: <version>/'
 }
 # look <trace> <output>: kit: the kit's pieces and nothing else; old look: version 2's helpers
 # or codes of its own; mixed: both; unstyled: nothing at all. An error alone is the kit's.

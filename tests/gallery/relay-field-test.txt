@@ -1,10 +1,10 @@
 LLM-RELAY FIELD TEST
 taken: YYYY-MM-DDTHH:MMZ
-relay: 0.2.26
+relay: <version>
 installed by: clone
 runlib: 7
-system: macOS 26.6.2, arm64
-bash: 3.2.57
+system: <this machine>
+bash: <this machine>
 terminal app: unknown
 at a terminal: yes
 test repository: ~/relay-field-test, made now, with generate.sh and gen/hello.txt on main, and a second branch called side
@@ -14,12 +14,8 @@ setting clones: set
 wiki command: no
 the user's skills named for Cowork: none
 tools:
-  go: go version go1.26.3 darwin/arm64
-  git: git version 2.50.1 (Apple Git-155)
-  buf: 1.73.0
-  python3: Python 3.9.6
-  node: v26.0.0
-  glab: glab 1.120.0 (<short-sha>)
+  git: <version>
+  python3: <version>
 
 The test changes ~/relay-field-test, which this command made. [36mrelay field-test --clean[0m removes it afterwards.
 [32m✓[0m Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt
