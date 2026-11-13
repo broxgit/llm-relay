@@ -31,3 +31,4 @@ One line for each release, oldest first. `scripts/release.sh` adds a line when i
 | 0.2.23 | 2026-11-11 | da5f73c |
 | 0.2.24 | 2026-11-11 | 2545b24 |
 | 0.2.25 | 2026-11-13 | 6b34eff |
+| 0.2.26 | 2026-11-13 | 711a97c |
