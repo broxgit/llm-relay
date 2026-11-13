@@ -1,4 +1,4 @@
-Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
+[1mUsage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS][0m
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
                    [--palette default|colorblind] [--theme auto|dark|light]
        relay setup --forget FOLDER

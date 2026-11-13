@@ -4,7 +4,7 @@ What the relay's commands print at a terminal, made by `scripts/gallery.sh`. Don
 
 - `relay --help`: kit. Pieces: table. [relay-help.txt](relay-help.txt)
 
-- `relay setup --help`: unstyled. Pieces: -. [relay-setup-help.txt](relay-setup-help.txt)
+- `relay setup --help`: kit. Pieces: table. [relay-setup-help.txt](relay-setup-help.txt)
 
 - `relay setup --dir <tmp>/home/Library/CloudStorage/OneDrive-Example`: kit. Pieces: detail error item next stage typed. [relay-setup.txt](relay-setup.txt)
 

@@ -3813,7 +3813,8 @@ cmd_setup() {
         shift 2
         ;;
       -h | --help)
-        cat <<EOF
+        # A table of the kit, as relay --help is: its first line, the header, is bold.
+        ui_table <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
                    [--palette default|colorblind] [--theme auto|dark|light]
