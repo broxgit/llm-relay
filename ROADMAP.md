@@ -47,6 +47,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### mr, ticket and branch end with "reply done" (2026-11-13)
+
+- **Why:** Copilot Cowork asks for most runs of these commands and waits for `done`, yet each one ended with a long prompt for a new session, so the terminal and Copilot said different things.
+- **What changed:** Each ends with `Next: back in Copilot Cowork, reply done`. The prompt for a new session stays on the clipboard, and at a terminal it isn't printed: s copies the Slackbot prompt in its place, p prints both, Enter finishes. With no terminal or no clipboard, both are printed. The skill reads the newest note in that command's folder after `done`. In 0.2.26.
+
 ### A release with nothing to type (2026-11-11)
 
 - **Why:** Each release meant pasting a command with that release's version and the path of its notes. The user scaffolded `releases/latest` and `releases/archive`, and asked for a script that needs no arguments and does the git steps too.
