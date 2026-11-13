@@ -50,9 +50,9 @@ OWN_SKILLS="remote-pair-run relay-field-test relay-answer"
 wait_draw() {
   local f
   case $(($1 % 4)) in 0) f="⠋" ;; 1) f="⠙" ;; 2) f="⠸" ;; *) f="⠴" ;; esac
-  printf '\r\033[K%s%s%s Waiting for Cowork  %s%ss of %ss · %s%s' "$S_CYAN" "$f" "$S_OFF" "$S_DIM" "$1" "$WAIT" "$2" "$S_OFF"
+  ui_wait "$1" "Waiting for Copilot Cowork" "$1s of ${WAIT}s · $2"
 }
-wait_clear() { [ "$STYLE" != yes ] || printf '\r\033[K'; }
+wait_clear() { ui_wait_clear; }
 
 # The release this is. docs/releasing.md says how to make the next one.
 RELAY_VERSION="0.2.26"
@@ -361,18 +361,18 @@ EOF
 # though not every time. So say it the moment it shows, not after the wait.
 refusal_advice() {
   if [ "${TERM_PROGRAM:-}" = Apple_Terminal ]; then
-    say_warn "macOS is refusing to let Apple's Terminal read OneDrive files that aren't on this Mac yet. More waiting rarely helps."
-    echo "If your OneDrive allows it, in Finder, right-click the task's output folder and choose Always Keep on This Device."
+    ui_item warn "macOS is refusing to let Apple's Terminal read OneDrive files that aren't on this Mac yet. More waiting rarely helps."
+    ui_detail "If your OneDrive allows it, in Finder, right-click the task's output folder and choose Always Keep on This Device."
   else
-    say_warn "macOS is refusing to let ${TERM_PROGRAM:-this terminal app} read OneDrive files that aren't on this Mac yet. More waiting rarely helps."
-    echo "Press Ctrl-C, and run the same command in Apple's Terminal, which could read them in one test."
+    ui_item warn "macOS is refusing to let ${TERM_PROGRAM:-this terminal app} read OneDrive files that aren't on this Mac yet. More waiting rarely helps."
+    ui_detail "Press Ctrl-C, and run the same command in Apple's Terminal, which could read them in one test."
   fi
 }
 
 # Keeps trying through every way OneDrive has shown a file isn't ready: missing, out of date,
 # unreadable, or refused with "Operation not permitted".
 wait_for_deliverable() {
-  local named="$1" dst="$2" start="$SECONDS" waited=0 said=0 advised="" problems last=""
+  local named="$1" dst="$2" start="$SECONDS" waited=0 said=0 advised="" problems last="" l
   while :; do
     SRC="$named"
     [ -n "$SRC" ] || SRC="$(newest_deliverable)"
@@ -386,14 +386,14 @@ wait_for_deliverable() {
       try_copy "$SRC" "$dst" >"$WORK/problems"
       problems="$(cat "$WORK/problems")"
       if [ -z "$problems" ]; then
-        [ -z "$last" ] || say_ok "Ready after $((SECONDS - start))s."
+        [ -z "$last" ] || ui_item ok "Ready after $((SECONDS - start))s."
         return 0
       fi
     fi
     waited=$((SECONDS - start))
     if [ "$problems" != "$last" ]; then
-      say_head "Waiting for OneDrive (${waited}s of ${WAIT}s):"
-      printf '%s\n' "$problems" | head -n 8 | sed 's/^/  /'
+      ui_stage WAITING "Waiting for OneDrive (${waited}s of ${WAIT}s)"
+      printf '%s\n' "$problems" | head -n 8 | while IFS= read -r l; do ui_detail "$l"; done
       last="$problems"
       said="$waited"
       case "$problems" in
@@ -405,13 +405,13 @@ wait_for_deliverable() {
           ;;
       esac
     elif [ $((waited - said)) -ge 60 ]; then
-      say_dim "Still waiting (${waited}s of ${WAIT}s)."
+      ui_detail "Still waiting (${waited}s of ${WAIT}s)."
       said="$waited"
     fi
     if [ "$waited" -ge "$WAIT" ]; then
       {
         say_warn_err "Still not ready after ${waited}s, at $(now), so nothing ran and no report was sent."
-        echo "Paste this output to Cowork. If your OneDrive allows it, in Finder, right-click the task's output folder, choose Always Keep on This Device, and run the same command again."
+        echo "Paste this output to Copilot Cowork. If your OneDrive allows it, in Finder, right-click the task's output folder, choose Always Keep on This Device, and run the same command again."
       } >&2
       return "$EXIT_LATER"
     fi
@@ -422,26 +422,25 @@ wait_for_deliverable() {
 show_deliverable() {
   local copy="$1" where="$2" version="$3" p size same="differs from this machine's copy"
   cmp -s "$copy/runlib.sh" "$RUNLIB" && same="same as this machine's copy"
-  echo
-  echo "Deliverable: $where"
-  echo "Version:     $version"
-  say_head "Files:"
+  ui_stage DELIVERABLE "what Copilot Cowork sent"
+  ui_detail "Deliverable: $where"
+  ui_detail "Version:     $version"
+  ui_detail "Files:"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     size="$(wc -c <"$copy/$p" | tr -d ' ')"
     case "$p" in
       runlib.sh)
         case "$same" in
-          same*) echo "  $p ${S_DIM}($size bytes, $same)${S_OFF}" ;;
-          *) echo "  ${M_WARN}$p ($size bytes, $same)" ;;
+          same*) ui_detail "  $p ($size bytes, $same)" ;;
+          *) ui_item warn "$p ($size bytes, $same)" ;;
         esac
         ;;
-      *) echo "  $p ${S_DIM}($size bytes)${S_OFF}" ;;
+      *) ui_detail "  $p ($size bytes)" ;;
     esac
   done <<EOF
 $(manifest_paths "$copy")
 EOF
-  echo
 }
 
 view_deliverable() {
@@ -466,7 +465,8 @@ EOF
 ask_to_run() {
   local copy="$1" question="${2:-Run it?}"
   while :; do
-    ask_key "$question [y]es, [v]iew the files, [n]o: " || return 1
+    ui_question "$question" >/dev/tty
+    ask_key "$(ui_keys yes "view the files" no)" || return 1
     case "$KEY" in
       y | Y) return 0 ;;
       n | N) return 1 ;;
@@ -480,16 +480,16 @@ send_report() {
   dir="$COWORK/relay/$task/reports"
   while [ "$i" -lt 3 ]; do
     if mkdir -p "$dir" 2>/dev/null && cp "$report" "$dir/" 2>/dev/null && cmp -s "$report" "$dir/$(basename "$report")"; then
-      echo
-      say_ok "Sent to OneDrive: Documents/Cowork/relay/$task/reports/$(basename "$report")"
-      echo 'Now tell Cowork: done'
+      ui_stage SENT "OneDrive: Documents/Cowork/relay/$task/reports/$(basename "$report")"
+      ui_turn
+      ui_next "tell Copilot Cowork: $(typed "done")"
       return 0
     fi
     i=$((i + 1))
     [ "$i" -lt 3 ] && sleep "$POLL"
   done
   echo
-  say_warn_err "Couldn't put the report in OneDrive. Attach it in Cowork instead: $report"
+  say_warn_err "Couldn't put the report in OneDrive. Attach it in Copilot Cowork instead: $report"
   return 1
 }
 
@@ -539,7 +539,7 @@ cmd_run() {
   copy="$WORK/deliverable"
   RUNLIB_EXPECT="$expect"
   # macOS has refused one terminal app and not another, so a run says which it's in.
-  say_dim "Relay run started at $(now), in ${TERM_PROGRAM:-an unnamed terminal app}."
+  ui_stage RUN "Relay run started at $(now), in ${TERM_PROGRAM:-an unnamed terminal app}."
   RUN_STARTED=1
   wait_for_deliverable "$named" "$copy" || return $?
 
@@ -548,7 +548,7 @@ cmd_run() {
   task="$(basename "${a%/*}")"
   show_deliverable "$copy" "$task/$(basename "$SRC")" "$version"
   if ! ask_to_run "$copy"; then
-    echo "Nothing ran, and no report was sent."
+    ui_item ok "Nothing ran, and no report was sent."
     return 1
   fi
 
@@ -567,7 +567,7 @@ cmd_run() {
   new="$(ls "$REPORTS" | LC_ALL=C sort | LC_ALL=C comm -13 "$WORK/before" - | tail -n 1)"
   if [ -z "$new" ]; then
     echo
-    say_warn_err "That run wrote no report, so nothing was sent to Cowork. Its output is above."
+    say_warn_err "That run wrote no report, so nothing was sent to Copilot Cowork. Its output is above."
     [ "$rc" -ne 0 ] || rc=1
     return "$rc"
   fi
@@ -2019,19 +2019,19 @@ warn_if_moved() {
   glab_call mr view "$MR_IID" -R "$MR_PROJECT" -F json >"$WORK/now.json" 2>/dev/null || return 0
   now_sha="$(json_get "$WORK/now.json" sha)"
   [ -z "$now_sha" ] || [ -z "$old_sha" ] || [ "$now_sha" = "$old_sha" ] ||
-    say_warn "Warning: ${f##*/} reviews $old_sha, but the merge request is now at $now_sha."
+    ui_item warn "Warning: ${f##*/} reviews $old_sha, but the merge request is now at $now_sha."
 }
 
 # What Cowork says it skipped has to be seen before saving. It comes from the cloud, so control
 # characters don't reach the terminal.
 show_coverage() {
-  local file="$1" name="$2"
+  local file="$1" name="$2" l
   if ! grep -qE '^##+ Coverage' "$file"; then
-    say_warn "Warning: $name has no Coverage section, so you can't tell what Cowork skipped. Ask it to add one."
+    ui_item warn "Warning: $name has no Coverage section, so you can't tell what Copilot Cowork skipped. Ask it to add one."
     return 0
   fi
-  say_head "What $name says it covered:"
-  awk '/^##+ Coverage/ { on = 1; next } on && /^#/ { exit } on' "$file" | sed '/^[[:space:]]*$/d' | head -n 30 | LC_ALL=C tr -d '\000-\010\013-\037\177' | sed 's/^/  /'
+  ui_stage COVERED "What $name says it covered:"
+  awk '/^##+ Coverage/ { on = 1; next } on && /^#/ { exit } on' "$file" | sed '/^[[:space:]]*$/d' | head -n 30 | LC_ALL=C tr -d '\000-\010\013-\037\177' | while IFS= read -r l; do ui_detail "$l"; done
 }
 
 cmd_review() {
@@ -2067,21 +2067,22 @@ cmd_review() {
   files="$(review_files "$copy")" || exit 1
   [ -n "$files" ] || die "that deliverable has nothing under reviews/ or plans/"
   echo
-  echo "Deliverable: $task/$(basename "$SRC")"
-  echo "Version:     $version"
-  ! printf '%s\n' "$files" | grep -q '^reviews/' || echo "Saving to:   $REVIEWS_DIR"
-  ! printf '%s\n' "$files" | grep -q '^plans/' || echo "Plans go to: $PLANS_DIR"
+  ui_stage DELIVERABLE "what Copilot Cowork sent"
+  ui_detail "Deliverable: $task/$(basename "$SRC")"
+  ui_detail "Version:     $version"
+  ! printf '%s\n' "$files" | grep -q '^reviews/' || ui_detail "Saving to:   $REVIEWS_DIR"
+  ! printf '%s\n' "$files" | grep -q '^plans/' || ui_detail "Plans go to: $PLANS_DIR"
   while IFS= read -r f; do
     dest="$(saved_at "$f")"
     if [ -f "$dest" ]; then
-      echo "  ${f#*/} ${S_DIM}($(wc -c <"$copy/$f" | tr -d ' ') bytes, replaces yours, which is kept as ${f##*/}.previous)${S_OFF}"
+      ui_detail "  ${f#*/} ($(wc -c <"$copy/$f" | tr -d ' ') bytes, replaces yours, which is kept as ${f##*/}.previous)"
     else
-      echo "  ${f#*/} ${S_DIM}($(wc -c <"$copy/$f" | tr -d ' ') bytes, new)${S_OFF}"
+      ui_detail "  ${f#*/} ($(wc -c <"$copy/$f" | tr -d ' ') bytes, new)"
     fi
     case "$f" in
       plans/*)
-        say_head "What ${f##*/} starts with:"
-        head -n 8 "$copy/$f" | LC_ALL=C tr -d '\000-\010\013-\037\177' | sed 's/^/  /'
+        ui_stage PLAN "What ${f##*/} starts with:"
+        head -n 8 "$copy/$f" | LC_ALL=C tr -d '\000-\010\013-\037\177' | while IFS= read -r a; do ui_detail "$a"; done
         ;;
       *)
         warn_if_moved "${f#reviews/}"
@@ -2094,7 +2095,7 @@ $files
 EOF
   echo
   if ! ask_to_run "$copy" "Save it?"; then
-    echo "Nothing was saved."
+    ui_item ok "Nothing was saved."
     return 1
   fi
   while IFS= read -r f; do
@@ -2104,8 +2105,8 @@ EOF
       cp "$dest" "$dest.previous" || die "couldn't keep your copy of $dest, so nothing replaced it"
     fi
     cp "$copy/$f" "$dest" || die "couldn't save $dest"
-    say_ok "Saved: $dest"
-    [ ! -f "$dest.previous" ] || say_dim "Your earlier copy: $dest.previous"
+    ui_item ok "Saved: $dest"
+    [ ! -f "$dest.previous" ] || ui_detail "Your earlier copy: $dest.previous"
   done <<EOF
 $files
 EOF
@@ -2168,21 +2169,22 @@ cmd_apply() {
   patches="$patches
 "
   echo
-  echo "Deliverable: $task/$(basename "$SRC")"
-  echo "Version:     $version"
-  echo "Repository:  $root, on $(git -C "$root" symbolic-ref -q --short HEAD || echo 'a detached HEAD')"
-  [ -z "$winner" ] || echo "Attempt:     $winner, the one that passed"
-  say_head "Patches:"
-  printf '%s' "$patches" | sed 's/^/  /'
+  ui_stage DELIVERABLE "what Copilot Cowork sent"
+  ui_detail "Deliverable: $task/$(basename "$SRC")"
+  ui_detail "Version:     $version"
+  ui_detail "Repository:  $root, on $(git -C "$root" symbolic-ref -q --short HEAD || echo 'a detached HEAD')"
+  [ -z "$winner" ] || ui_detail "Attempt:     $winner, the one that passed"
+  ui_stage PATCHES "what applying it changes"
+  printf '%s\n' "$patches" | while IFS= read -r a; do [ -z "$a" ] || ui_detail "$a"; done
   # A patch that never passed a run can still be what someone wants, but they should know.
   if [ -z "$report" ]; then
-    say_warn "Warning: there's no report from a run of version $version on this Mac."
+    ui_item warn "Warning: there's no report from a run of version $version on this Mac."
   elif ! tail -n 1 "$report" | grep -q ' RUN: PASS$'; then
-    say_warn "Warning: the last run of version $version didn't pass."
+    ui_item warn "Warning: the last run of version $version didn't pass."
   fi
   echo
   if ! ask_to_run "$copy" "Apply it, uncommitted?"; then
-    echo "Nothing changed."
+    ui_item ok "Nothing changed."
     return 1
   fi
   while IFS= read -r p; do
@@ -2203,7 +2205,7 @@ EOF
   done <<EOF
 $patches
 EOF
-  say_ok "Applied, and nothing is committed. Look it over with: $(typed "git -C $root diff")"
+  ui_item ok "Applied, and nothing is committed. Look it over with: $(typed "git -C $root diff")"
   git -C "$root" status --short
 }
 
@@ -4119,7 +4121,7 @@ wait_for_answer() {
     if read_file "$src" "$WORK/answer.md" "the answer" >"$WORK/problems"; then
       if [ "$(tr -d '\r' <"$WORK/answer.md" | awk 'NF { l = $0 } END { sub(/[ \t]+$/, "", l); print l }')" = "$ANSWER_END" ]; then
         wait_clear
-        [ -z "$last" ] || say_ok "Ready after $((SECONDS - start))s."
+        [ -z "$last" ] || ui_item ok "Ready after $((SECONDS - start))s."
         return 0
       fi
       state="the answer is arriving, and isn't all here yet"
