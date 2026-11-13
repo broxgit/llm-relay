@@ -1,0 +1,26 @@
+[34m●[0m [1m[44m[97m START [0m  [1mrelay <version>[0m
+[2m│[0m
+[35m●[0m [1m[45m[97m THIS MAC [0m  [1mWhat you can do on this Mac[0m
+[2m│[0m   [32m✓[0m Try a practice round first                     ready
+[2m│[0m   [32m✓[0m Change code with Copilot Cowork                ready
+[2m│[0m   [1m[33m![0m Review a merge request                         needs glab: [36mbrew install glab[0m, then sign in with: [36mglab auth login[0m
+[2m│[0m   [32m✓[0m Review a branch before the merge request       ready
+[2m│[0m   [1m[33m![0m Start from a Jira ticket                       needs acli: [36mbrew tap atlassian/homebrew-acli && brew install acli[0m, then sign in with: [36macli auth login[0m
+[2m│[0m   [1m[33m![0m Run Go checks in a review                      needs go: [36mbrew install go[0m
+[2m│[0m   [1m[33m![0m Lint a review with the repository's pre-commit needs pre-commit: [36mbrew install pre-commit[0m
+[2m│[0m   [1m[33m![0m Send a repository's wiki with it               needs wiki: optional, from github.com/broxgit/llm-wiki
+[2m│[0m   [1m[33m![0m Have Claude Code ask Copilot Cowork            set up with: [36mrelay ask --setup[0m
+[2m│[0m
+[32m●[0m [1m[42m[30m WHERE [0m  [1mWhere things are[0m
+[2m│[0m     clones   ~/dev
+[2m│[0m     reviews  ~/mr-reviews
+[2m│[0m     plans    ~/plans
+[2m│[0m     colours  palette default, theme auto
+[2m│[0m     [36mrelay setup[0m changes any of them.
+[2m│[0m   [1m[33m![0m This is a terminal app that gives no name, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply: macOS has refused other terminal apps on OneDrive files.
+[2m│[0m
+[33m◆[0m [1m[33mYOUR TURN[0m
+
+  [1m[46m[30m 1 [0m  [1mOpen a new Copilot Cowork session and paste the prompt.[0m  [32m📋 A prompt for Copilot Cowork is on your clipboard.[0m
+
+[1m[36mNext:[0m open a new Copilot Cowork session and paste it.

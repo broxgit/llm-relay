@@ -42,10 +42,10 @@ The formula is in a second repository, [broxgit/homebrew-tap](https://github.com
 
 Before 1.0, nothing here has been proven with Copilot Cowork end to end, and any release may change a command.
 
-Raise the last number for a release, whatever is in it. Raise the middle number only when Brock says a release is a step change. 1.0.0 is his decision, made when the relay has been proven with Cowork end to end. The numbers don't get there by counting.
+Raise the last number for a release, whatever is in it. Raise the middle number only when Brock says a release is a step change. 1.0.0 is his decision, made when the relay has been proven with Copilot Cowork end to end. The numbers don't get there by counting.
 
 ## What an upgrade doesn't do
 
-It doesn't touch OneDrive. The skill Cowork reads is copied there by `relay setup`. So after an upgrade the relay says, on the next `relay scan` or `relay mr`, that Cowork's copy isn't its own, until `relay setup` runs again.
+It doesn't touch OneDrive. The skill Copilot Cowork reads is copied there by `relay setup`. So after an upgrade the relay says, on the next `relay scan` or `relay mr`, that Copilot Cowork's copy isn't its own, until `relay setup` runs again.
 
 A user who runs `brew upgrade` without `brew update` first may be told the old version is already installed. So every place that tells users how to update gives both.
