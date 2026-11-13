@@ -67,7 +67,7 @@ normalize() {
     -e 's/[0-9a-f]{40}/<sha>/g' -e 's/(^|[^0-9a-zA-Z])[0-9a-f]{7,12}([^0-9a-zA-Z]|$)/\1<short-sha>\2/g' \
     -e 's/[0-9]+ bytes/<n> bytes/g' -e 's/([^0-9])[0-9]+s([^a-z])/\1<n>s\2/g' \
     -e "s/relay(:?) $(sed -n 's/^RELAY_VERSION="\(.*\)"$/\1/p' "$R")/relay\1 <version>/g" \
-    -e 's/^(system|bash): .*/\1: <this machine>/' -e 's/^(  [a-z0-9-]+): .*[0-9]+[.][0-9]+.*/\1: <version>/'
+    -e 's/(system|bash): .*/\1: <this machine>/' -e 's/(git|python3): .*[0-9]+[.][0-9]+.*/\1: <version>/'
 }
 # look <trace> <output>: kit: the kit's pieces and nothing else; old look: version 2's helpers
 # or codes of its own; mixed: both; unstyled: nothing at all. An error alone is the kit's.

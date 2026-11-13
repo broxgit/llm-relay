@@ -3,8 +3,8 @@
 [2m│[0m     relay: <version>
 [2m│[0m     installed by: clone
 [2m│[0m     runlib: 7
-[2m│[0m     system: macOS 26.6.2, arm64
-[2m│[0m     bash: 3.2.57
+[2m│[0m     system: <this machine>
+[2m│[0m     bash: <this machine>
 [2m│[0m     terminal app: unknown
 [2m│[0m     at a terminal: yes
 [2m│[0m     test repository: ~/relay-field-test, made now, with generate.sh and gen/hello.txt on main, and a second branch called side
@@ -14,8 +14,8 @@
 [2m│[0m     wiki command: no
 [2m│[0m     the user's skills named for Cowork: none
 [2m│[0m     tools:
-[2m│[0m       git: git version 2.54.0
-[2m│[0m       python3: Python 3.14.5
+[2m│[0m       git: <version>
+[2m│[0m       python3: <version>
 [2m│[0m     The test changes ~/relay-field-test, which this command made. [36mrelay field-test --clean[0m removes it afterwards.
 [2m│[0m
 [35m●[0m [1m[45m[97m SENT [0m  [1mOneDrive: Documents/Cowork/relay/field-test/note.txt[0m
