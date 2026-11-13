@@ -90,7 +90,7 @@ no_codes_in() {
   if [ -z "$found" ]; then ok "$name"; else bad "$name" "$found"; fi
 }
 # plain_words: what a terminal showed, with the codes, the marks and the live wait taken out.
-plain_words() { sed "s/${ESC_BYTE}\[[0-9;]*[mK]//g; s/^\( *\)✓ /\1/; s/^\( *\)[!+] /\1/" | tr -d '\r' | grep -v 'Waiting for Cowork  '; }
+plain_words() { sed "s/${ESC_BYTE}\[[0-9;]*[mK]//g; s/^\( *\)✓ /\1/; s/^\( *\)[!+] /\1/" | tr -d '\r' | grep -v 'Waiting for Copilot Cowork  '; }
 # kit_words: the words of what a command on the kit printed, one a line, as ui.sh's ui_words
 # reads them: codes, glyphs and marks out, and what a live wait drew over left out too.
 kit_words() { sed 's/^.*\r\(.\)/\1/' | bash -c ". '$REPO/ui.sh'; ui_words"; }
@@ -719,8 +719,8 @@ rl_expect "it says runlib.sh is the same" 0 "same as this machine's copy"
 rl_expect "it runs a copy" 0 "HERE=/"
 rl_lacks "the copy isn't in the OneDrive folder" "HERE=$OD"
 rl_expect "it leaves behind what the manifest doesn't list" 0 "RESULT leftovers stay behind: PASS"
-rl_expect "it sends the report to OneDrive" 0 "Sent to OneDrive: Documents/Cowork/relay/t1/reports/demo-v1-"
-rl_expect "it says what to tell Cowork" 0 "Now tell Cowork: done"
+rl_expect "it sends the report to OneDrive" 0 "SENT  OneDrive: Documents/Cowork/relay/t1/reports/demo-v1-"
+rl_expect "it says what to tell Copilot Cowork" 0 "Next: tell Copilot Cowork: done"
 [ "$(rl_sent t1)" = 1 ] && ok "one report is in the task's folder" || bad "one report is in the task's folder" "$(rl_sent t1)"
 check "the sent report is complete" bash -c "tail -n 1 '$OD'/Documents/Cowork/relay/t1/reports/demo-v1-*.txt | grep -q 'DEMO RUN: PASS'"
 check "a copy stays on the machine" bash -c "ls '$RH'/pair-run-reports/demo-v1-*.txt"
@@ -733,9 +733,9 @@ rl y t1s/d1 --expect 1
 RL_PLAIN="$RL_OUT"
 sleep 1
 sty_out="$(styled y env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" run t1s/d1 --expect 1)"
-same_kit_words "a styled run shows what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed -n '/^Deliverable: /,/^Run it?/p')" "$(printf '%s\n' "$RL_PLAIN" | tr -d '\r' | sed -n '/^Deliverable: /,/^Run it?/p')"
-case "$sty_out" in *"${ESC_BYTE}[1mFiles:${ESC_BYTE}[0m"*) ok "a styled run makes Files: a heading" ;; *) bad "a styled run makes Files: a heading" "$sty_out" ;; esac
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/t1s/reports/"*"Now tell Cowork: done"*) ok "a styled run marks the report it sent, and ends on what to tell Cowork" ;; *) bad "a styled run marks the report it sent, and ends on what to tell Cowork" "$sty_out" ;; esac
+same_kit_words "a styled run shows what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed -n '/Deliverable: /,/Run it?/p')" "$(printf '%s\n' "$RL_PLAIN" | tr -d '\r' | sed -n '/Deliverable: /,/Run it?/p')"
+case "$sty_out" in *" DELIVERABLE ${ESC_BYTE}[0m"*"│${ESC_BYTE}[0m     Files:"*) ok "a styled run shows the deliverable as a stage, its files on the rail" ;; *) bad "a styled run shows the deliverable as a stage, its files on the rail" "$sty_out" ;; esac
+case "$sty_out" in *" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive: Documents/Cowork/relay/t1s/reports/"*"YOUR TURN"*"Next:${ESC_BYTE}[0m tell Copilot Cowork: ${ESC_BYTE}[36mdone"*) ok "a styled run marks the report it sent, and ends on what to tell Copilot Cowork" ;; *) bad "a styled run marks the report it sent, and ends on what to tell Copilot Cowork" "$sty_out" ;; esac
 case "$sty_out" in *"DEMO RUN: PASS"*) ok "the deliverable's own output is still there" ;; *) bad "the deliverable's own output is still there" "$sty_out" ;; esac
 no_codes_in "a styled run writes no code to OneDrive, the report or the home folder" "$RH"
 
@@ -745,7 +745,7 @@ case "$RL_OUT" in *"Relay run ended at "*Z.) ok "and the last line ends as it do
 rl_lacks "n really runs nothing" "HERE="
 [ "$(rl_sent t1)" = 1 ] && ok "n sends no report" || bad "n sends no report" "$(rl_sent t1)"
 rl xn t1/d1
-rl_expect "another key asks again" 1 "Run it? [y]es, [v]iew the files, [n]o: x"
+rl_expect "another key asks again" 1 "[y]es  [v]iew the files  [n]o  › x"
 rl_expect "and n then runs nothing" 1 "Nothing ran"
 rl vy t1/d1
 rl_expect "v shows the files" 0 "===== run.sh ====="
@@ -759,7 +759,7 @@ lacks "relay.sh has no switch that answers for the user" "RELAY_TEST_TTY" cat "$
 out="$(env HOME="$RH" python3 "$TTY" --pipe-stdin y '' "$W" run t1/d1 2>&1)"
 case "$?:$out" in 0:* | *"HERE="*) bad "a pipe on standard input is refused even with a terminal there" "$out" ;; *"Agents: tell the user to run it"*) ok "a pipe on standard input is refused even with a terminal there" ;; *) bad "a pipe on standard input is refused even with a terminal there" "$out" ;; esac
 out="$(env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" n sh -c '"$1" run t1/d1 >"$2" 2>&1' sh "$W" "$T/redirected.txt" 2>&1)"
-case "$out" in *"Run it? [y]es, [v]iew the files, [n]o: "*) ok "the question shows at the terminal when the output goes to a file" ;; *) bad "the question shows at the terminal when the output goes to a file" "$out" ;; esac
+case "$out" in *"? Run it?"*"[y]es  [v]iew the files  [n]o  › "*) ok "the question shows at the terminal when the output goes to a file" ;; *) bad "the question shows at the terminal when the output goes to a file" "$out" ;; esac
 check "the rest of the output went to the file" grep -q 'Deliverable: t1/d1' "$T/redirected.txt"
 lacks "and the question didn't" "Run it?" cat "$T/redirected.txt"
 sleep 1
@@ -768,7 +768,7 @@ rl_new t2 d2 'result "bad" 1
 report_end'
 rl y t2/d2
 rl_expect "a failed run exits non-zero" 1 "DEMO RUN: FAIL"
-rl_expect "a failed run still sends its report" 1 "Sent to OneDrive"
+rl_expect "a failed run still sends its report" 1 "SENT  OneDrive"
 rl_new t3 d3 'exit 7'
 sed -i.bak '/^report_start/d' "$RL_D/run.sh" && rm -f "$RL_D/run.sh.bak"
 bash "$LIB" manifest "$RL_D" >/dev/null
@@ -810,7 +810,7 @@ if [ "$(id -u)" != 0 ]; then
   rl y t9/d9 --expect 1
   rl_expect "an unreadable manifest gives its reason" 75 "manifest.txt can't be read: Permission denied (size "
   rl_lacks "and it isn't called missing" "manifest.txt is missing"
-  rl_expect "and it says what to do next" 75 "Paste this output to Cowork"
+  rl_expect "and it says what to do next" 75 "Paste this output to Copilot Cowork"
   chmod 644 "$RL_D/manifest.txt"
 fi
 printf '\n' >"$RL_D/manifest.txt"
@@ -3119,7 +3119,7 @@ case "$out" in *"$ESC"*) bad "and so does a terminal that has no colour" "$out" 
 # The wait is one line kept up to date, and an answer is shown as it was written.
 ak_tty() { local keys="$1"; shift; env -u NO_COLOR LC_ALL=en_US.UTF-8 TERM=xterm HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT="${ASK_WAIT:-3}" RELAY_POLL=1 python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
 out="$(ak_tty "" answer "$id3")"
-case "$out" in *"Waiting for Cowork  "*"s of 3s · no answer yet"*"No answer after"*) ok "at a terminal the wait is one line that is kept up to date" ;; *) bad "at a terminal the wait is one line that is kept up to date" "$out" ;; esac
+case "$out" in *"Waiting for Copilot Cowork  "*"s of 3s · no answer yet"*"No answer after"*) ok "at a terminal the wait is one line that is kept up to date" ;; *) bad "at a terminal the wait is one line that is kept up to date" "$out" ;; esac
 case "$out" in *"Still waiting"*) bad "with no lines piling up" "$out" ;; *) ok "with no lines piling up" ;; esac
 printf 'answer to: %s\n\nANSWER\nPlain as written.\n\nend of answer\n' "$id3" >"$AR/$id3.md"
 out="$(ak_tty y answer "$id3")"
