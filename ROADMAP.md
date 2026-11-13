@@ -47,6 +47,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 ## Done
 
+### One look for every command, shared with llm-wiki (2026-11-13)
+
+- **Why:** decided on 2026-11-13: the timeline look tried on `relay mr` is the house style of llm-relay, llm-wiki and any llm tool after them, so no command looks plainer than the others. llm-wiki keeps the kit and the guide.
+- **What changed:** `ui.sh`, a byte-for-byte copy of llm-wiki's kit, draws every command: a question, stages on a rail, items, cards to paste, YOUR TURN and its steps, with 24-bit colour where the terminal says so. `relay setup` asks for a palette (`default` or `colorblind`) and a theme (`auto`, `dark` or `light`). What a person reads says "Copilot Cowork"; OneDrive paths such as `Documents/Cowork` stay. `relay ask` keeps plain lines, since an assistant reads them. `tests/ui-lint.sh` fails on any command that prints without the kit, and `scripts/gallery.sh` keeps what the commands print, checked on macOS. The Homebrew formula has to install `ui.sh`: `scripts/release.sh` adds it.
+- **Untested:** the look in a real terminal with a real `relay mr`, `run` or `ask`; only the smoke tests' fakes and a pseudo-terminal have run it. The light theme in macOS's Terminal, which can't say its background.
+
 ### mr, ticket and branch end with "reply done" (2026-11-13)
 
 - **Why:** Copilot Cowork asks for most runs of these commands and waits for `done`, yet each one ended with a long prompt for a new session, so the terminal and Copilot said different things.

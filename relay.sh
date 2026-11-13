@@ -55,7 +55,7 @@ wait_draw() {
 wait_clear() { ui_wait_clear; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.26"
+RELAY_VERSION="0.2.27"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -2925,12 +2925,12 @@ adapt_skill() {
     mkdir -p "$out/$(dirname "$f")" && cp "$src/$f" "$out/$f" || { echo "$f couldn't be copied"; return 1; }
     n=$((n + 1))
     size="$(wc -c <"$src/$f" | tr -d ' ')"
-    [ "$size" -le 5242880 ] || { echo "$f is over 5 MB, Cowork's limit for one file"; return 1; }
+    [ "$size" -le 5242880 ] || { echo "$f is over 5 MB, Copilot Cowork's limit for one file"; return 1; }
     total=$((total + size))
   done <<EOF
 $(skill_files "$src")
 EOF
-  [ "$n" -le 20 ] || { echo "it has $n files beside SKILL.md, and Cowork takes 20"; return 1; }
+  [ "$n" -le 20 ] || { echo "it has $n files beside SKILL.md, and Copilot Cowork takes 20"; return 1; }
   sha="$(folder_hash "$src")"
   # Twice: the copy's hash goes in the stamp, and the stamp line is the one thing it leaves out.
   skill_note "$name" "$src" "$sha" "<!-- relay:stamp pending -->" >"$SKILL_TMP/note"
@@ -2939,8 +2939,8 @@ EOF
   skill_note "$name" "$src" "$sha" "<!-- relay:stamp template $SKILL_TEMPLATE | source $sha | copy $copy_sha | made $(now) -->" >"$SKILL_TMP/note"
   put_note "$src/SKILL.md" "$SKILL_TMP/note" "$out/SKILL.md"
   size="$(wc -c <"$out/SKILL.md" | tr -d ' ')"
-  [ "$size" -le 1048576 ] || { echo "its SKILL.md comes to over 1 MB, Cowork's limit"; return 1; }
-  [ $((total + size)) -le 10485760 ] || { echo "it comes to over 10 MB, Cowork's limit for one skill"; return 1; }
+  [ "$size" -le 1048576 ] || { echo "its SKILL.md comes to over 1 MB, Copilot Cowork's limit"; return 1; }
+  [ $((total + size)) -le 10485760 ] || { echo "it comes to over 10 MB, Copilot Cowork's limit for one skill"; return 1; }
 }
 
 # macOS can refuse one terminal app a file in OneDrive that another reads. A copy that can't be
@@ -3381,7 +3381,7 @@ tool_hint() {
     pre-commit) echo "brew install pre-commit" ;;
     wiki) echo "optional, from github.com/broxgit/llm-wiki" ;;
     curl) echo "it comes with macOS" ;;
-    security) echo "it comes with macOS, and asking Cowork needs its Keychain" ;;
+    security) echo "it comes with macOS, and asking Copilot Cowork needs its Keychain" ;;
   esac
 }
 
@@ -4235,7 +4235,7 @@ cmd_ask() {
       --setup) shift; ask_setup "$@"; return $? ;;
       --trigger)
         trigger_prompt
-        if [ "$AT_TERMINAL" = yes ] && command -v pbcopy >/dev/null 2>&1 && trigger_prompt | pbcopy 2>/dev/null; then echo; echo "It's on your clipboard. Paste it into a Cowork conversation, or give Cowork the second paragraph to change a trigger it has."; fi
+        if [ "$AT_TERMINAL" = yes ] && command -v pbcopy >/dev/null 2>&1 && trigger_prompt | pbcopy 2>/dev/null; then echo; echo "It's on your clipboard. Paste it into a Copilot Cowork conversation, or give Copilot Cowork the second paragraph to change a trigger it has."; fi
         return 0
         ;;
       --from)
@@ -4530,7 +4530,7 @@ ask_collect() {
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     rm -f "$WORK/answer.md"
     echo "  no answer"
-    note_line "- answer: NONE after $((SECONDS - sent))s. $(sed -n 's/^Waiting for Cowork ([^)]*): //p' "$WORK/wait.out" | tail -n 1)"
+    note_line "- answer: NONE after $((SECONDS - sent))s. $(sed -n 's/^Waiting for Copilot Cowork ([^)]*): //p' "$WORK/wait.out" | tail -n 1)"
     if grep -q 'most likely has the wrong instructions' "$WORK/wait.out"; then
       note_line "- why, most likely: A FILE CAME WITH NO LAST LINE AND STOPPED GROWING, so the trigger has the wrong instructions"
     else
@@ -4564,7 +4564,7 @@ field_asks() {
   needs_tool "field-test --asks" security
   needs_tool "field-test --asks" curl
   if ! security find-generic-password -s "$WAKE_ADDRESS_ITEM" >/dev/null 2>&1 || ! security find-generic-password -s "$WAKE_SECRET_ITEM" >/dev/null 2>&1; then
-    die "relay field-test --asks needs the webhook that wakes Cowork, because nobody types into Cowork here. Set it up with: relay ask --setup"
+    die "relay field-test --asks needs the webhook that wakes Copilot Cowork, because nobody types into Copilot Cowork here. Set it up with: relay ask --setup"
   fi
   make_field_repo
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
@@ -4582,8 +4582,8 @@ field_asks() {
   note_line "- relay: $RELAY_VERSION"
   note_line "- the relay's own skills in Cowork's folder: $OWN_SKILL_STATE"
   note_line "- longest wait for one answer: ${WAIT}s"
-  echo "This sends six asks to Cowork and waits for each answer. It takes about 8 minutes, and needs nothing from you unless Cowork asks for an approval."
-  echo "If this Mac has never had an answer, Cowork's first run asks to write to OneDrive. Open the new conversation in Cowork and choose always allow."
+  echo "This sends six asks to Copilot Cowork and waits for each answer. It takes about 8 minutes, and needs nothing from you unless Copilot Cowork asks for an approval."
+  echo "If this Mac has never had an answer, Copilot Cowork's first run asks to write to OneDrive. Open the new conversation in Copilot Cowork and choose always allow."
   echo "No answer is saved. Each is read only to check its shape."
 
   # 1. The plainest ask, which is also the one an approval would hold up.

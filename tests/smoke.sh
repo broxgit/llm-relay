@@ -2191,7 +2191,7 @@ Ready after
 Waiting for OneDrive
 Removed
 Woke Copilot Cowork.
-Waiting for Cowork
+Waiting for Copilot Cowork
 Copilot Cowork's webhook didn't take the request
 This Mac has no webhook to wake Copilot Cowork with
 No answer after
@@ -3187,7 +3187,7 @@ check "relay ask --skill puts that skill where Claude Code looks" cmp "$REPO/cla
 ak start >/dev/null
 check "relay start gives Cowork the skill it answers with" cmp "$REPO/cowork/relay-answer/SKILL.md" "$AO/Documents/Cowork/skills/relay-answer/SKILL.md"
 check "the everyday skill knows what an ask is" grep -q '^## Asks from an assistant on the Mac$' "$SK/SKILL.md"
-check "the docs say how to set it up" grep -q '^## Ask Cowork from Claude Code$' "$REPO/docs/using.md"
+check "the docs say how to set it up" grep -q '^## Ask Copilot Cowork from Claude Code$' "$REPO/docs/using.md"
 check "with a trigger that names the relay's skill, and no other" grep -q '^Use the relay-answer skill, and no other\.' "$REPO/docs/using.md"
 expect "relay completes ask" "ask" "$W" __complete 1 ""
 expect "ask completes --scan" "--scan" "$W" __complete 2 ask ""
@@ -3216,7 +3216,7 @@ fake_cowork() {
   done
 }
 out="$(ua "$T/no-keychain")"; rc=$?
-case "$rc:$out" in 0:*) bad "field-test --asks needs the webhook" "$out" ;; *"needs the webhook that wakes Cowork"*"Set it up with: relay ask --setup"*) ok "field-test --asks needs the webhook, and says how to get it" ;; *) bad "field-test --asks needs the webhook, and says how to get it" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*) bad "field-test --asks needs the webhook" "$out" ;; *"needs the webhook that wakes Copilot Cowork"*"Set it up with: relay ask --setup"*) ok "field-test --asks needs the webhook, and says how to get it" ;; *) bad "field-test --asks needs the webhook, and says how to get it" "exit $rc: $out" ;; esac
 refuse "and --asks takes nothing else" env HOME="$UH" "$W" --dir "$UO" field-test --asks more
 : >"$AK/curl.args"
 mkdir -p "$UO/Documents/relay-answers"
@@ -3257,6 +3257,8 @@ UR="$(ls "$UH"/relay-field-test-asks-*.md 2>/dev/null | head -n 1)"
 case "$rc:$out" in 0:*) bad "with no answer to the first ask it stops" "$out" ;; *"Saved: "*) ok "with no answer to the first ask it stops" ;; *) bad "with no answer to the first ask it stops" "exit $rc: $out" ;; esac
 check "and says the rest weren't sent" grep -q '^The first ask got no answer, so the rest were not sent.$' "$UR"
 check "and what a missing answer most likely is" grep -q '^- why, most likely: NO FILE REACHED THIS MAC. If Cowork.s newest conversation wrote an answer, OneDrive stalled$' "$UR"
+# The report reads the wait's last state from its line, which names Copilot Cowork.
+check "and the state the wait ended in" grep -q '^- answer: NONE after [0-9]*s\. no answer yet' "$UR"
 case "$out" in *"Restart OneDrive"*) bad "with nobody watching it offers no restart" "$out" ;; *) ok "with nobody watching it offers no restart" ;; esac
 check "having sent one" grep -q '^- asks sent: 1$' "$UR"
 out="$(env FAKE_CURL_CODE=403 HOME="$UH" PATH="$FB:$AB:$PATH" FAKE_KEYCHAIN="$AK" RELAY_WAIT=2 RELAY_POLL=1 "$W" --dir "$UO" field-test --asks </dev/null 2>&1)"
@@ -3290,13 +3292,11 @@ if [ "$(uname -s)" != Darwin ]; then
   printf 'note  %s\n' "the gallery is checked on macOS only"
 elif out="$("$REPO/scripts/gallery.sh" --check 2>&1)"; then ok "the gallery is current: $out"
 else bad "the gallery is current" "$out"; fi
-# The lint is a report until every command has moved to the kit. relay mr is the first.
-if out="$("$REPO/tests/ui-lint.sh" --functions)"; then
-  case "$out" in *cmd_mr* | *pack_mr* | *want_checks* | *run_check* | *finish_prompts* | *print_prompts*) bad "relay mr prints through the kit alone" "$out" ;; *) ok "relay mr prints through the kit alone" ;; esac
-  printf 'note  %s\n' "the lint is a report until every command has moved: $(printf '%s\n' "$out" | grep -c .) function(s) left"
-else
-  bad "the lint runs" "$out"
-fi
+# Every command prints through the kit: the lint finds no colour code, no S_ or M_ variable and
+# no version 2 helper outside ui.sh.
+if out="$("$REPO/tests/ui-lint.sh" 2>&1)"; then ok "the lint: every command prints through the kit"; else bad "the lint: every command prints through the kit" "$out"; fi
+printf 'f() {\n  printf "\\033[1mx"\n}\n' >"$T/lint-bad.sh"
+if "$REPO/tests/ui-lint.sh" "$T/lint-bad.sh" >/dev/null 2>&1; then bad "and it fails on a colour code"; else ok "and it fails on a colour code"; fi
 check "the copy says where the original is" grep -q '^Conventions version [0-9]*\. llm-wiki keeps the original\.' "$CG"
 check "AGENTS.md sends an agent to the guide before it changes what a command prints" grep -q 'docs/conventions.md' "$REPO/AGENTS.md"
 check "the user guide names the switch" grep -q 'LLM_RELAY_STYLE' "$REPO/docs/using.md"
