@@ -733,7 +733,7 @@ rl y t1s/d1 --expect 1
 RL_PLAIN="$RL_OUT"
 sleep 1
 sty_out="$(styled y env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" run t1s/d1 --expect 1)"
-same_words "a styled run shows what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed -n '/^Deliverable: /,/^Run it?/p')" "$(printf '%s\n' "$RL_PLAIN" | tr -d '\r' | sed -n '/^Deliverable: /,/^Run it?/p')"
+same_kit_words "a styled run shows what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed -n '/^Deliverable: /,/^Run it?/p')" "$(printf '%s\n' "$RL_PLAIN" | tr -d '\r' | sed -n '/^Deliverable: /,/^Run it?/p')"
 case "$sty_out" in *"${ESC_BYTE}[1mFiles:${ESC_BYTE}[0m"*) ok "a styled run makes Files: a heading" ;; *) bad "a styled run makes Files: a heading" "$sty_out" ;; esac
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/t1s/reports/"*"Now tell Cowork: done"*) ok "a styled run marks the report it sent, and ends on what to tell Cowork" ;; *) bad "a styled run marks the report it sent, and ends on what to tell Cowork" "$sty_out" ;; esac
 case "$sty_out" in *"DEMO RUN: PASS"*) ok "the deliverable's own output is still there" ;; *) bad "the deliverable's own output is still there" "$sty_out" ;; esac
@@ -958,7 +958,7 @@ chmod +x "$STB/pbcopy"
 sty_scan() { styled "" env HOME="$RH" PATH="$STB:$PATH" "$W" scan "$@"; }
 unsize() { sed 's/, [0-9][0-9]* bytes//'; }
 sty_out="$(sty_scan "$SR")"
-same_words "a styled scan says what a piped one says" "$(printf '%s\n' "$sty_out" | plain_words | grep -v 'on your clipboard' | unsize)" "$(sc "$SR" 2>&1 | unsize)"
+same_kit_words "a styled scan says what a piped one says" "$(printf '%s\n' "$sty_out" | plain_words | grep -v 'on your clipboard' | unsize)" "$(sc "$SR" 2>&1 | unsize)"
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive:"*) ok "a styled scan marks what it sent" ;; *) bad "a styled scan marks what it sent" "$sty_out" ;; esac
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Scanned scan-me:"*"${ESC_BYTE}[2m"*" bytes${ESC_BYTE}[0m"*) ok "and dims its size" ;; *) bad "and dims its size" "$sty_out" ;; esac
 no_codes_in "a styled scan writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard-sty"
@@ -1485,7 +1485,7 @@ case "$out" in *"Not this"* | *"A finding"*) bad "and only that section" "$out" 
 # How a review looks at a terminal.
 rvs() { local keys="$1"; shift; styled "$keys" env HOME="$RH" PATH="$FG:$PATH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" review "$@"; }
 sty_out="$(rvs n t20/rev --expect 3)"
-same_words "a styled review shows what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+same_kit_words "a styled review shows what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
 case "$sty_out" in *"${ESC_BYTE}[1mWhat svc-7.md says it covered:${ESC_BYTE}[0m"*) ok "a styled review makes the coverage a heading" ;; *) bad "a styled review makes the coverage a heading" "$sty_out" ;; esac
 # The review above has a control character of Cowork's in it, which is copied as it came, so what
 # the relay writes is checked on a review without one.
@@ -1565,7 +1565,7 @@ bash "$LIB" manifest "$RL_D" >/dev/null
 out="$(ap n t22/fix --repo "$AR" --expect 2)"
 case "$out" in *"Warning: there's no report"*"Nothing changed"*) ok "apply warns with no passing run, and n changes nothing" ;; *) bad "apply warns with no passing run, and n changes nothing" "$out" ;; esac
 sty_out="$(styled n env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" apply t22/fix --repo "$AR" --expect 2)"
-same_words "a styled apply that is refused says what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+same_kit_words "a styled apply that is refused says what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
 case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Warning: there's no report"*) ok "a styled apply marks its warning" ;; *) bad "a styled apply marks its warning" "$sty_out" ;; esac
 check "really nothing" test -z "$(git -C "$AR" status --short)"
 RL_WAIT=0 rl y t22/fix --expect 2
@@ -1577,7 +1577,7 @@ check "and commits nothing" bash -c "[ \"\$(git -C '$AR' rev-parse HEAD)\" = '$A
 # How apply looks at a terminal: the same words, and no code in the patch it leaves.
 git -C "$AR" checkout -q -- a.txt b.txt
 sty_out="$(styled y env HOME="$RH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" apply t22/fix --repo "$AR" --expect 2)"
-same_words "a styled apply shows what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+same_kit_words "a styled apply shows what a plain one does" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Applied, and nothing is committed. Look it over with: ${ESC_BYTE}[36mgit -C $AR diff${ESC_BYTE}[0m"*) ok "a styled apply marks it done, with the command to type in colour" ;; *) bad "a styled apply marks it done, with the command to type in colour" "$sty_out" ;; esac
 no_codes_in "a styled apply leaves no code in the repository, OneDrive or the home folder" "$AR" "$RH"
 git -C "$AR" checkout -q -- a.txt b.txt
@@ -1683,7 +1683,7 @@ check "and it's in the settings" grep -q "^reviews=$T/elsewhere$" "$RH/.config/l
 check "with the clones" grep -q "^clones=$T/c1:$T/c2$" "$RH/.config/llm-relay/settings"
 out="$(env -u LLM_PALETTE -u LLM_THEME HOME="$T/fresh-relay-home" python3 "$TTY" $'\n\n\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
 case "$out" in *"Where should merge request reviews go?"*"relay setting: reviews=$T/fresh-relay-home/mr-reviews"*) ok "setup asks once at a terminal" ;; *) bad "setup asks once at a terminal" "$out" ;; esac
-case "$out" in *"Colours: default, or colorblind"*"[default]: "*"Your terminal's background: auto, dark or light? [auto]: "*"relay setting: palette=default"*"relay setting: theme=auto"*) ok "and asks for the palette and the theme, with the defaults in brackets" ;; *) bad "and asks for the palette and the theme, with the defaults in brackets" "$out" ;; esac
+case "$out" in *"Colours: default, or colorblind"*"[default] › "*"Your terminal's background: auto, dark or light? [auto] › "*"relay setting: palette=default"*"relay setting: theme=auto"*) ok "and asks for the palette and the theme, with the defaults in brackets" ;; *) bad "and asks for the palette and the theme, with the defaults in brackets" "$out" ;; esac
 check "which go in the settings" grep -qx 'palette=default' "$T/fresh-relay-home/.config/llm-relay/settings"
 check "both of them" grep -qx 'theme=auto' "$T/fresh-relay-home/.config/llm-relay/settings"
 out="$(env -u LLM_PALETTE -u LLM_THEME HOME="$T/fresh-relay-home" python3 "$TTY" '' "$W" setup --dir "$OD" 2>&1)"
@@ -1766,7 +1766,7 @@ out="$(xk n "$XR" --ask)"
 case "$out" in *"Send secret-repo to OneDrive anyway? [y]es, [n]o: "*"Nothing from secret-repo was sent."*) ok "--ask asks again" ;; *) bad "--ask asks again" "$out" ;; esac
 # The question is shown with a mark and a colour, and says the same words.
 sty_out="$(styled n env HOME="$RH" PATH="$STB:$PATH" "$W" --dir "$OD" scan "$XR" --ask)"
-same_words "the styled secrets question says what the plain one says" "$sty_out" "$(xk n "$XR" --ask | tr -d '\r')"
+same_kit_words "the styled secrets question says what the plain one says" "$sty_out" "$(xk n "$XR" --ask | tr -d '\r')"
 case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Before anything is sent:"*"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Nothing from secret-repo was sent."*) ok "the styled secrets question is marked as needing attention" ;; *) bad "the styled secrets question is marked as needing attention" "$sty_out" ;; esac
 no_codes_in "refusing a scan writes no code to OneDrive or the home folder" "$RH"
 out="$(xsc "$XR" </dev/null 2>&1)"; rc=$?
@@ -1864,7 +1864,7 @@ sys.stdout.buffer.write(b[:s] + b[e:])
 PY
 }
 out="$(ks --skills review:plain --skills-from "$KS" --reviews "$T/skill-reviews" --clones "$T/skill-clones")"
-case "$out" in *"skill review: copied to Cowork"*"skill plain: copied to Cowork"*) ok "setup --skills copies the named skills" ;; *) bad "setup --skills copies the named skills" "$out" ;; esac
+case "$out" in *"skill review: copied to Copilot Cowork"*"skill plain: copied to Copilot Cowork"*) ok "setup --skills copies the named skills" ;; *) bad "setup --skills copies the named skills" "$out" ;; esac
 check "the list is kept in the settings" grep -q '^skills=review:plain$' "$KH/.config/llm-relay/settings"
 check "with where they live" grep -q "^skills_from=$KS\$" "$KH/.config/llm-relay/settings"
 [ "$(head -n 4 "$KC/review/SKILL.md")" = "$(head -n 4 "$KS/review/SKILL.md")" ] && ok "the header comes first, as it was" || bad "the header comes first, as it was" "$(head -n 4 "$KC/review/SKILL.md")"
@@ -1882,14 +1882,14 @@ case "$rc:$out" in 0:*"review: in step"*"plain: in step"*) ok "relay skills says
 # How the skills commands look at a terminal.
 kks() { styled "" env HOME="$KH" "$W" --dir "$KO" skills; }
 sty_out="$(kks)"
-same_words "a styled relay skills says what a piped one does" "$sty_out" "$out"
+same_kit_words "a styled relay skills says what a piped one does" "$sty_out" "$out"
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m review: in step."*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m plain: in step."*) ok "and marks each skill that is in step" ;; *) bad "and marks each skill that is in step" "$sty_out" ;; esac
 cp "$KC/review/SKILL.md" "$T/skill-before"
 out="$(ks)"
-case "$out" in *"skill review: Cowork's copy is in step"*) ok "setup again says so" ;; *) bad "setup again says so" "$out" ;; esac
+case "$out" in *"skill review: Copilot Cowork's copy is in step"*) ok "setup again says so" ;; *) bad "setup again says so" "$out" ;; esac
 sty_out="$(styled "" env HOME="$KH" "$W" setup --dir "$KO")"
-same_words "a styled setup says what a piped one does" "$sty_out" "$out"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m installed: $KC/remote-pair-run"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m skill review: Cowork's copy is in step"*) ok "a styled setup marks what it installed and what is in step" ;; *) bad "a styled setup marks what it installed and what is in step" "$sty_out" ;; esac
+same_kit_words "a styled setup says what a piped one does" "$sty_out" "$out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m installed: $KC/remote-pair-run"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m skill review: Copilot Cowork's copy is in step"*) ok "a styled setup marks what it installed and what is in step" ;; *) bad "a styled setup marks what it installed and what is in step" "$sty_out" ;; esac
 no_codes_in "a styled setup writes no code to OneDrive or the home folder" "$KO" "$KH"
 check "and doesn't make the copy again" cmp "$T/skill-before" "$KC/review/SKILL.md"
 # Another Mac can share this OneDrive. Its setup, with no skills named, leaves these copies alone.
@@ -1899,14 +1899,14 @@ check "a setup that never named a skill removes none" test -f "$KC/plain/SKILL.m
 # The user's skill changes: the copy is made again, by whatever talks to Cowork next.
 echo 'A new step.' >>"$KS/review/SKILL.md"
 out="$(kk)"; rc=$?
-case "$rc:$out" in 1:*"review: your skill has changed since Cowork's copy was made"*) ok "relay skills sees a skill that changed" ;; *) bad "relay skills sees a skill that changed" "exit $rc: $out" ;; esac
+case "$rc:$out" in 1:*"review: your skill has changed since Copilot Cowork's copy was made"*) ok "relay skills sees a skill that changed" ;; *) bad "relay skills sees a skill that changed" "exit $rc: $out" ;; esac
 sty_out="$(kks)"
-same_words "a styled relay skills says what a piped one does for a skill that changed" "$sty_out" "$out"
-case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m review: your skill has changed since Cowork's copy was made. ${ESC_BYTE}[36mrelay setup${ESC_BYTE}[0m, scan or mr updates it."*) ok "a skill that changed is marked as needing attention, with the command in colour" ;; *) bad "a skill that changed is marked as needing attention, with the command in colour" "$sty_out" ;; esac
+same_kit_words "a styled relay skills says what a piped one does for a skill that changed" "$sty_out" "$out"
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m review: your skill has changed since Copilot Cowork's copy was made. ${ESC_BYTE}[36mrelay setup${ESC_BYTE}[0m, scan or mr updates it."*) ok "a skill that changed is marked as needing attention, with the command in colour" ;; *) bad "a skill that changed is marked as needing attention, with the command in colour" "$sty_out" ;; esac
 git init -q "$T/skill-repo" && git -C "$T/skill-repo" commit -q --allow-empty -m first
 kscan() { env HOME="$KH" "$W" --dir "$KO" scan "$T/skill-repo" --no-wiki 2>&1; }
 out="$(kscan)"
-case "$out" in *"skill review: Cowork's copy was out of date, so it was made again"*"Scanned skill-repo"*) ok "relay scan makes the copy again first" ;; *) bad "relay scan makes the copy again first" "$out" ;; esac
+case "$out" in *"skill review: Copilot Cowork's copy was out of date, so it was made again"*"Scanned skill-repo"*) ok "relay scan makes the copy again first" ;; *) bad "relay scan makes the copy again first" "$out" ;; esac
 kbody "$KC/review/SKILL.md" | cmp -s - "$KS/review/SKILL.md" && ok "and it matches the skill again" || bad "and it matches the skill again"
 lacks "a scan says nothing when the copies are in step" "skill " kscan
 echo 'Ask me before a second pass.' >"$KS/review/COWORK.md"
@@ -1919,24 +1919,24 @@ kbody "$KC/review/SKILL.md" | cmp -s - "$KS/review/SKILL.md" && ok "the skill's 
 # The copy changes in OneDrive: that's text from the cloud, so it's never thrown away unasked.
 printf -- '- Cowork added this\n\033[31mred\n' >>"$KC/review/SKILL.md"
 out="$(kscan)"
-case "$out" in *"skill review: Cowork's copy was changed in OneDrive, so it wasn't updated"*) ok "a scan leaves a copy changed in OneDrive, and warns" ;; *) bad "a scan leaves a copy changed in OneDrive, and warns" "$out" ;; esac
+case "$out" in *"skill review: Copilot Cowork's copy was changed in OneDrive, so it wasn't updated"*) ok "a scan leaves a copy changed in OneDrive, and warns" ;; *) bad "a scan leaves a copy changed in OneDrive, and warns" "$out" ;; esac
 check "really leaves it" grep -q 'Cowork added this' "$KC/review/SKILL.md"
 out="$(kk)"
-case "$out" in *"review: Cowork's copy was changed in OneDrive"*) ok "relay skills says it was changed there" ;; *) bad "relay skills says it was changed there" "$out" ;; esac
+case "$out" in *"review: Copilot Cowork's copy was changed in OneDrive"*) ok "relay skills says it was changed there" ;; *) bad "relay skills says it was changed there" "$out" ;; esac
 out="$(ks)"; rc=$?
 case "$rc:$out" in 0:*) bad "setup with no terminal leaves it too" "$out" ;; *"-- Cowork added this"*"left as it is. Run relay setup at a terminal"*) ok "setup with no terminal leaves it too" ;; *) bad "setup with no terminal leaves it too" "exit $rc: $out" ;; esac
 case "$out" in *"$(printf '\033')"*) bad "control characters from OneDrive don't reach the terminal" "$out" ;; *) ok "control characters from OneDrive don't reach the terminal" ;; esac
 out="$(env HOME="$KH" python3 "$TTY" n "$W" setup --dir "$KO" 2>&1)"
-case "$out" in *"Replace Cowork's copy with a fresh one?"*"left as it is in OneDrive"*) ok "at a terminal it shows the difference and asks" ;; *) bad "at a terminal it shows the difference and asks" "$out" ;; esac
+case "$out" in *"Replace Copilot Cowork's copy with a fresh one?"*"left as it is in OneDrive"*) ok "at a terminal it shows the difference and asks" ;; *) bad "at a terminal it shows the difference and asks" "$out" ;; esac
 check "n keeps OneDrive's copy" grep -q 'Cowork added this' "$KC/review/SKILL.md"
 sty_out="$(styled n env HOME="$KH" "$W" setup --dir "$KO")"
-case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m skill review: Cowork's copy was changed in OneDrive after the relay made it."*"Replace Cowork's copy with a fresh one? [y]es, [n]o: "*"left as it is in OneDrive"*) ok "a styled setup marks a copy changed in OneDrive, and asks as it did" ;; *) bad "a styled setup marks a copy changed in OneDrive, and asks as it did" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m skill review: Copilot Cowork's copy was changed in OneDrive after the relay made it."*"? ${ESC_BYTE}[0m ${ESC_BYTE}[1m${ESC_BYTE}[33mReplace Copilot Cowork's copy with a fresh one?"*"[y]${ESC_BYTE}[0mes"*"left as it is in OneDrive"*) ok "a styled setup marks a copy changed in OneDrive, and asks as it did" ;; *) bad "a styled setup marks a copy changed in OneDrive, and asks as it did" "$sty_out" ;; esac
 out="$(env HOME="$KH" python3 "$TTY" y "$W" setup --dir "$KO" 2>&1)"
-case "$out" in *"skill review: Cowork's copy replaced with a fresh one"*) ok "y replaces it" ;; *) bad "y replaces it" "$out" ;; esac
+case "$out" in *"skill review: Copilot Cowork's copy replaced with a fresh one"*) ok "y replaces it" ;; *) bad "y replaces it" "$out" ;; esac
 refuse "and the change is gone" grep -q 'Cowork added this' "$KC/review/SKILL.md"
 
 # A review cites the copy it used.
-KSHA="$(kk | sed -n 's/^review: in step.*(\([0-9a-f]*\))$/\1/p')"
+KSHA="$(kk | sed -n 's/^ *- review: in step.*(\([0-9a-f]*\))$/\1/p')"
 KR="$KO/Documents/Cowork/Tasks/kt/output/rev"
 mkdir -p "$KR/reviews/ABC-1"
 printf '# Review\n\n## Coverage\n\n- Skills loaded: `review 00000000`\n' >"$KR/reviews/ABC-1/svc-1.md"
@@ -1945,7 +1945,7 @@ krev() { env HOME="$KH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 python3 "$TTY" n "$W
 out="$(krev)"
 case "$out" in *"Warning: this review used an older copy of your review skill (00000000, and yours is now $KSHA)"*) ok "relay review warns when a review cites an older copy" ;; *) bad "relay review warns when a review cites an older copy" "$out" ;; esac
 sty_out="$(styled n env HOME="$KH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 "$W" --dir "$KO" review kt/rev)"
-same_words "a styled review says what a plain one does about a skill's stamp" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
+same_kit_words "a styled review says what a plain one does about a skill's stamp" "$sty_out" "$(printf '%s\n' "$out" | tr -d '\r')"
 case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Warning: this review used an older copy of your review skill"*) ok "and marks it as needing attention" ;; *) bad "and marks it as needing attention" "$sty_out" ;; esac
 printf '# Review\n\n## Coverage\n\n- Skills loaded: `review %s`\n' "$KSHA" >"$KR/reviews/ABC-1/svc-1.md"
 bash "$LIB" manifest "$KR" >/dev/null
@@ -1956,28 +1956,28 @@ mkdir -p "$KC/handmade" "$KS/handmade"
 echo '# By hand, in OneDrive' >"$KC/handmade/SKILL.md"
 echo '# The same name, on the Mac' >"$KS/handmade/SKILL.md"
 out="$(ks --skills review:plain:handmade)"; rc=$?
-case "$rc:$out" in 0:*) bad "a skill of that name the relay didn't make is left alone" "$out" ;; *"skill handmade: Cowork's folder already has a skill of that name, which the relay didn't make"*) ok "a skill of that name the relay didn't make is left alone" ;; *) bad "a skill of that name the relay didn't make is left alone" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*) bad "a skill of that name the relay didn't make is left alone" "$out" ;; *"skill handmade: Copilot Cowork's folder already has a skill of that name, which the relay didn't make"*) ok "a skill of that name the relay didn't make is left alone" ;; *) bad "a skill of that name the relay didn't make is left alone" "exit $rc: $out" ;; esac
 check "really left alone" grep -q 'By hand, in OneDrive' "$KC/handmade/SKILL.md"
 expect "setup says how to compare it with yours" "diff -r \"$KS/handmade\" \"$KC/handmade\"" ks --skills review:plain:handmade
 expect "and where Cowork-only text goes" "COWORK.md" ks --skills review:plain:handmade
-expect "and that your own skill goes over whatever you choose" "Your own skill's text goes to Cowork whatever you do here" ks --skills review:plain:handmade
+expect "and that your own skill goes over whatever you choose" "Your own skill's text goes to Copilot Cowork whatever you do here" ks --skills review:plain:handmade
 # macOS can refuse one terminal app a file in OneDrive. A copy that can't be read was once
 # reported as made by hand, which it wasn't. Seen in a note made from iTerm on 2026-11-06.
 if [ "$(id -u)" != 0 ]; then
   chmod 000 "$KC/plain/SKILL.md"
   out="$(kk)"
-  case "$out" in *"plain: this terminal app can't read Cowork's copy, so the relay can't say where it stands."*) ok "a copy that can't be read is called that, not made by hand" ;; *) bad "a copy that can't be read is called that, not made by hand" "$out" ;; esac
-  case "$out" in *"plain: Cowork's folder has a skill of that name, which the relay didn't make"*) bad "and never the relay didn't make it" "$out" ;; *) ok "and never the relay didn't make it" ;; esac
+  case "$out" in *"plain: this terminal app can't read Copilot Cowork's copy, so the relay can't say where it stands."*) ok "a copy that can't be read is called that, not made by hand" ;; *) bad "a copy that can't be read is called that, not made by hand" "$out" ;; esac
+  case "$out" in *"plain: Copilot Cowork's folder has a skill of that name, which the relay didn't make"*) bad "and never the relay didn't make it" "$out" ;; *) ok "and never the relay didn't make it" ;; esac
   out="$(ks --skills review:plain:handmade)"
-  case "$out" in *"skill plain: this terminal app can't read Cowork's copy, so it's left as it is."*) ok "setup leaves a copy it can't read as it is, and says why" ;; *) bad "setup leaves a copy it can't read as it is, and says why" "$out" ;; esac
+  case "$out" in *"skill plain: this terminal app can't read Copilot Cowork's copy, so it's left as it is."*) ok "setup leaves a copy it can't read as it is, and says why" ;; *) bad "setup leaves a copy it can't read as it is, and says why" "$out" ;; esac
   chmod 644 "$KC/plain/SKILL.md"
 fi
 out="$(kscan)"
-case "$out" in *"skill handmade: Cowork's folder already has a skill of that name"*"relay setup says what to do"*) ok "a scan warns in one line and points at setup" ;; *) bad "a scan warns in one line and points at setup" "$out" ;; esac
+case "$out" in *"skill handmade: Copilot Cowork's folder already has a skill of that name"*"relay setup says what to do"*) ok "a scan warns in one line and points at setup" ;; *) bad "a scan warns in one line and points at setup" "$out" ;; esac
 case "$out" in *"diff -r"*) bad "a scan doesn't give the steps" "$out" ;; *) ok "a scan doesn't give the steps" ;; esac
 expect "relay skills points at setup for it" "relay setup says what to do" kk
 out="$(ks --skills review)"
-case "$out" in *"skill plain: no longer named, so Cowork's copy was removed"*) ok "a copy that's no longer named is removed" ;; *) bad "a copy that's no longer named is removed" "$out" ;; esac
+case "$out" in *"skill plain: no longer named, so Copilot Cowork's copy was removed"*) ok "a copy that's no longer named is removed" ;; *) bad "a copy that's no longer named is removed" "$out" ;; esac
 check "it's gone" test ! -e "$KC/plain"
 check "the handmade one stays" test -f "$KC/handmade/SKILL.md"
 check "and so does the relay's own skill" test -f "$KC/remote-pair-run/SKILL.md"
@@ -2026,7 +2026,7 @@ VH="$T/version-home"
 VO="$T/version-onedrive"
 mkdir -p "$VH" "$VO"
 vscan() { env HOME="$VH" "$W" --dir "$VO" scan "$T/skill-repo" --no-wiki 2>&1; }
-expect "a scan says when Cowork has no skill yet" "Cowork doesn't have the remote-pair-run skill yet. Run: relay start" vscan
+expect "a scan says when Cowork has no skill yet" "Copilot Cowork doesn't have the remote-pair-run skill yet. Run: relay start" vscan
 # With no skill in Cowork's folder, telling Cowork to read the scan would get nowhere, so the
 # last lines send the user to relay start first.
 out="$(vscan 2>&1)"
@@ -2036,14 +2036,14 @@ env HOME="$VH" "$W" setup --dir "$VO" --reviews "$T/version-reviews" --clones "$
 lacks "and nothing once setup has run" "remote-pair-run" vscan
 expect "once Cowork has the skill, the scan ends with Now tell Cowork" "Now tell Cowork: read Documents/Cowork/relay/scans/" vscan
 echo '# an older copy' >>"$VO/Documents/Cowork/skills/remote-pair-run/runlib.sh"
-expect "and says when Cowork's copy isn't this relay's" "Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay start" vscan
+expect "and says when Copilot Cowork's copy isn't this relay's" "Copilot Cowork's copy of the remote-pair-run skill isn't this relay's, so it may be out of date. Run: relay start" vscan
 # A warning goes to standard error, so it is styled as standard error is. At a terminal with
 # only the errors sent to a file, the file has no colour code in it.
 styled "" env HOME="$VH" sh -c '"$1" --dir "$2" scan "$3" --no-wiki 2>"$4"' sh "$W" "$VO" "$T/skill-repo" "$T/scan-errors.txt" >"$T/scan-shown.txt"
 check "a warning sent to a file says what it says" grep -q "isn't this relay's, so it may be out of date" "$T/scan-errors.txt"
 if grep -q "$ESC_BYTE" "$T/scan-errors.txt"; then bad "and has no colour code, though the terminal has"; elif grep -q "$ESC_BYTE" "$T/scan-shown.txt"; then ok "and has no colour code, though the terminal has"; else bad "and has no colour code, though the terminal has" "$(cat "$T/scan-shown.txt")"; fi
 out="$(styled "" env HOME="$VH" "$W" --dir "$VO" scan "$T/skill-repo" --no-wiki)"
-case "$out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Cowork's copy of the remote-pair-run skill"*"${ESC_BYTE}[36mrelay start${ESC_BYTE}[0m"*) ok "at a terminal the same warning has its mark, and the command in cyan" ;; *) bad "at a terminal the same warning has its mark, and the command in cyan" "$out" ;; esac
+case "$out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Copilot Cowork's copy of the remote-pair-run skill"*"${ESC_BYTE}[36mrelay start${ESC_BYTE}[0m"*) ok "at a terminal the same warning has its mark, and the command in cyan" ;; *) bad "at a terminal the same warning has its mark, and the command in cyan" "$out" ;; esac
 
 # Two Macs on one account, on different releases. The older one leaves the newer one's skills.
 VB="$T/version-bin"
@@ -2055,18 +2055,18 @@ VSK="$VO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
 vstart >/dev/null
 sed -i.bak 's/^This skill is for relay .*/This skill is for relay 99.0.0./' "$VSK" && rm -f "$VSK.bak"
 out="$(vstart)"
-case "$out" in *"Cowork's skills are from a newer relay, 99.0.0, and this Mac has "*", so they were left as they are."*"brew update && brew upgrade llm-relay"*) ok "relay start leaves the skills of a newer relay, and says to upgrade this Mac" ;; *) bad "relay start leaves the skills of a newer relay, and says to upgrade this Mac" "$out" ;; esac
+case "$out" in *"Copilot Cowork's skills are from a newer relay, 99.0.0, and this Mac has "*", so they were left as they are."*"brew update && brew upgrade llm-relay"*) ok "relay start leaves the skills of a newer relay, and says to upgrade this Mac" ;; *) bad "relay start leaves the skills of a newer relay, and says to upgrade this Mac" "$out" ;; esac
 check "the newer copy is still there" grep -q '^This skill is for relay 99.0.0.$' "$VSK"
 check "and the note tells Cowork which side is behind" grep -q "^the relay's own skills in Cowork's folder: a newer relay's\$" "$VO/Documents/Cowork/relay/start/note.txt"
-case "$out" in *"Cowork takes up to 10 minutes to see its new skills"*) bad "nothing new was copied, so there is no wait" "$out" ;; *) ok "nothing new was copied, so there is no wait" ;; esac
-expect "a scan says the same, and names the upgrade" "Cowork's skills are from a newer relay, 99.0.0" vscan
+case "$out" in *"Copilot Cowork takes up to 10 minutes to see its new skills"*) bad "nothing new was copied, so there is no wait" "$out" ;; *) ok "nothing new was copied, so there is no wait" ;; esac
+expect "a scan says the same, and names the upgrade" "Copilot Cowork's skills are from a newer relay, 99.0.0" vscan
 out="$(env HOME="$VH" "$W" setup --dir "$VO" </dev/null 2>&1)"
 case "$out" in *"from a newer relay, 99.0.0"*"left as they are"*) ok "relay setup leaves them too" ;; *) bad "relay setup leaves them too" "$out" ;; esac
 check "and they are still the newer ones" grep -q '^This skill is for relay 99.0.0.$' "$VSK"
 check "Cowork's skill knows the case where the Mac is the one behind" grep -q "a newer relay's" "$SK/SKILL.md"
 sed -i.bak 's/^This skill is for relay .*/This skill is for relay 0.0.1./' "$VSK" && rm -f "$VSK.bak"
 out="$(vstart)"
-case "$out" in *"newer relay"*) bad "an older relay's skills are replaced, as before" "$out" ;; *"Cowork takes up to 10 minutes to see its new skills"*) ok "an older relay's skills are replaced, as before" ;; *) bad "an older relay's skills are replaced, as before" "$out" ;; esac
+case "$out" in *"newer relay"*) bad "an older relay's skills are replaced, as before" "$out" ;; *"Copilot Cowork takes up to 10 minutes to see its new skills"*) ok "an older relay's skills are replaced, as before" ;; *) bad "an older relay's skills are replaced, as before" "$out" ;; esac
 check "with this relay's" cmp -s "$REPO/cowork/remote-pair-run/SKILL.md" "$VSK"
 
 # The folder clones are looked for under has to be there already.
@@ -2105,7 +2105,7 @@ case "$out" in *"installed: $FO/Documents/Cowork/skills/remote-pair-run"*"instal
 check "as it is" cmp "$FS/SKILL.md" "$FO/Documents/Cowork/skills/relay-field-test/SKILL.md"
 out="$(ft field-test)"; rc=$?
 FN="$FO/Documents/Cowork/relay/field-test/note.txt"
-case "$rc:$out" in 0:*"LLM-RELAY FIELD TEST"*"Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"*"Use relay-field-test to guide me through testing the relay"*) ok "relay field-test writes a note and prints the prompt" ;; *) bad "relay field-test writes a note and prints the prompt" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"NOTE  LLM-RELAY FIELD TEST"*"SENT  OneDrive: Documents/Cowork/relay/field-test/note.txt"*"YOUR TURN"*"Use relay-field-test to guide me through testing the relay"*) ok "relay field-test writes a note and prints the prompt" ;; *) bad "relay field-test writes a note and prints the prompt" "exit $rc: $out" ;; esac
 check "the prompt goes on the clipboard" grep -q 'read Documents/Cowork/relay/field-test/note.txt from my OneDrive first' "$T/clipboard"
 check "the note says which relay" grep -q "^relay: $("$W" --version | sed 's/^relay //')\$" "$FN"
 check "and which runlib" grep -q '^runlib: [0-9][0-9]*$' "$FN"
@@ -2135,8 +2135,9 @@ rm -f "$FRP/kept.txt"
 rm -f "$T/clipboard"
 pl_out="$(ft field-test | grep -v -e '^taken: ' -e '^at a terminal: ')"
 sty_out="$(styled "" env HOME="$FH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$FO" field-test)"
-same_words "a styled field-test says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | grep -v -e '^taken: ' -e '^at a terminal: ')" "$pl_out"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"*"${ESC_BYTE}[1mPaste this into a new Cowork session. It's on your clipboard:${ESC_BYTE}[0m"*"send it: ${ESC_BYTE}[36mUse the YOUR TURN block format.${ESC_BYTE}[0m"*) ok "a styled field-test marks what it sent, and the words to send in colour" ;; *) bad "a styled field-test marks what it sent, and the words to send in colour" "$sty_out" ;; esac
+# The note says when it was taken, and whether a terminal was there, which differ between the runs.
+same_kit_words "a styled field-test says what a piped one does" "$(printf '%s\n' "$sty_out" | plain_words | grep -v -e 'taken: ' -e 'at a terminal: ')" "$(printf '%s\n' "$pl_out" | grep -v -e 'taken: ' -e 'at a terminal: ')"
+case "$sty_out" in *" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive: Documents/Cowork/relay/field-test/note.txt"*"${ESC_BYTE}[1mPaste this into a new Copilot Cowork session.${ESC_BYTE}[0m"*"It's on your clipboard."*"send it: ${ESC_BYTE}[36mUse the YOUR TURN block format.${ESC_BYTE}[0m"*) ok "a styled field-test marks what it sent, and the words to send in colour" ;; *) bad "a styled field-test marks what it sent, and the words to send in colour" "$sty_out" ;; esac
 no_codes_in "a styled field-test writes no code to OneDrive, the home folder or the clipboard" "$FO" "$FH" "$T/clipboard"
 expect "the second branch scans as the skill says" "from your local side, not on origin" env HOME="$FH" "$W" --dir "$FO" scan "$FRP" --branch side --no-wiki
 mkdir -p "$T/ft-home-2/relay-field-test"
@@ -2148,8 +2149,8 @@ case "$out" in *"Left ~/relay-field-test: relay field-test didn't make it."*) ok
 check "really leaves it" test -f "$T/ft-home-2/relay-field-test/mine.txt"
 echo '# changed' >>"$FO/Documents/Cowork/skills/relay-field-test/SKILL.md"
 out="$(ft field-test)"
-case "$out" in *"the relay's own skills in Cowork's folder: not this relay's"*"Cowork needs this relay's skills first. Run relay setup"*) ok "it says when Cowork doesn't have this relay's skills" ;; *) bad "it says when Cowork doesn't have this relay's skills" "$out" ;; esac
-expect "a scan notices an old field-test skill too" "Cowork's copy of the relay-field-test skill isn't this relay's" env HOME="$FH" "$W" --dir "$FO" scan "$T/skill-repo" --no-wiki
+case "$out" in *"the relay's own skills in Cowork's folder: not this relay's"*"Copilot Cowork needs this relay's skills first. Run relay setup"*) ok "it says when Cowork doesn't have this relay's skills" ;; *) bad "it says when Cowork doesn't have this relay's skills" "$out" ;; esac
+expect "a scan notices an old field-test skill too" "Copilot Cowork's copy of the relay-field-test skill isn't this relay's" env HOME="$FH" "$W" --dir "$FO" scan "$T/skill-repo" --no-wiki
 refuse "relay field-test takes no arguments" ft field-test extra
 expect "the field-test skill's name can't be given to --skills" "skill relay-field-test: not a name the relay can copy" env HOME="$FH" "$W" setup --dir "$FO" --skills relay-field-test
 env HOME="$FH" "$W" setup --dir "$FO" --skills none </dev/null >/dev/null 2>&1
@@ -2178,8 +2179,8 @@ Run go build, vet, test and mod tidy on a temporary copy
 Run these on a temporary copy
 the relay found nothing it knows how to run here
 says it covered:
-your skill has changed since Cowork's copy was made
-Cowork's copy was out of date, so it was made again
+your skill has changed since Copilot Cowork's copy was made
+Copilot Cowork's copy was out of date, so it was made again
 worktree identical to
 tracked files unchanged in the worktree
 your checkout unchanged
@@ -2348,34 +2349,34 @@ mkdir -p "$GH" "$GO"
 gs() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM="${GS_TERM:-Apple_Terminal}" "$W" --dir "$GO" start "$@" 2>&1; }
 rm -f "$T/clipboard"
 out="$(gs)"; rc=$?
-case "$rc:$out" in 0:"relay $("$W" --version | sed 's/^relay //')"*"What you can do on this Mac:"*"Change code with Cowork"*"A prompt for Cowork is on your clipboard."*) ok "relay start says which relay, what the Mac can do, and that a prompt is ready" ;; *) bad "relay start says which relay, what the Mac can do, and that a prompt is ready" "$out" ;; esac
+case "$rc:$out" in 0:"START  relay $("$W" --version | sed 's/^relay //')"*"What you can do on this Mac"*"Change code with Copilot Cowork"*"YOUR TURN"*"A prompt for Copilot Cowork is on your clipboard."*) ok "relay start says which relay, what the Mac can do, and that a prompt is ready" ;; *) bad "relay start says which relay, what the Mac can do, and that a prompt is ready" "$out" ;; esac
 check "it installs the relay's skills when Cowork has none" test -f "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md" -a -f "$GO/Documents/Cowork/skills/relay-field-test/SKILL.md"
-case "$out" in *"Cowork takes up to 10 minutes to see its new skills."*"Next: at "[0-2][0-9]:[0-5][0-9]", open a new Cowork session and paste it."*) ok "and says when to start, by the clock" ;; *) bad "and says when to start, by the clock" "$out" ;; esac
+case "$out" in *"Copilot Cowork takes up to 10 minutes to see its new skills."*"Next: at "[0-2][0-9]:[0-5][0-9]", open a new Copilot Cowork session and paste it."*) ok "and says when to start, by the clock" ;; *) bad "and says when to start, by the clock" "$out" ;; esac
 check "the prompt is on the clipboard" grep -q "Use remote-pair-run. I've just run relay start. With nothing attached, read Documents/Cowork/relay/start/note.txt" "$T/clipboard"
 GN="$GO/Documents/Cowork/relay/start/note.txt"
 check "the note says which relay" grep -q "^relay: $("$W" --version | sed 's/^relay //')\$" "$GN"
 check "and which runlib" grep -q '^runlib: [0-9][0-9]*$' "$GN"
 check "and that the skills were installed just now" grep -q "^the relay's own skills in Cowork's folder: this relay's, installed just now\$" "$GN"
 check "and that nothing has run here yet" grep -q '^runs on this Mac so far: 0$' "$GN"
-check "and what the Mac is set up for" grep -q '^  Change code with Cowork  *ready$' "$GN"
+check "and what the Mac is set up for" grep -q '^  Change code with Copilot Cowork  *ready$' "$GN"
 refuse "the note holds no path from this Mac" grep -q -e "$T" -e "$GH" -e "$HOME" -e '/Users/' -e '/home/' "$GN"
 out="$(gs)"
-case "$out" in *"takes up to 10 minutes"* | *"Next: at "*) bad "a second start has nothing to wait for" "$out" ;; *"Next: open a new Cowork session and paste it."*) ok "a second start has nothing to wait for" ;; *) bad "a second start has nothing to wait for" "$out" ;; esac
+case "$out" in *"takes up to 10 minutes"* | *"Next: at "*) bad "a second start has nothing to wait for" "$out" ;; *"Next: open a new Copilot Cowork session and paste it."*) ok "a second start has nothing to wait for" ;; *) bad "a second start has nothing to wait for" "$out" ;; esac
 check "and its note doesn't say the skills are new" grep -q "^the relay's own skills in Cowork's folder: this relay's\$" "$GN"
 case "$out" in *"not Apple's Terminal"*) bad "in Apple's Terminal it says nothing about terminal apps" "$out" ;; *) ok "in Apple's Terminal it says nothing about terminal apps" ;; esac
 out="$(GS_TERM=iTerm.app gs)"
 case "$out" in *"This is iTerm.app, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply"*) ok "in another terminal app it says to use Apple's Terminal" ;; *) bad "in another terminal app it says to use Apple's Terminal" "$out" ;; esac
-# After an upgrade Cowork's copy is the old relay's. start puts that right, where scan and mr only say so.
+# After an upgrade Copilot Cowork's copy is the old relay's. start puts that right, where scan and mr only say so.
 echo '# an older skill' >"$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
 out="$(gs)"
-case "$out" in *"Cowork takes up to 10 minutes to see its new skills."*) ok "a stale copy of the relay's skill is replaced, and start says to wait" ;; *) bad "a stale copy of the relay's skill is replaced, and start says to wait" "$out" ;; esac
+case "$out" in *"Copilot Cowork takes up to 10 minutes to see its new skills."*) ok "a stale copy of the relay's skill is replaced, and start says to wait" ;; *) bad "a stale copy of the relay's skill is replaced, and start says to wait" "$out" ;; esac
 check "really replaced" cmp -s "$REPO/cowork/remote-pair-run/SKILL.md" "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
 refuse "start takes no arguments" gs extra
 # A copy this terminal app can't read isn't a stale one, and isn't written over.
 if [ "$(id -u)" != 0 ]; then
   chmod 000 "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
   out="$(gs)"
-  case "$out" in *"This terminal app can't read Cowork's copy of the relay's skills"*"Try Apple's Terminal."*) ok "start says when it can't read Cowork's copy of its skills" ;; *) bad "start says when it can't read Cowork's copy of its skills" "$out" ;; esac
+  case "$out" in *"This terminal app can't read Copilot Cowork's copy of the relay's skills"*"Try Apple's Terminal."*) ok "start says when it can't read Copilot Cowork's copy of its skills" ;; *) bad "start says when it can't read Copilot Cowork's copy of its skills" "$out" ;; esac
   case "$out" in *"takes up to 10 minutes"*) bad "and doesn't write over what it couldn't read" "$out" ;; *) ok "and doesn't write over what it couldn't read" ;; esac
   check "the note says so too" grep -q "^the relay's own skills in Cowork's folder: unreadable from this terminal app\$" "$GN"
   chmod 644 "$GO/Documents/Cowork/skills/remote-pair-run/SKILL.md"
@@ -2394,15 +2395,15 @@ check "and so does the note, for Cowork" grep -q 'needs glab: brew install glab'
 out="$(env HOME="$GH" PATH="$NO_GLAB" "$W" --dir "$GO" mr https://gitlab.com/team/svc/-/merge_requests/7 </dev/null 2>&1)"
 case "$out" in *"relay mr needs glab: brew install glab, then sign in with: glab auth login"*) ok "relay mr says how to get glab when it's missing" ;; *) bad "relay mr says how to get glab when it's missing" "$out" ;; esac
 out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clones "$T/start-clones" </dev/null 2>&1)"
-case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*"To let Claude Code ask Cowork questions: relay ask --setup"*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
+case "$out" in *"What you can do on this Mac"*"Change code with Copilot Cowork"*"To let Claude Code ask Copilot Cowork questions: relay ask --setup"*"Next: run relay start."*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
-case "$out" in *"Where things are:"*"  clones   $T/start-clones"*"  reviews  $T/start-reviews"*"  plans    "*"/plans"*"  relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
+case "$out" in *"Where things are"*"  clones   $T/start-clones"*"  reviews  $T/start-reviews"*"  plans    "*"/plans"*"  relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
 case "$out" in *"  colours  palette "*", theme "*"  relay setup changes any of them."*) ok "and the palette and theme" ;; *) bad "and the palette and theme" "$out" ;; esac
 # A practice round: the same beginning, with a repository made for it.
 gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
 rm -f "$T/clipboard"
 out="$(gp)"; rc=$?
-case "$rc:$out" in 0:*"What you can do on this Mac:"*"The practice changes ~/relay-practice, which this command made. relay practice --clean removes it."*"A prompt for Cowork is on your clipboard."*) ok "relay practice begins as start does, and says what it made" ;; *) bad "relay practice begins as start does, and says what it made" "$out" ;; esac
+case "$rc:$out" in 0:*"What you can do on this Mac"*"The practice changes ~/relay-practice, which this command made. relay practice --clean removes it."*"A prompt for Copilot Cowork is on your clipboard."*) ok "relay practice begins as start does, and says what it made" ;; *) bad "relay practice begins as start does, and says what it made" "$out" ;; esac
 check "it makes a repository that says the relay made it" test -f "$GH/relay-practice/.relay-practice"
 check "with one file that says hello" bash -c "[ \"\$(cat '$GH/relay-practice/greeting.txt')\" = hello ]"
 check "committed, with nothing left over" bash -c "[ -z \"\$(git -C '$GH/relay-practice' status --short)\" ] && git -C '$GH/relay-practice' rev-parse -q --verify HEAD >/dev/null"
@@ -2446,14 +2447,14 @@ mk_clean
 pl_out="$(cd "$SH/relay-practice" && env HOME="$SH" "$W" --dir "$SO" practice --clean 2>&1)"
 mk_clean
 sty_out="$(cd "$SH/relay-practice" && styled "" env HOME="$SH" "$W" --dir "$SO" practice --clean)"
-same_words "a styled practice --clean says what a piped one does" "$sty_out" "$pl_out"
+same_kit_words "a styled practice --clean says what a piped one does" "$sty_out" "$pl_out"
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed ~/relay-practice"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed Documents/Cowork/relay/scans/relay-practice.txt from OneDrive"*"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m Your terminal was in the folder that's gone now. Before anything else, run: ${ESC_BYTE}[36mcd ~${ESC_BYTE}[0m"*) ok "a styled practice --clean marks what it removed, and the command to type" ;; *) bad "a styled practice --clean marks what it removed, and the command to type" "$sty_out" ;; esac
 mk_clean
 pl_out="$(cd "$SH/relay-field-test" && env HOME="$SH" "$W" --dir "$SO" field-test --clean 2>&1)"
 mk_clean
 sty_out="$(cd "$SH/relay-field-test" && styled "" env HOME="$SH" "$W" --dir "$SO" field-test --clean)"
-same_words "a styled field-test --clean says what a piped one does" "$sty_out" "$pl_out"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed ~/relay-field-test"*"${ESC_BYTE}[2mCowork's task folders"*) ok "a styled field-test --clean marks what it removed, and dims what it left" ;; *) bad "a styled field-test --clean marks what it removed, and dims what it left" "$sty_out" ;; esac
+same_kit_words "a styled field-test --clean says what a piped one does" "$sty_out" "$pl_out"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Removed ~/relay-field-test"*"│${ESC_BYTE}[0m     Copilot Cowork's task folders"*) ok "a styled field-test --clean marks what it removed, and says what it left on the rail" ;; *) bad "a styled field-test --clean marks what it removed, and says what it left on the rail" "$sty_out" ;; esac
 rm -rf "$SH/relay-practice" "$SH/relay-field-test"
 mkdir -p "$SH/relay-practice"
 sty_out="$(styled "" env HOME="$SH" "$W" --dir "$SO" practice --clean)"
@@ -2859,7 +2860,7 @@ refuse "and makes no request" test -f "$AK/curl.args"
 case "$out" in *"Tell them to run this in a terminal, and wait for them:"*"relay answer $id"*) ok "an assistant is told the user has to see the answer first" ;; *) bad "an assistant is told the user has to see the answer first" "$out" ;; esac
 case "$out" in *"To have the relay wake Cowork itself, set it up once: relay ask --setup"*) ok "with no webhook it says how to get one" ;; *) bad "with no webhook it says how to get one" "$out" ;; esac
 # An ask is no use if Cowork has no skill to answer with, so relay ask says so, as a scan does.
-case "$out" in *"Cowork doesn't have the remote-pair-run skill yet. Run: relay start"*"Asked: "*) ok "relay ask says when Cowork has no skill to answer with" ;; *) bad "relay ask says when Cowork has no skill to answer with" "$out" ;; esac
+case "$out" in *"Copilot Cowork doesn't have the remote-pair-run skill yet. Run: relay start"*"Asked: "*) ok "relay ask says when Cowork has no skill to answer with" ;; *) bad "relay ask says when Cowork has no skill to answer with" "$out" ;; esac
 
 # The webhook. Its address and its secret are the one thing the relay reads from the Keychain.
 printf 'https://hooks.example/wake/abc123\n' >"$AK/llm-relay-wake-address"
@@ -3082,37 +3083,37 @@ st() { env HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$1" TERM_PROGRAM=Apple
 st_tty() { local k="$1"; shift; python3 "$TTY" "" env -u NO_COLOR LC_ALL=en_US.UTF-8 TERM=xterm HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$k" TERM_PROGRAM=Apple_Terminal "$@" "$W" --dir "$GO" start 2>&1; }
 out="$(st "$T/no-keychain")"
 case "$out" in *"$ESC"*) bad "piped, relay start has no colour codes" "$out" ;; *) ok "piped, relay start has no colour codes" ;; esac
-case "$out" in *"  Have Claude Code ask Cowork"*"set up with: relay ask --setup"*) ok "the list says Claude Code can ask Cowork, and how to set it up" ;; *) bad "the list says Claude Code can ask Cowork, and how to set it up" "$out" ;; esac
-check "and the note for Cowork has the line" grep -q '^  Have Claude Code ask Cowork  *set up with: relay ask --setup$' "$GN"
+case "$out" in *"- Have Claude Code ask Copilot Cowork"*"set up with: relay ask --setup"*) ok "the list says Claude Code can ask Cowork, and how to set it up" ;; *) bad "the list says Claude Code can ask Cowork, and how to set it up" "$out" ;; esac
+check "and the note for Cowork has the line" grep -q '^  Have Claude Code ask Copilot Cowork  *set up with: relay ask --setup$' "$GN"
 # Ready means all of it. A webhook with no skill for Claude Code is still to set up.
-expect "with a webhook and no skill for Claude Code, it is still to set up" "Have Claude Code ask Cowork                    set up with: relay ask --setup" st "$AK"
+expect "with a webhook and no skill for Claude Code, it is still to set up" "Have Claude Code ask Copilot Cowork            set up with: relay ask --setup" st "$AK"
 env HOME="$GH" "$W" --dir "$GO" ask --skill >/dev/null 2>&1
-expect "with the webhook and the skill it is ready" "Have Claude Code ask Cowork                    ready" st "$AK"
+expect "with the webhook and the skill it is ready" "Have Claude Code ask Copilot Cowork            ready" st "$AK"
 if printf '%s\n' "$out" | grep -qE "pre-commit +(ready|needs)"; then ok "a long line in the list keeps a space before its state"; else bad "a long line in the list keeps a space before its state" "$out"; fi
 rm -f "$T/clipboard"
 out="$(st_tty "$AK")"
-case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Cowork                    ready"*) ok "at a terminal, what is ready has a green mark, and still says ready" ;; *) bad "at a terminal, what is ready has a green mark, and still says ready" "$out" ;; esac
+case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Copilot Cowork            ready"*) ok "at a terminal, what is ready has a green mark, and still says ready" ;; *) bad "at a terminal, what is ready has a green mark, and still says ready" "$out" ;; esac
 # The words never change: with the codes and the marks taken out, a terminal's lines are the piped ones.
 strip_style() { sed "s/${ESC}\[[0-9;]*m//g; s/^  ✓ /  /; s/^  [!+] /  /; s/^✓ //; s/^[!+] //" | tr -d '\r'; }
 if [ "$(printf '%s\n' "$out" | strip_style | sed -n '/^What you can do/,/^  relay setup changes/p')" = "$(st "$AK" | sed -n '/^What you can do/,/^  relay setup changes/p')" ]; then ok "with the codes and marks taken out, it is what a pipe gets"; else bad "with the codes and marks taken out, it is what a pipe gets" "$(printf '%s\n' "$out" | strip_style | sed -n '/^What you can do/,/^  relay setup changes/p')"; fi
-case "$out" in *"${ESC}[1mWhat you can do on this Mac:${ESC}[0m"*"Where things are:"*"${ESC}[36mNext:${ESC}[0m open a new Cowork session and paste it."*) ok "headings are bold, and the last line is what to do next" ;; *) bad "headings are bold, and the last line is what to do next" "$out" ;; esac
+case "$out" in *" THIS MAC ${ESC}[0m  ${ESC}[1mWhat you can do on this Mac${ESC}[0m"*" WHERE ${ESC}[0m  ${ESC}[1mWhere things are${ESC}[0m"*"${ESC}[36mNext:${ESC}[0m open a new Copilot Cowork session and paste it."*) ok "start is a timeline, THIS MAC and WHERE, and the last line is what to do next" ;; *) bad "start is a timeline, THIS MAC and WHERE, and the last line is what to do next" "$out" ;; esac
 out2="$(st_tty "$T/no-keychain")"
-case "$out2" in *"${ESC}[1m${ESC}[33m!${ESC}[0m Have Claude Code ask Cowork                    set up with: ${ESC}[36mrelay ask --setup${ESC}[0m"*) ok "and what isn't has a bold yellow one, with the command to type in cyan" ;; *) bad "and what isn't has a bold yellow one, with the command to type in cyan" "$out2" ;; esac
+case "$out2" in *"${ESC}[1m${ESC}[33m!${ESC}[0m Have Claude Code ask Copilot Cowork            set up with: ${ESC}[36mrelay ask --setup${ESC}[0m"*) ok "and what isn't has a bold yellow one, with the command to type in cyan" ;; *) bad "and what isn't has a bold yellow one, with the command to type in cyan" "$out2" ;; esac
 case "$out2" in *"${ESC}[2mset up with"* | *"${ESC}[2mneeds "*) bad "what a thing needs is never dim" "$out2" ;; *) ok "what a thing needs is never dim" ;; esac
 # LLM_RELAY_STYLE is the relay's own switch. on wins over NO_COLOR, and off over a terminal.
 out="$(st_tty "$AK" NO_COLOR=1 LLM_RELAY_STYLE=on)"
-case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Cowork"*) ok "LLM_RELAY_STYLE=on turns style on, over NO_COLOR" ;; *) bad "LLM_RELAY_STYLE=on turns style on, over NO_COLOR" "$out" ;; esac
+case "$out" in *"${ESC}[32m✓${ESC}[0m Have Claude Code ask Copilot Cowork"*) ok "LLM_RELAY_STYLE=on turns style on, over NO_COLOR" ;; *) bad "LLM_RELAY_STYLE=on turns style on, over NO_COLOR" "$out" ;; esac
 out="$(st_tty "$AK" LLM_RELAY_STYLE=off)"
-case "$out" in *"$ESC"*) bad "LLM_RELAY_STYLE=off turns it off at a terminal" "$out" ;; *"Have Claude Code ask Cowork"*"ready"*) ok "LLM_RELAY_STYLE=off turns it off at a terminal" ;; *) bad "LLM_RELAY_STYLE=off turns it off at a terminal" "$out" ;; esac
+case "$out" in *"$ESC"*) bad "LLM_RELAY_STYLE=off turns it off at a terminal" "$out" ;; *"Have Claude Code ask Copilot Cowork"*"ready"*) ok "LLM_RELAY_STYLE=off turns it off at a terminal" ;; *) bad "LLM_RELAY_STYLE=off turns it off at a terminal" "$out" ;; esac
 out="$(env LLM_RELAY_STYLE=on HOME="$GH" PATH="$AB:$FB:$PATH" FAKE_KEYCHAIN="$AK" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" start </dev/null 2>&1)"
-case "$out" in *"$ESC"* | *"✓"*) bad "with nobody at a terminal it is plain, even with the switch on" "$out" ;; *"Have Claude Code ask Cowork"*) ok "with nobody at a terminal it is plain, even with the switch on" ;; *) bad "with nobody at a terminal it is plain, even with the switch on" "$out" ;; esac
+case "$out" in *"$ESC"* | *"✓"*) bad "with nobody at a terminal it is plain, even with the switch on" "$out" ;; *"Have Claude Code ask Copilot Cowork"*) ok "with nobody at a terminal it is plain, even with the switch on" ;; *) bad "with nobody at a terminal it is plain, even with the switch on" "$out" ;; esac
 out="$(st_tty "$AK" LC_ALL=C)"
-case "$out" in *"${ESC}[32m+${ESC}[0m Have Claude Code ask Cowork"*) ok "where the locale isn't UTF-8, the mark is a plus" ;; *) bad "where the locale isn't UTF-8, the mark is a plus" "$out" ;; esac
+case "$out" in *"${ESC}[32m+${ESC}[0m Have Claude Code ask Copilot Cowork"*) ok "where the locale isn't UTF-8, the mark is a plus" ;; *) bad "where the locale isn't UTF-8, the mark is a plus" "$out" ;; esac
 if grep -q "$ESC" "$GN"; then bad "the note for Cowork has no colour codes, even then"; else ok "the note for Cowork has no colour codes, even then"; fi
 if grep -q "$ESC" "$T/clipboard"; then bad "nor has the clipboard"; else ok "nor has the clipboard"; fi
-check "the note still says ready in words" grep -q '^  Change code with Cowork  *ready$' "$GN"
+check "the note still says ready in words" grep -q '^  Change code with Copilot Cowork  *ready$' "$GN"
 out="$(st_tty "$AK" NO_COLOR=1)"
-case "$out" in *"$ESC"*) bad "NO_COLOR turns it off at a terminal" "$out" ;; *"Have Claude Code ask Cowork"*"ready"*) ok "NO_COLOR turns it off at a terminal" ;; *) bad "NO_COLOR turns it off at a terminal" "$out" ;; esac
+case "$out" in *"$ESC"*) bad "NO_COLOR turns it off at a terminal" "$out" ;; *"Have Claude Code ask Copilot Cowork"*"ready"*) ok "NO_COLOR turns it off at a terminal" ;; *) bad "NO_COLOR turns it off at a terminal" "$out" ;; esac
 out="$(st_tty "$AK" TERM=dumb)"
 case "$out" in *"$ESC"*) bad "and so does a terminal that has no colour" "$out" ;; *) ok "and so does a terminal that has no colour" ;; esac
 # The wait is one line kept up to date, and an answer is shown as it was written.

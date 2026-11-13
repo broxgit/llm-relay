@@ -88,7 +88,7 @@ if [ -t 0 ] && (exec 3<>/dev/tty) 2>/dev/null; then AT_TERMINAL=yes; fi
 
 cleanup() {
   [ -z "$WORK" ] || rm -rf "$WORK"
-  [ -z "$RUN_STARTED" ] || say_dim "Relay run ended at $(now)."
+  [ -z "$RUN_STARTED" ] || ui_detail "Relay run ended at $(now)."
 }
 
 # setting <key> <default>: a line of the settings file `relay setup` writes, or of the old one
@@ -153,7 +153,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
   setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
          Run it again to update the skill. --skills copies your own Claude skills there too,
          each with a note on what to do differently in Cowork. setup --help has more.
-  skills Says where Cowork's copy of each of your skills stands, and changes nothing.
+  skills Says where Copilot Cowork's copy of each of your skills stands, and changes nothing.
   field-test
          Starts a guided test. It makes a small repository at ~/relay-field-test for the
          test to change, puts a note about this Mac's setup in OneDrive, with no paths or
@@ -946,7 +946,7 @@ forget_clone() {
   tmp="$KNOWN_CLONES.$$"
   awk -F '\t' -v a="$want" -v b="$real" '!($2 == a || (b != "" && $2 == b))' "$KNOWN_CLONES" >"$tmp" &&
     mv -f "$tmp" "$KNOWN_CLONES" || { rm -f "$tmp"; die "couldn't write $KNOWN_CLONES"; }
-  say_ok "Forgot the clone at $(tilde "$want"). The folder is as it was, and the relay remembers it again the next time you use it."
+  ui_item ok "Forgot the clone at $(tilde "$want"). The folder is as it was, and the relay remembers it again the next time you use it."
 }
 
 # scan_name <repository>: the name its scan gets in OneDrive. A scan is named after its folder,
@@ -3006,7 +3006,7 @@ EOF
 # What changed in OneDrive came from the cloud, so control characters don't reach the terminal.
 show_skill_change() {
   local name="$1"
-  say_warn "skill $name: Cowork's copy was changed in OneDrive after the relay made it. Lines starting with - are only in OneDrive's copy:"
+  ui_item warn "skill $name: Copilot Cowork's copy was changed in OneDrive after the relay made it. Lines starting with - are only in OneDrive's copy:"
   diff -r -u "$SKILLS_DIR/$name" "$SKILL_TMP/copy" 2>&1 | grep -v '^[-+]<!-- relay:stamp ' | grep -v '^diff -r' | head -n 60 | LC_ALL=C tr -d '\000-\010\013-\037\177' | sed 's/^/  /'
 }
 
@@ -3024,9 +3024,9 @@ remove_dropped_skills() {
     [ -d "$d" ] || continue
     copy_state "$d"
     case "$COPY_STATE" in
-      intact) rm -rf "$d" && say_ok "skill $name: no longer named, so Cowork's copy was removed" ;;
-      edited) say_warn "skill $name: no longer named, but its copy was changed in OneDrive, so it stays. Delete it in Finder if you don't want it." ;;
-      unreadable) say_warn "skill $name: no longer named, but this terminal app can't read its copy, so it stays. $UNREADABLE_WHY" ;;
+      intact) rm -rf "$d" && ui_item ok "skill $name: no longer named, so Copilot Cowork's copy was removed" ;;
+      edited) ui_item warn "skill $name: no longer named, but its copy was changed in OneDrive, so it stays. Delete it in Finder if you don't want it." ;;
+      unreadable) ui_item warn "skill $name: no longer named, but this terminal app can't read its copy, so it stays. $UNREADABLE_WHY" ;;
     esac
   done <<EOF
 $(printf '%s\n' "$1" | tr ':' '\n')
@@ -3063,24 +3063,24 @@ check_own_skill() {
   for s in $OWN_SKILLS; do
     if [ ! -f "$SKILLS_DIR/$s/SKILL.md" ]; then
       OWN_SKILL_STATE=missing
-      say_warn_err "Cowork doesn't have the $s skill yet. Run: $(typed_err "relay start")"
+      say_warn_err "Copilot Cowork doesn't have the $s skill yet. Run: $(typed_err "relay start")"
       return 0
     fi
     for f in "$REPO/cowork/$s"/*; do
       if ! can_read "$SKILLS_DIR/$s/$(basename "$f")"; then
         OWN_SKILL_STATE="unreadable from this terminal app"
-        say_warn_err "This terminal app can't read Cowork's copy of the $s skill, so the relay can't tell if it's current. $UNREADABLE_WHY"
+        say_warn_err "This terminal app can't read Copilot Cowork's copy of the $s skill, so the relay can't tell if it's current. $UNREADABLE_WHY"
         return 0
       fi
       if ! cmp -s "$f" "$SKILLS_DIR/$s/$(basename "$f")"; then
         theirs="$(cowork_skill_version)"
         if [ -n "$theirs" ] && version_newer "$theirs" "$RELAY_VERSION"; then
           OWN_SKILL_STATE="a newer relay's"
-          say_warn_err "Cowork's skills are from a newer relay, $theirs, and this Mac has $RELAY_VERSION. Another Mac of yours put them there. Upgrade this one: $(typed_err "brew update && brew upgrade llm-relay")"
+          say_warn_err "Copilot Cowork's skills are from a newer relay, $theirs, and this Mac has $RELAY_VERSION. Another Mac of yours put them there. Upgrade this one: $(typed_err "brew update && brew upgrade llm-relay")"
           return 0
         fi
         OWN_SKILL_STATE="not this relay's"
-        say_warn_err "Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: $(typed_err "relay start")"
+        say_warn_err "Copilot Cowork's copy of the $s skill isn't this relay's, so it may be out of date. Run: $(typed_err "relay start")"
         return 0
       fi
     done
@@ -3111,30 +3111,30 @@ sync_skills() {
         continue
         ;;
       same)
-        [ "$mode" != setup ] || say_ok "skill $name: Cowork's copy is in step (${SKILL_SHA:0:8})"
+        [ "$mode" != setup ] || ui_item ok "skill $name: Copilot Cowork's copy is in step (${SKILL_SHA:0:8})"
         continue
         ;;
       foreign)
         if [ "$mode" = setup ]; then
-          say_warn_err "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone."
+          say_warn_err "skill $name: Copilot Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone."
           echo "  To have the relay keep it in step with yours:" >&2
           echo "  1. See how it differs from yours: $(typed_err "diff -r \"$SKILLS_FROM/$name\" \"$SKILLS_DIR/$name\"")" >&2
-          echo "  2. Your own skill's text goes to Cowork whatever you do here. Only text that's in Cowork's copy and not in yours is at stake: it's gone from Cowork once you move the folder. To keep any of it, put it in $SKILLS_FROM/$name/COWORK.md, and the relay adds it to its copy. Otherwise skip this step." >&2
-          echo "  3. Move that folder out of Cowork's skills folder, and run $(typed_err "relay setup") again." >&2
+          echo "  2. Your own skill's text goes to Copilot Cowork whatever you do here. Only text that's in Copilot Cowork's copy and not in yours is at stake: it's gone from Copilot Cowork once you move the folder. To keep any of it, put it in $SKILLS_FROM/$name/COWORK.md, and the relay adds it to its copy. Otherwise skip this step." >&2
+          echo "  3. Move that folder out of Copilot Cowork's skills folder, and run $(typed_err "relay setup") again." >&2
         else
-          say_warn_err "skill $name: Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. $(typed_err "relay setup") says what to do."
+          say_warn_err "skill $name: Copilot Cowork's folder already has a skill of that name, which the relay didn't make. It's left alone. $(typed_err "relay setup") says what to do."
         fi
         rc=1
         continue
         ;;
       unreadable)
-        say_warn_err "skill $name: this terminal app can't read Cowork's copy, so it's left as it is. $UNREADABLE_WHY"
+        say_warn_err "skill $name: this terminal app can't read Copilot Cowork's copy, so it's left as it is. $UNREADABLE_WHY"
         rc=1
         continue
         ;;
       edited)
         if [ "$mode" != setup ]; then
-          say_warn_err "skill $name: Cowork's copy was changed in OneDrive, so it wasn't updated. $(typed_err "relay setup") shows the difference."
+          say_warn_err "skill $name: Copilot Cowork's copy was changed in OneDrive, so it wasn't updated. $(typed_err "relay setup") shows the difference."
           rc=1
           continue
         fi
@@ -3152,7 +3152,8 @@ sync_skills() {
         rc=1
         continue
       fi
-      ask_key "Replace Cowork's copy with a fresh one? [y]es, [n]o: " || KEY=n
+      ui_question "Replace Copilot Cowork's copy with a fresh one?" >/dev/tty
+      ask_key "$(ui_keys yes no)" || KEY=n
       case "$KEY" in
         y | Y) ;;
         *)
@@ -3163,14 +3164,14 @@ sync_skills() {
       esac
     fi
     if ! { rm -rf "${SKILLS_DIR:?}/$name" && mkdir -p "$SKILLS_DIR" && cp -R "$SKILL_TMP/copy" "$SKILLS_DIR/$name"; }; then
-      say_warn_err "skill $name: couldn't write Cowork's copy to $SKILLS_DIR"
+      say_warn_err "skill $name: couldn't write Copilot Cowork's copy to $SKILLS_DIR"
       rc=1
       continue
     fi
     case "$SKILL_STATE" in
-      absent) say_ok "skill $name: copied to Cowork (${SKILL_SHA:0:8})" ;;
-      stale) say_ok "skill $name: Cowork's copy was out of date, so it was made again (${SKILL_SHA:0:8})" ;;
-      edited) say_ok "skill $name: Cowork's copy replaced with a fresh one (${SKILL_SHA:0:8})" ;;
+      absent) ui_item ok "skill $name: copied to Copilot Cowork (${SKILL_SHA:0:8})" ;;
+      stale) ui_item ok "skill $name: Copilot Cowork's copy was out of date, so it was made again (${SKILL_SHA:0:8})" ;;
+      edited) ui_item ok "skill $name: Copilot Cowork's copy replaced with a fresh one (${SKILL_SHA:0:8})" ;;
     esac
   done <<EOF
 $(printf '%s\n' "$SKILLS" | tr ':' '\n')
@@ -3192,7 +3193,7 @@ check_skill_stamps() {
     cited="$(awk '/^##+ Coverage/ { on = 1; next } on && /^#/ { exit } on' "$file" | grep -o -- "$name [0-9a-f]\{8\}" | head -n 1)"
     [ -n "$cited" ] || continue
     sha="$(folder_hash "$SKILLS_FROM/$name")"
-    [ "${cited##* }" = "${sha:0:8}" ] || say_warn "Warning: this review used an older copy of your $name skill (${cited##* }, and yours is now ${sha:0:8}). A new Cowork session picks up the current one."
+    [ "${cited##* }" = "${sha:0:8}" ] || ui_item warn "Warning: this review used an older copy of your $name skill (${cited##* }, and yours is now ${sha:0:8}). A new Cowork session picks up the current one."
   done <<EOF
 $(printf '%s\n' "$SKILLS" | tr ':' '\n')
 EOF
@@ -3208,9 +3209,10 @@ cmd_skills() {
     *) die_usage "relay skills takes no arguments. Name the skills to copy with: relay setup --skills NAME:NAME" ;;
   esac
   if [ -z "$SKILLS" ]; then
-    echo "No skills are named. Name some with: $(typed "relay setup --skills NAME:NAME")"
+    ui_detail "No skills are named. Name some with: $(typed "relay setup --skills NAME:NAME")"
     return 0
   fi
+  ui_stage SKILLS "yours, in Copilot Cowork's folder"
   SKILL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
@@ -3218,17 +3220,17 @@ cmd_skills() {
     case "$SKILL_STATE" in
       same)
         if skill_matches "$name"; then
-          say_ok "$name: in step. Cowork's copy is your skill plus the relay's note (${SKILL_SHA:0:8})"
+          ui_item ok "$name: in step. Copilot Cowork's copy is your skill plus the relay's note (${SKILL_SHA:0:8})"
           continue
         fi
-        say_warn "$name: the copy's stamp is right, but its text isn't your skill's. $(typed "relay setup") makes it again."
+        ui_item warn "$name: the copy's stamp is right, but its text isn't your skill's. $(typed "relay setup") makes it again."
         ;;
-      stale) say_warn "$name: your skill has changed since Cowork's copy was made. $(typed "relay setup"), scan or mr updates it." ;;
-      absent) say_warn "$name: not in Cowork's folder yet. $(typed "relay setup") copies it." ;;
-      edited) say_warn "$name: Cowork's copy was changed in OneDrive. $(typed "relay setup") shows the difference." ;;
-      foreign) say_warn "$name: Cowork's folder has a skill of that name, which the relay didn't make. $(typed "relay setup") says what to do." ;;
-      unreadable) say_warn "$name: this terminal app can't read Cowork's copy, so the relay can't say where it stands. $UNREADABLE_WHY" ;;
-      nosource) say_warn "$name: there's no $SKILLS_FROM/$name/SKILL.md." ;;
+      stale) ui_item warn "$name: your skill has changed since Copilot Cowork's copy was made. $(typed "relay setup"), scan or mr updates it." ;;
+      absent) ui_item warn "$name: not in Copilot Cowork's folder yet. $(typed "relay setup") copies it." ;;
+      edited) ui_item warn "$name: Copilot Cowork's copy was changed in OneDrive. $(typed "relay setup") shows the difference." ;;
+      foreign) ui_item warn "$name: Copilot Cowork's folder has a skill of that name, which the relay didn't make. $(typed "relay setup") says what to do." ;;
+      unreadable) ui_item warn "$name: this terminal app can't read Copilot Cowork's copy, so the relay can't say where it stands. $UNREADABLE_WHY" ;;
+      nosource) ui_item warn "$name: there's no $SKILLS_FROM/$name/SKILL.md." ;;
     esac
     rc=1
   done <<EOF
@@ -3279,22 +3281,23 @@ make_field_repo() {
 
 clean_field_test() {
   local f inside=""
+  ui_stage CLEAN "what relay field-test made"
   if [ -f "$FIELD_REPO/.relay-field-test" ]; then
     case "$(pwd -P 2>/dev/null)/" in "$(cd "$FIELD_REPO" 2>/dev/null && pwd -P)/"*) inside=1 ;; esac
     # Out of it first, so nothing this command runs next is left in a folder that's gone.
     cd "$HOME" 2>/dev/null || cd / || true
-    rm -rf "$FIELD_REPO" && say_ok "Removed ~/relay-field-test"
+    rm -rf "$FIELD_REPO" && ui_item ok "Removed ~/relay-field-test"
   elif [ -e "$FIELD_REPO" ]; then
-    say_warn "Left ~/relay-field-test: relay field-test didn't make it."
+    ui_item warn "Left ~/relay-field-test: relay field-test didn't make it."
   else
     echo "No test repository to remove."
   fi
   for f in relay/field-test/note.txt relay/scans/relay-field-test.txt relay/scans/relay-field-test.tar.gz; do
-    [ ! -f "$COWORK/$f" ] || { rm -f "$COWORK/$f" && say_ok "Removed Documents/Cowork/$f from OneDrive"; }
+    [ ! -f "$COWORK/$f" ] || { rm -f "$COWORK/$f" && ui_item ok "Removed Documents/Cowork/$f from OneDrive"; }
   done
   rmdir "$COWORK/relay/field-test" 2>/dev/null
-  say_dim "Cowork's task folders, and the reports under Documents/Cowork/relay, are left as they are."
-  [ -z "$inside" ] || say_warn "Your terminal was in the folder that's gone now. Before anything else, run: $(typed "cd ~")"
+  ui_detail "Copilot Cowork's task folders, and the reports under Documents/Cowork/relay, are left as they are."
+  [ -z "$inside" ] || ui_item warn "Your terminal was in the folder that's gone now. Before anything else, run: $(typed "cd ~")"
 }
 
 # named_skill_lines: where each of the user's skills stands in Cowork's folder, in plain words,
@@ -3334,14 +3337,14 @@ EOF
 # starting section has to say when to give its command: a smoke test holds all three together,
 # so the guided way in can't fall behind what the relay does.
 FEATURES="Try a practice round first|git|practice
-Change code with Cowork|git|scan
+Change code with Copilot Cowork|git|scan
 Review a merge request|glab python3|mr
 Review a branch before the merge request|git|branch
 Start from a Jira ticket|acli python3|ticket
 Run Go checks in a review|go|mr
 Lint a review with the repository's pre-commit|pre-commit|mr
 Send a repository's wiki with it|wiki|scan
-Have Claude Code ask Cowork|security curl|ask"
+Have Claude Code ask Copilot Cowork|security curl|ask"
 
 # tool_commands <tool>: the parts of its hint that are commands to type, one a line, so a
 # terminal can show them in the colour kept for that.
@@ -3408,10 +3411,11 @@ feature_lines() {
     if [ "$begins" = ask ] && [ -z "$missing" ]; then
       if ! has_webhook || [ ! -f "$HOME/.claude/skills/relay-ask/SKILL.md" ]; then missing="set up with: relay ask --setup"; fi
     fi
-    if [ "$how" = shown ] && [ "$STYLE" = yes ]; then
-      # The same words as the plain line, with a mark in front and the commands in their colour.
+    if [ "$how" = shown ]; then
+      # On screen, an item of the kit: the same words as the note's line, with a mark in front
+      # and the commands in typed's colour.
       if [ -z "$missing" ]; then
-        printf '  %s%-47s%s\n' "$M_OK" "$what" "ready"
+        ui_item ok "$(printf '%-47s%s' "$what" "ready")"
       else
         missing="$(typed_in "$missing" "relay ask --setup")"
         for t in $tools; do
@@ -3421,7 +3425,7 @@ feature_lines() {
 $(tool_commands "$t")
 EOC
         done
-        printf '  %s%-47s%s\n' "$M_WARN" "$what" "$missing"
+        ui_item warn "$(printf '%-47s' "$what")$missing"
       fi
     else
       printf '  %-47s%s\n' "$what" "${missing:-ready}"
@@ -3438,7 +3442,7 @@ install_own_skills() {
     target="$1/Documents/Cowork/skills/$key"
     mkdir -p "$target" || die "can't create $target"
     cp "$REPO/cowork/$key"/* "$target/" || die "can't copy the skill to $target"
-    say_ok "installed: $target"
+    ui_item ok "installed: $target"
   done
 }
 
@@ -3477,20 +3481,21 @@ make_practice_repo() {
 
 clean_practice() {
   local f inside=""
+  ui_stage CLEAN "what relay practice made"
   if [ -f "$PRACTICE_REPO/.relay-practice" ]; then
     case "$(pwd -P 2>/dev/null)/" in "$(cd "$PRACTICE_REPO" 2>/dev/null && pwd -P)/"*) inside=1 ;; esac
     # Out of it first, so nothing this command runs next is left in a folder that's gone.
     cd "$HOME" 2>/dev/null || cd / || true
-    rm -rf "$PRACTICE_REPO" && say_ok "Removed ~/relay-practice"
+    rm -rf "$PRACTICE_REPO" && ui_item ok "Removed ~/relay-practice"
   elif [ -e "$PRACTICE_REPO" ]; then
-    say_warn "Left ~/relay-practice: relay practice didn't make it."
+    ui_item warn "Left ~/relay-practice: relay practice didn't make it."
   else
     echo "No practice repository to remove."
   fi
   for f in relay/scans/relay-practice.txt relay/scans/relay-practice.tar.gz; do
-    [ ! -f "$COWORK/$f" ] || { rm -f "$COWORK/$f" && say_ok "Removed Documents/Cowork/$f from OneDrive"; }
+    [ ! -f "$COWORK/$f" ] || { rm -f "$COWORK/$f" && ui_item ok "Removed Documents/Cowork/$f from OneDrive"; }
   done
-  [ -z "$inside" ] || say_warn "Your terminal was in the folder that's gone now. Before anything else, run: $(typed "cd ~")"
+  [ -z "$inside" ] || ui_item warn "Your terminal was in the folder that's gone now. Before anything else, run: $(typed "cd ~")"
 }
 
 # relay start: the one command to begin with. It gets Cowork this relay's skills, says what this
@@ -3524,15 +3529,15 @@ cmd_practice() {
 # begin_session <start|practice>: what both of those do.
 begin_session() {
   local mode="$1" dest note prompt changed="" runs=0
-  echo "relay $RELAY_VERSION"
+  ui_stage START "relay $RELAY_VERSION"
   check_own_skill 2>/dev/null
   case "$OWN_SKILL_STATE" in
     "this relay's") ;;
     unreadable*)
-      echo "This terminal app can't read Cowork's copy of the relay's skills, so the relay can't tell if they're current. $UNREADABLE_WHY" >&2
+      echo "This terminal app can't read Copilot Cowork's copy of the relay's skills, so the relay can't tell if they're current. $UNREADABLE_WHY" >&2
       ;;
     "a newer relay's")
-      say_warn "Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Another Mac of yours put them there. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
+      ui_item warn "Copilot Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Another Mac of yours put them there. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
       ;;
     *)
       install_own_skills "$ONEDRIVE" >/dev/null
@@ -3549,26 +3554,21 @@ begin_session() {
   sync_skills quiet || true
   SKILL_TMP="$WORK/skills"
   mkdir -p "$SKILL_TMP"
-  echo
-  say_head "What you can do on this Mac:"
+  ui_stage "THIS MAC" "What you can do on this Mac"
   feature_lines shown
-  echo
-  say_head "Where things are:"
-  printf '  %sclones%s   %s\n' "$S_DIM" "$S_OFF" "$(tilde "$CLONES_DIRS")"
-  printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
-  printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
-  printf '  %scolours%s  palette %s, theme %s\n' "$S_DIM" "$S_OFF" "$PALETTE" "$THEME"
-  printf '  %s changes any of them.\n' "$(typed "relay setup")"
+  ui_stage WHERE "Where things are"
+  ui_detail "clones   $(tilde "$CLONES_DIRS")"
+  ui_detail "reviews  $(tilde "$REVIEWS_DIR")"
+  ui_detail "plans    $(tilde "$PLANS_DIR")"
+  ui_detail "colours  palette $PALETTE, theme $THEME"
+  ui_detail "$(typed "relay setup") changes any of them."
   # Reviews and plans are made when the first is saved. Clones have to be there already.
   if ! clones_folder_there; then
-    say_warn "$(tilde "$CLONES_DIRS") isn't there, so a merge request's clone won't be found. Say where your clones are: $(typed "relay setup --clones FOLDER")"
+    ui_item warn "$(tilde "$CLONES_DIRS") isn't there, so a merge request's clone won't be found. Say where your clones are: $(typed "relay setup --clones FOLDER")"
   fi
   case "${TERM_PROGRAM:-}" in
     Apple_Terminal) ;;
-    *)
-      echo
-      echo "This is ${TERM_PROGRAM:-a terminal app that gives no name}, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply: macOS has refused other terminal apps on OneDrive files."
-      ;;
+    *) ui_item warn "This is ${TERM_PROGRAM:-a terminal app that gives no name}, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply: macOS has refused other terminal apps on OneDrive files." ;;
   esac
   [ ! -f "$REPORTS/.relay-runs" ] || runs="$(grep -c . "$REPORTS/.relay-runs" || true)"
   dest="$COWORK/relay/start"
@@ -3606,27 +3606,25 @@ begin_session() {
   SKILL_TMP=""
   if [ "$mode" = practice ]; then
     prompt="Use remote-pair-run for a practice round. I've just run relay practice. With nothing attached, read Documents/Cowork/relay/start/note.txt from my OneDrive first, then follow the skill's section on a practice round."
-    echo
-    echo "The practice changes ~/relay-practice, which this command made. $(typed "relay practice --clean") removes it."
+    ui_detail "The practice changes ~/relay-practice, which this command made. $(typed "relay practice --clean") removes it."
   else
     prompt="Use remote-pair-run. I've just run relay start. With nothing attached, read Documents/Cowork/relay/start/note.txt from my OneDrive first, then follow the skill's section on starting."
   fi
-  echo
   if [ -n "$changed" ]; then
-    echo "Cowork takes up to 10 minutes to see its new skills. It's $(date +%H:%M) now, so start at $(clock_in 10)."
+    ui_item warn "Copilot Cowork takes up to 10 minutes to see its new skills. It's $(date +%H:%M) now, so start at $(clock_in 10)."
   fi
+  ui_turn
   if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    say_ok "A prompt for Cowork is on your clipboard."
+    ui_step --done --emoji "📋" 1 "Open a new Copilot Cowork session and paste the prompt." "A prompt for Copilot Cowork is on your clipboard."
   else
-    echo "Paste this into Cowork:"
-    echo
-    printf '%s\n' "$prompt"
+    ui_step 1 "Paste this into Copilot Cowork:"
+    ui_card "$prompt"
     echo
   fi
   if [ -n "$changed" ]; then
-    say_next "at $(clock_in 10), open a new Cowork session and paste it."
+    ui_next "at $(clock_in 10), open a new Copilot Cowork session and paste it."
   else
-    say_next "open a new Cowork session and paste it."
+    ui_next "open a new Copilot Cowork session and paste it."
   fi
 }
 
@@ -3677,24 +3675,24 @@ cmd_field_test() {
     list_tools
   } >"$note"
   mkdir -p "$dest" && cp "$note" "$dest/note.txt" || { rm -rf "$SKILL_TMP"; die "couldn't write to $dest"; }
-  cat "$note"
+  # What goes to OneDrive, as it is: the note Copilot Cowork reads.
+  ui_stage NOTE "LLM-RELAY FIELD TEST" "this Mac's setup, for Copilot Cowork and the report"
+  sed 1d "$note" | while IFS= read -r l; do ui_detail "$l"; done
   rm -rf "$SKILL_TMP"
   SKILL_TMP=""
-  echo
-  echo "The test changes ~/relay-field-test, which this command made. $(typed "relay field-test --clean") removes it afterwards."
-  say_ok "Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt"
-  [ "$OWN_SKILL_STATE" = "this relay's" ] || say_warn "Cowork needs this relay's skills first. Run $(typed "relay setup"), wait 10 minutes, and start a new Cowork session."
+  ui_detail "The test changes ~/relay-field-test, which this command made. $(typed "relay field-test --clean") removes it afterwards."
+  ui_stage SENT "OneDrive: Documents/Cowork/relay/field-test/note.txt"
+  [ "$OWN_SKILL_STATE" = "this relay's" ] || ui_item warn "Copilot Cowork needs this relay's skills first. Run $(typed "relay setup"), wait 10 minutes, and start a new Copilot Cowork session."
   prompt="Use relay-field-test to guide me through testing the relay, and write the report for its developer. With nothing attached, read Documents/Cowork/relay/field-test/note.txt from my OneDrive first."
-  echo
+  ui_turn
   if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    say_head "Paste this into a new Cowork session. It's on your clipboard:"
+    ui_step --done --emoji "📋" 1 "Paste this into a new Copilot Cowork session." "It's on your clipboard."
   else
-    say_head "Paste this into a new Cowork session:"
+    ui_step 1 "Paste this into a new Copilot Cowork session."
   fi
+  ui_card "$prompt"
   echo
-  printf '%s\n' "$prompt"
-  echo
-  echo "Use Apple's Terminal, and keep to one tab. If Cowork's steps get hard to follow, send it: $(typed "Use the YOUR TURN block format.")"
+  ui_detail "Use Apple's Terminal, and keep to one tab. If Copilot Cowork's steps get hard to follow, send it: $(typed "Use the YOUR TURN block format.")"
 }
 
 # ---- setup -------------------------------------------------------------------
@@ -3728,7 +3726,7 @@ relay_setting() {
   old="$(setting "$key" "")"
   answer="$passed"
   if [ -z "$answer" ] && [ -z "$old" ] && [ "$AT_TERMINAL" = yes ]; then
-    printf '%s [%s]: ' "$question" "$default" >/dev/tty
+    ui_prompt "$question" "$default" >/dev/tty
     IFS= read -r answer </dev/tty || answer=""
     answer="${answer:-$default}"
   fi
@@ -3748,11 +3746,11 @@ relay_choice() {
   answer="$passed"
   if [ -z "$answer" ] && [ -z "$(setting "$key" "")" ] && [ -z "$(printenv "$variable")" ] && [ "$AT_TERMINAL" = yes ]; then
     while :; do
-      printf '%s [%s]: ' "$question" "$default" >/dev/tty
+      ui_prompt "$question" "$default" >/dev/tty
       IFS= read -r answer </dev/tty || answer=""
       answer="${answer:-$default}"
       case " $* " in *" $answer "*) break ;; esac
-      printf '  Answer one of: %s.\n' "$*" >/dev/tty
+      ui_item warn "Answer one of: $*." >/dev/tty
     done
   fi
   [ -n "$answer" ] || return 0
@@ -3822,7 +3820,7 @@ folder if there are several, or it syncs elsewhere. Run it again to update the s
 
 --reviews is where relay review saves merge request reviews. --clones is where relay mr
 looks for your clones, with several folders separated by colons. At a terminal, it asks
-for each the first time. --plans is where relay review saves a plan Cowork wrote, and
+for each the first time. --plans is where relay review saves a plan Copilot Cowork wrote, and
 where relay branch looks for one. It's ~/plans unless you say otherwise.
 
 --palette colorblind uses blue and magenta for ok and an error, in place of green and red,
@@ -3831,12 +3829,12 @@ light background; auto reads the terminal's word for it where it gives one, and 
 otherwise. At a terminal, it asks for each the first time. LLM_PALETTE and LLM_THEME, which
 llm-wiki reads too, win over both for one shell.
 
---forget drops one clone from the ones the relay remembers and tells Cowork about, and
+--forget drops one clone from the ones the relay remembers and tells Copilot Cowork about, and
 does nothing else. The folder isn't touched. relay start lists them.
 
---skills names your own Claude skills to copy to Cowork too, separated by colons, such as
+--skills names your own Claude skills to copy to Copilot Cowork too, separated by colons, such as
 mr-review:simple-english. Each copy is your skill with a note on top saying what to do
-differently in Cowork, and is made again whenever your skill changes. --skills none stops
+differently in Copilot Cowork, and is made again whenever your skill changes. --skills none stops
 copying them, and removes the copies. --skills-from is where your skills live, if it isn't
 ~/.claude/skills. relay skills shows where each one stands.
 EOF
@@ -3853,12 +3851,14 @@ EOF
   [ -d "$dir" ] || die "no such folder: $dir"
   SKILLS_DIR="$dir/Documents/Cowork/skills"
   check_own_skill 2>/dev/null
+  ui_stage SKILLS "the relay's, in Copilot Cowork's folder"
   if [ "$OWN_SKILL_STATE" = "a newer relay's" ]; then
-    say_warn "Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Another Mac of yours put them there. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
+    ui_item warn "Copilot Cowork's skills are from a newer relay, $(cowork_skill_version), and this Mac has $RELAY_VERSION, so they were left as they are. Another Mac of yours put them there. Upgrade this one: $(typed "brew update && brew upgrade llm-relay")"
   else
     install_own_skills "$dir"
   fi
   refresh_claude_skill
+  ui_stage SETTINGS "in $(tilde "$SETTINGS")"
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
   [ -z "$plans" ] || relay_setting plans "$plans" "$HOME/plans" ""
@@ -3866,7 +3866,7 @@ EOF
   relay_choice theme "$theme" auto LLM_THEME "Your terminal's background: auto, dark or light?" auto dark light
   for key in reviews clones plans palette theme; do
     value="$(setting "$key" "")"
-    [ -z "$value" ] || say_dim "relay setting: $key=$value"
+    [ -z "$value" ] || ui_detail "relay setting: $key=$value"
   done
   if [ -n "$skills_from" ]; then
     # shellcheck disable=SC2088
@@ -3882,12 +3882,12 @@ EOF
   fi
   SKILLS_DIR="$dir/Documents/Cowork/skills"
   sync_skills setup "$before" || rc=1
-  [ -z "$SKILLS" ] || say_dim "relay setting: skills=$SKILLS, from $SKILLS_FROM"
-  say_head "What you can do on this Mac:"
+  [ -z "$SKILLS" ] || ui_detail "relay setting: skills=$SKILLS, from $SKILLS_FROM"
+  ui_stage "THIS MAC" "What you can do on this Mac"
   feature_lines shown
-  echo "Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps."
-  say_next "run $(typed "relay start"). It puts a prompt for Cowork on your clipboard."
-  echo "To let Claude Code ask Cowork questions: $(typed "relay ask --setup")"
+  ui_detail "Copilot Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps."
+  ui_detail "To let Claude Code ask Copilot Cowork questions: $(typed "relay ask --setup")"
+  ui_next "run $(typed "relay start"). It puts a prompt for Copilot Cowork on your clipboard."
   return "$rc"
 }
 
@@ -4089,13 +4089,13 @@ refresh_claude_skill() {
   [ -f "$to" ] && [ -f "$from" ] || return 0
   ! cmp -s "$from" "$to" || return 0
   if ! grep -q '^This skill is for relay [0-9]' "$to" 2>/dev/null; then
-    say_warn "$(tilde "$to") isn't the relay's own, so it was left as it is. $(typed "relay ask --skill") replaces it."
+    ui_item warn "$(tilde "$to") isn't the relay's own, so it was left as it is. $(typed "relay ask --skill") replaces it."
     return 0
   fi
   if cp "$from" "$to" 2>/dev/null; then
-    say_ok "Claude Code's relay-ask skill was an older relay's, so it was updated. A new Claude Code session has it."
+    ui_item ok "Claude Code's relay-ask skill was an older relay's, so it was updated. A new Claude Code session has it."
   else
-    say_warn "Claude Code's relay-ask skill is an older relay's, and couldn't be updated: $(tilde "$to")"
+    ui_item warn "Claude Code's relay-ask skill is an older relay's, and couldn't be updated: $(tilde "$to")"
   fi
 }
 
@@ -4105,8 +4105,8 @@ install_claude_skill() {
   [ -f "$REPO/claude/relay-ask/SKILL.md" ] || die "this relay came without the relay-ask skill"
   mkdir -p "$to" || die "can't create $to"
   cp "$REPO/claude/relay-ask/SKILL.md" "$to/SKILL.md" || die "can't copy the skill to $to"
-  say_ok "installed: $(tilde "$to")/SKILL.md"
-  say_dim "A new Claude Code session will have it."
+  ui_item ok "installed: $(tilde "$to")/SKILL.md"
+  ui_detail "A new Claude Code session will have it."
 }
 
 # wait_for_answer <id>: waits until the answer is on this Mac and whole, in $WORK/answer.md. It

@@ -36,7 +36,7 @@ Cowork can't reach your files or run your build, but it can still change your co
 | Save the review or plan Cowork wrote | `relay review <task-folder>/<deliverable>` | [Review a merge request](#review-a-merge-request) |
 | Put a fix Cowork proved in my working tree | `relay apply <task-folder>/<deliverable> --repo ~/code/thing` | [Several attempts in one round](#several-attempts-in-one-round), [`apply`](#apply) |
 | Let Cowork use my own Claude skills | `relay setup --skills NAME:NAME` | [Your own skills in Cowork](#your-own-skills-in-cowork) |
-| Have Claude Code ask Cowork a question | `relay ask --setup`, once | [Ask Cowork from Claude Code](#ask-cowork-from-claude-code) |
+| Have Claude Code ask Copilot Cowork a question | `relay ask --setup`, once | [Ask Cowork from Claude Code](#ask-cowork-from-claude-code) |
 | Change where reviews and clones live | `relay setup` | [Settings](#settings) |
 | Get tab completion | `relay completion zsh` | [Settings](#settings) |
 | Test relay on my Mac, or help improve it | `relay field-test` | [Have Cowork walk you through a test](#have-cowork-walk-you-through-a-test) |
