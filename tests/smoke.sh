@@ -2190,10 +2190,10 @@ not on origin
 Ready after
 Waiting for OneDrive
 Removed
-Woke Cowork.
+Woke Copilot Cowork.
 Waiting for Cowork
-Cowork's webhook didn't take the request
-This Mac has no webhook to wake Cowork with
+Copilot Cowork's webhook didn't take the request
+This Mac has no webhook to wake Copilot Cowork with
 No answer after
 Nothing was saved.
 Tell them to run this in a terminal, and wait for them:
@@ -2855,10 +2855,10 @@ check "the ask is in OneDrive, under the relay's folder" test -f "$AA/$id.md"
 check "it holds the question" grep -q '^What does the uploader retry on$' "$AA/$id.md"
 check "and where the answer goes, outside Documents/Cowork" grep -q "^write the answer to: Documents/relay-answers/$id.md\$" "$AA/$id.md"
 check "the answers folder is made, outside Documents/Cowork" test -d "$AR"
-case "$out" in *"This Mac has no webhook to wake Cowork with, so paste this into a Cowork session:"*"Use relay-answer. Answer the asks in Documents/Cowork/relay/asks in my OneDrive."*) ok "with no webhook it gives a line to paste" ;; *) bad "with no webhook it gives a line to paste" "$out" ;; esac
+case "$out" in *"This Mac has no webhook to wake Copilot Cowork with, so paste this into a Copilot Cowork session:"*"Use relay-answer. Answer the asks in Documents/Cowork/relay/asks in my OneDrive."*) ok "with no webhook it gives a line to paste" ;; *) bad "with no webhook it gives a line to paste" "$out" ;; esac
 refuse "and makes no request" test -f "$AK/curl.args"
 case "$out" in *"Tell them to run this in a terminal, and wait for them:"*"relay answer $id"*) ok "an assistant is told the user has to see the answer first" ;; *) bad "an assistant is told the user has to see the answer first" "$out" ;; esac
-case "$out" in *"To have the relay wake Cowork itself, set it up once: relay ask --setup"*) ok "with no webhook it says how to get one" ;; *) bad "with no webhook it says how to get one" "$out" ;; esac
+case "$out" in *"To have the relay wake Copilot Cowork itself, set it up once: relay ask --setup"*) ok "with no webhook it says how to get one" ;; *) bad "with no webhook it says how to get one" "$out" ;; esac
 # An ask is no use if Cowork has no skill to answer with, so relay ask says so, as a scan does.
 case "$out" in *"Copilot Cowork doesn't have the remote-pair-run skill yet. Run: relay start"*"Asked: "*) ok "relay ask says when Cowork has no skill to answer with" ;; *) bad "relay ask says when Cowork has no skill to answer with" "$out" ;; esac
 
@@ -2868,7 +2868,7 @@ printf 'only-the-keychain-knows\n' >"$AK/llm-relay-wake-secret"
 echo 'How is the cache filled?' >"$T/ask-question.txt"
 out="$(ak ask --from "$T/ask-question.txt")"
 id2="$(ask_id "$out")"
-case "$out" in *"Woke Cowork."*) ok "with a webhook in the Keychain it wakes Cowork" ;; *) bad "with a webhook in the Keychain it wakes Cowork" "$out" ;; esac
+case "$out" in *"Woke Copilot Cowork."*) ok "with a webhook in the Keychain it wakes Cowork" ;; *) bad "with a webhook in the Keychain it wakes Cowork" "$out" ;; esac
 check "--from takes the question from a file" grep -q '^How is the cache filled?$' "$AA/$id2.md"
 check "the address reaches curl on its standard input" grep -q '^url = "https://hooks.example/wake/abc123"$' "$AK/curl.stdin"
 check "and the secret, in the header Cowork reads" grep -q '^header = "X-Trigger-Secret: only-the-keychain-knows"$' "$AK/curl.stdin"
@@ -2878,7 +2878,7 @@ refuse "nor written to the ask" grep -rq -e 'hooks.example' -e 'only-the-keychai
 refuse "the request carries no question" grep -q -e 'cache' "$AK/curl.args" "$AK/curl.stdin"
 if [ "$(grep -c 'find-generic-password -s "\$WAKE_[A-Z_]*" -w' "$W")" = 2 ] && [ "$(grep -c -e '-w 2>/dev/null' "$W")" = 2 ]; then ok "the Keychain's values are read in two places, both in the request"; else bad "the Keychain's values are read in two places, both in the request"; fi
 out="$(env FAKE_CURL_CODE=500 HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" "$W" --dir "$AO" ask one more </dev/null 2>&1)"
-case "$out" in *"Cowork's webhook didn't take the request (HTTP 500). Paste this into a Cowork session:"*) ok "a request that isn't taken is said, with the line to paste" ;; *) bad "a request that isn't taken is said, with the line to paste" "$out" ;; esac
+case "$out" in *"Copilot Cowork's webhook didn't take the request (HTTP 500). Paste this into a Copilot Cowork session:"*) ok "a request that isn't taken is said, with the line to paste" ;; *) bad "a request that isn't taken is said, with the line to paste" "$out" ;; esac
 
 # What goes with a question: a file's text, and a repository as a scan.
 printf 'line one\nline two\n' >"$T/ask-notes.log"
@@ -2920,7 +2920,7 @@ case "$rc:$out" in 0:*) bad "n saves nothing" "$out" ;; *"On a timeout"*"Nothing
 [ "$rc" = 1 ] && ok "and exits 1: the user said no, which waiting won't change" || bad "and exits 1: the user said no, which waiting won't change" "exit $rc"
 refuse "and leaves no file" test -e "$AH/relay-answers/$id.md"
 out="$(ak_key y answer "$id")"; rc=$?
-case "$rc:$out" in 0:*"Cowork's answer to $id"*"On a timeout"*"Saved: ~/relay-answers/$id.md"*) ok "y saves it where the assistant reads it" ;; *) bad "y saves it where the assistant reads it" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"Copilot Cowork's answer to $id"*"On a timeout"*"Saved: ~/relay-answers/$id.md"*) ok "y saves it where the assistant reads it" ;; *) bad "y saves it where the assistant reads it" "exit $rc: $out" ;; esac
 check "the saved answer is the answer" grep -q '^end of answer$' "$AH/relay-answers/$id.md"
 if LC_ALL=C grep -q "$(printf '\033')" "$AH/relay-answers/$id.md"; then bad "with no control characters, so it can't drive a terminal"; else ok "with no control characters, so it can't drive a terminal"; fi
 expect "an answer already saved isn't asked about again" "Already saved: ~/relay-answers/$id.md" ak_key "" answer "$id"
@@ -2928,7 +2928,7 @@ printf 'answer to: something-else\n\nend of answer\n' >"$AR/$id2.md"
 expect "an answer that names another ask is pointed out" "its first line doesn't say it answers $id2" ak_key n answer "$id2"
 : >"$AK/curl.args"
 out="$(ASK_WAIT=6 ASK_AGAIN=1 ak_key y answer "$id3")"
-case "$out" in *"so Cowork was woken once more."*"No answer after"*"relay answer $id3"*) ok "with no answer it wakes Cowork again, then says what to do" ;; *) bad "with no answer it wakes Cowork again, then says what to do" "$out" ;; esac
+case "$out" in *"so Copilot Cowork was woken once more."*"No answer after"*"relay answer $id3"*) ok "with no answer it wakes Cowork again, then says what to do" ;; *) bad "with no answer it wakes Cowork again, then says what to do" "$out" ;; esac
 check "by the same request" grep -q . "$AK/curl.args"
 # A run that finds every ask answered does nothing and leaves a conversation, so one is enough.
 if [ "$(grep -c . "$AK/curl.args")" = 1 ] && [ "$(printf '%s\n' "$out" | grep -c 'woken once more')" = 1 ]; then ok "and only once, however long it waits"; else bad "and only once, however long it waits" "$out"; fi
@@ -2945,7 +2945,7 @@ check "the user guide says what 75 means" grep -q '^\*\*Exit codes\.\*\* .*75' "
 # An answer that is late is most likely in OneDrive and not on the Mac. Twice in five field
 # runs only pausing and resuming OneDrive brought it down.
 out="$(ASK_WAIT=4 ASK_STALL=1 ak_key "" answer "$id3")"
-case "$out" in *"Cowork has probably answered, and OneDrive hasn't brought the answer to this Mac."*"pause syncing, then resume it."*"relay answer $id3"*) ok "a late answer is called a likely stall in OneDrive, with what to do" ;; *) bad "a late answer is called a likely stall in OneDrive, with what to do" "$out" ;; esac
+case "$out" in *"Copilot Cowork has probably answered, and OneDrive hasn't brought the answer to this Mac."*"pause syncing, then resume it."*"relay answer $id3"*) ok "a late answer is called a likely stall in OneDrive, with what to do" ;; *) bad "a late answer is called a likely stall in OneDrive, with what to do" "$out" ;; esac
 case "$out" in *"Restart OneDrive"*) bad "with no OneDrive running it offers no restart" "$out" ;; *) ok "with no OneDrive running it offers no restart" ;; esac
 # A OneDrive that can be quit and opened. Opening it brings down what was stuck.
 OB="$T/ask-onedrive-bin"
@@ -2973,7 +2973,7 @@ chmod +x "$OB/pgrep" "$OB/osascript" "$OB/open"
 od_key() { local keys="$1"; shift; env HOME="$AH" PATH="$OB:$AB:$PATH" FAKE_KEYCHAIN="$AK" FAKE_ANSWERS="$AR" RELAY_WAIT="${ASK_WAIT:-8}" RELAY_POLL=1 RELAY_ASK_AGAIN=100 RELAY_ASK_STALL=1 python3 "$TTY" "$keys" "$W" --dir "$AO" "$@" 2>&1; }
 : >"$AK/onedrive-running"
 out="$(ASK_WAIT=4 od_key n answer "$id3")"
-case "$out" in *"Restart OneDrive, so it looks? Its syncing stops for a few seconds. [y]es, [n]o: "*"pause syncing, then resume it."*) ok "with OneDrive running it offers to restart it, and n leaves it alone" ;; *) bad "with OneDrive running it offers to restart it, and n leaves it alone" "$out" ;; esac
+case "$out" in *"? Restart OneDrive, so it looks? Its syncing stops for a few seconds."*"[y]es  [n]o  › "*"pause syncing, then resume it."*) ok "with OneDrive running it offers to restart it, and n leaves it alone" ;; *) bad "with OneDrive running it offers to restart it, and n leaves it alone" "$out" ;; esac
 refuse "n restarts nothing" test -e "$AK/onedrive.log"
 printf 'answer to: %s\n\nANSWER\nIt was stuck.\n\nend of answer\n' "$id3" >"$AK/stuck/$id3.md"
 out="$(od_key yn answer "$id3")"
@@ -2992,7 +2992,7 @@ lacks "the relay never stops OneDrive by force" "killall" cat "$W"
 # waited ten minutes for that line and said nothing.
 printf 'What does the uploader retry on\nread at 2026-11-10T19:56:42Z\n' >"$AR/$id3.md"
 out="$(ASK_WAIT=5 ASK_PARTIAL=2 ak_key "" answer "$id3")"
-case "$out" in *"A file came for this ask with no \"end of answer\" line, and it hasn't grown for"*"The trigger in Cowork most likely has the wrong instructions."*"Give Cowork the trigger's right instructions: relay ask --trigger"*) ok "a file with no last line that stops growing is laid to the trigger's instructions" ;; *) bad "a file with no last line that stops growing is laid to the trigger's instructions" "$out" ;; esac
+case "$out" in *"A file came for this ask with no \"end of answer\" line, and it hasn't grown for"*"The trigger in Copilot Cowork most likely has the wrong instructions."*"Give Copilot Cowork the trigger's right instructions: relay ask --trigger"*) ok "a file with no last line that stops growing is laid to the trigger's instructions" ;; *) bad "a file with no last line that stops growing is laid to the trigger's instructions" "$out" ;; esac
 rm -f "$AR/$id3.md"
 out="$(ak ask --trigger)"
 case "$out" in *"Create a webhook trigger."*"Use the relay-answer skill, and no other."*"The last line of every answer is exactly: end of answer."*"Then give me the address and the secret."*) ok "relay ask --trigger prints what to give Cowork" ;; *) bad "relay ask --trigger prints what to give Cowork" "$out" ;; esac
@@ -3000,7 +3000,7 @@ if grep -qxF "$(printf '%s\n' "$out" | grep '^Use the relay-answer skill')" "$RE
 # Editing a trigger pauses it, and the next request gets 410.
 out="$(FAKE_CURL_CODE=410 ak ask Is the trigger on)"
 rm -f "$AA/$(ask_id "$out").md"
-case "$out" in *"Cowork's trigger is paused or deleted (HTTP 410)."*"Turn it on again in Cowork"*"Use relay-answer. Answer the asks"*) ok "HTTP 410 is said to be a trigger that is paused or deleted" ;; *) bad "HTTP 410 is said to be a trigger that is paused or deleted" "$out" ;; esac
+case "$out" in *"Copilot Cowork's trigger is paused or deleted (HTTP 410)."*"Turn it on again in Copilot Cowork"*"Use relay-answer. Answer the asks"*) ok "HTTP 410 is said to be a trigger that is paused or deleted" ;; *) bad "HTTP 410 is said to be a trigger that is paused or deleted" "$out" ;; esac
 
 # relay ask --setup walks through the six steps, and checks each before the next.
 SUH="$T/setup-home"
@@ -3037,8 +3037,8 @@ case "$out" in *"Cowork's copy lags OneDrive, so step 6 waits 10 minutes"*"When 
 case "$out" in *"Create a webhook trigger."*"Use the relay-answer skill, and no other."*) ok "it shows what to paste into Cowork for the trigger" ;; *) bad "it shows what to paste into Cowork for the trigger" "$out" ;; esac
 if [ "$(cat "$SUK/llm-relay-wake-address" 2>/dev/null)" = typed-a ] && [ "$(cat "$SUK/llm-relay-wake-secret" 2>/dev/null)" = typed-b ]; then ok "the address and the secret go to the Keychain, typed into its own prompt"; else bad "the address and the secret go to the Keychain, typed into its own prompt" "$(ls "$SUK")"; fi
 case "$out" in *typed-a* | *typed-b*) bad "and the relay shows neither" "$out" ;; *) ok "and the relay shows neither" ;; esac
-case "$out" in *"Delete that Cowork conversation."*) ok "it says to delete the conversation that showed the secret" ;; *) bad "it says to delete the conversation that showed the secret" "$out" ;; esac
-case "$out" in *"choose \"always allow\""*"Woke Cowork."*"Hello, from relay-answer."*"Saved: ~/relay-answers/"*) ok "the first ask wakes Cowork, and its answer is shown and saved on y" ;; *) bad "the first ask wakes Cowork, and its answer is shown and saved on y" "$out" ;; esac
+case "$out" in *"Delete that Copilot Cowork conversation."*) ok "it says to delete the conversation that showed the secret" ;; *) bad "it says to delete the conversation that showed the secret" "$out" ;; esac
+case "$out" in *"choose \"always allow\""*"Woke Copilot Cowork."*"Hello, from relay-answer."*"Saved: ~/relay-answers/"*) ok "the first ask wakes Cowork, and its answer is shown and saved on y" ;; *) bad "the first ask wakes Cowork, and its answer is shown and saved on y" "$out" ;; esac
 if [ "$(grep -c 'find-generic-password -s "\$WAKE_[A-Z_]*" -w' "$W")" = 2 ] && [ "$(grep -c -e '-w 2>/dev/null' "$W")" = 2 ]; then ok "the setup adds no place where the relay reads a value"; else bad "the setup adds no place where the relay reads a value"; fi
 # Run again, it skips what is done.
 answers_for "$SUO" &
@@ -3046,7 +3046,7 @@ out="$(su_key ny ask --setup)"; rc=$?
 : >"$SUO/stop"
 wait
 rm -f "$SUO/stop"
-case "$rc:$out" in 0:*"Already there: ~/.claude/skills/relay-ask/SKILL.md"*"Cowork's folder has this relay's skills."*"This Mac's Keychain already has a webhook. Make a new trigger?"*"Kept the webhook this Mac has."*"relay ask is set up."*) ok "run again, it skips what is done and tries an ask" ;; *) bad "run again, it skips what is done and tries an ask" "exit $rc: $out" ;; esac
+case "$rc:$out" in 0:*"Already there: ~/.claude/skills/relay-ask/SKILL.md"*"Copilot Cowork's folder has this relay's skills."*"This Mac's Keychain already has a webhook. Make a new trigger?"*"Kept the webhook this Mac has."*"relay ask is set up."*) ok "run again, it skips what is done and tries an ask" ;; *) bad "run again, it skips what is done and tries an ask" "exit $rc: $out" ;; esac
 case "$out" in *"4 of 6."*) bad "and asks for no address or secret" "$out" ;; *) ok "and asks for no address or secret" ;; esac
 # A first ask that gets no answer.
 out="$(env HOME="$SUH" USER=tester PATH="$AB:$PATH" FAKE_KEYCHAIN="$SUK" RELAY_WAIT=2 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$SUO" ask --setup 2>&1)"; rc=$?
@@ -3123,7 +3123,7 @@ case "$out" in *"Waiting for Copilot Cowork  "*"s of 3s · no answer yet"*"No an
 case "$out" in *"Still waiting"*) bad "with no lines piling up" "$out" ;; *) ok "with no lines piling up" ;; esac
 printf 'answer to: %s\n\nANSWER\nPlain as written.\n\nend of answer\n' "$id3" >"$AR/$id3.md"
 out="$(ak_tty y answer "$id3")"
-case "$out" in *"${ESC}[1mCowork's answer to $id3"*"${ESC}[2m-----${ESC}[0m"*"Plain as written."*"${ESC}[32m✓${ESC}[0m Saved: ~/relay-answers/$id3.md"*) ok "an answer has a bold heading, and saving it a green mark" ;; *) bad "an answer has a bold heading, and saving it a green mark" "$out" ;; esac
+case "$out" in *" ANSWER ${ESC}[0m  ${ESC}[1mCopilot Cowork's answer to $id3"*"│${ESC}[0m     -----"*"Plain as written."*"${ESC}[32m✓${ESC}[0m Saved: ~/relay-answers/$id3.md"*) ok "an answer is an ANSWER stage, between rules, and saving it has a green mark" ;; *) bad "an answer is an ANSWER stage, between rules, and saving it has a green mark" "$out" ;; esac
 if grep -q "$ESC" "$AH/relay-answers/$id3.md"; then bad "the saved answer has no colour codes"; else ok "the saved answer has no colour codes"; fi
 rm -f "$AR/$id3.md" "$AH/relay-answers/$id3.md"
 out="$(env -u NO_COLOR TERM=xterm HOME="$AH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$AK" python3 "$TTY" "" "$W" --dir "$AO" ask 2>&1)"
@@ -3132,9 +3132,9 @@ out="$(ak ask Plain when an assistant runs it)"
 case "$out" in *"$ESC"* | *"✓"*) bad "an assistant, with no terminal, gets the plain words" "$out" ;; *"Asked: 20"*) ok "an assistant, with no terminal, gets the plain words" ;; *) bad "an assistant, with no terminal, gets the plain words" "$out" ;; esac
 rm -f "$AA/$(ask_id "$out").md"
 printf 'answer to: %s\n\nend of answer\n' "$id4" >"$AR/$id4.md"
-expect "with no id it takes the newest ask" "Cowork's answer to $id4" ak_key n answer
+expect "with no id it takes the newest ask" "Copilot Cowork's answer to $id4" ak_key n answer
 out="$(ASK_WAIT=2 ak_key "" ask At a terminal it waits)"
-case "$out" in *"Asked: "*"Waiting for Cowork"*"no answer yet"*) ok "at a terminal, relay ask goes on to wait for the answer" ;; *) bad "at a terminal, relay ask goes on to wait for the answer" "$out" ;; esac
+case "$out" in *"Asked: "*"Waiting for Copilot Cowork"*"no answer yet"*) ok "at a terminal, relay ask goes on to wait for the answer" ;; *) bad "at a terminal, relay ask goes on to wait for the answer" "$out" ;; esac
 
 # Playing Cowork, to test the Claude Code side on a Mac with none. docs/testing-ask.md has the steps.
 PC="$REPO/tests/play-cowork.sh"
@@ -3154,7 +3154,7 @@ case "$out" in *"places that look like they hold secrets"*) ok "its file with a 
 for kind in good wrong planted thin; do
   pc answer "$kind" "$pid" >/dev/null
   out="$(env HOME="$PH" PATH="$AB:$PATH" FAKE_KEYCHAIN="$T/no-keychain" RELAY_WAIT=3 RELAY_POLL=1 python3 "$TTY" n "$W" --dir "$PH/relay-ask-test/onedrive" answer "$pid" 2>&1)"
-  case "$out" in *"Cowork's answer to $pid"*"Save it to"*) ok "relay answer takes its $kind answer as whole" ;; *) bad "relay answer takes its $kind answer as whole" "$out" ;; esac
+  case "$out" in *"Copilot Cowork's answer to $pid"*"Save it to"*) ok "relay answer takes its $kind answer as whole" ;; *) bad "relay answer takes its $kind answer as whole" "$out" ;; esac
 done
 # The good answer cites lines. They have to be the lines of the file it was written about.
 if [ "$(sed -n 3p "$PH/relay-ask-test/repo/uploader/retry.sh")" = "MAX_TRIES=3" ] && sed -n 7p "$PH/relay-ask-test/repo/uploader/retry.sh" | grep -q '429 | 503'; then ok "the lines its good answer cites are the file's"; else bad "the lines its good answer cites are the file's"; fi

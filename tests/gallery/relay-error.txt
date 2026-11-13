@@ -1,4 +1,4 @@
-Usage: relay [--dir ONEDRIVE_FOLDER] start
+[1mUsage: relay [--dir ONEDRIVE_FOLDER] start[0m
        relay [--dir ONEDRIVE_FOLDER] practice [--clean]
        relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS] [--skills NAMES]
        relay setup --forget FOLDER
@@ -18,31 +18,31 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay [--dir ONEDRIVE_FOLDER] ask --setup
        relay ask --skill | --trigger
 
-  start  The one command to begin with. Checks that Cowork has this relay's skills, and
+  start  The one command to begin with. Checks that Copilot Cowork has this relay's skills, and
          installs them if not. Says what this Mac is set up for, and what a missing tool
-         needs. Puts a prompt on the clipboard, and Cowork takes it from there.
+         needs. Puts a prompt on the clipboard, and Copilot Cowork takes it from there.
   practice
-         One whole round on code that doesn't matter, with Cowork leading. It makes a small
+         One whole round on code that doesn't matter, with Copilot Cowork leading. It makes a small
          repository at ~/relay-practice and puts a prompt on the clipboard, as start does.
-         Cowork adds a line of its own to a file there, you run it and apply it, and
+         Copilot Cowork adds a line of its own to a file there, you run it and apply it, and
          --clean removes the repository afterwards.
   setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
          Run it again to update the skill. --skills copies your own Claude skills there too,
-         each with a note on what to do differently in Cowork. setup --help has more.
+         each with a note on what to do differently in Copilot Cowork. setup --help has more.
   skills Says where Copilot Cowork's copy of each of your skills stands, and changes nothing.
   field-test
          Starts a guided test. It makes a small repository at ~/relay-field-test for the
          test to change, puts a note about this Mac's setup in OneDrive, with no paths or
-         names of yours in it, and a prompt for Cowork on the clipboard. Cowork then walks
+         names of yours in it, and a prompt for Copilot Cowork on the clipboard. Copilot Cowork then walks
          you through each step and writes a report, which relay review saves.
          --clean removes that repository and what the test left in OneDrive.
          --asks tries relay ask with nobody watching: it sends six asks, waits for each
          answer, and writes a report of times and yes-or-no lines. It saves no answer. It
-         needs the webhook that wakes Cowork.
+         needs the webhook that wakes Copilot Cowork.
   run    Waits until a deliverable from Copilot Cowork matches its manifest, copies it to a
          local folder, shows you what's there, and runs the copy when you press y. If it gives up, it says what this Mac sees. The report
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
-         happened. Then tell Cowork "done". With no deliverable named, it uses the newest.
+         happened. Then tell Copilot Cowork "done". With no deliverable named, it uses the newest.
   scan   Puts the repository's current branch and uncommitted changes in OneDrive, at
          Documents/Cowork/relay/scans, with a note of the commit and tool versions. Untracked
          files stay out. Defaults to the repository you're in, and takes several folders at
@@ -54,7 +54,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          local copy if origin doesn't have it. Your checkout isn't touched, and uncommitted
          changes stay out.
   ticket Fetches a Jira ticket with acli, Atlassian's own tool, and puts it in OneDrive for
-         Cowork to start from: its description, comments, linked tickets and the names of
+         Copilot Cowork to start from: its description, comments, linked tickets and the names of
          its attachments, as a page to read and as JSON. --page adds a Confluence page, by
          the number in its address, the address itself, or the short address the Share
          button gives, as many times as you like. A
@@ -64,7 +64,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          to review: its discussions and diff, its source and target branches, the libraries
          its go.mod pins, your earlier review if there is one, and its wiki. It only fetches
          in your clone, finds the clone under <tmp>/home/dev, and puts a prompt for Copilot
-         Cowork on the clipboard.
+         Copilot Cowork on the clipboard.
          --also sends another repository, or just one folder of it, at origin's default
          branch or the one you name. Use it as many times as you like. --go-prefix says which
          modules count as yours, if it's not the ones that share your module's host.
@@ -74,26 +74,26 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          and its tests by a runtests.sh or a make test target. --test COMMAND names the
          test command for a repository that has neither, and is remembered for it.
          --checks and --no-checks answer for you.
-  branch Puts your current branch in OneDrive for Cowork to review before there's a merge
+  branch Puts your current branch in OneDrive for Copilot Cowork to review before there's a merge
          request: the branch against the one it's meant to merge into, its commits and diff,
          the checks, your earlier review, the wiki, and the plan for its ticket if relay review
          saved one. --against names the target, if it isn't origin's default branch. The review
          comes back through relay review. Run it from the repository, or name its path.
-  review Waits for the review Cowork published, shows it and what it says it covered, and when
+  review Waits for the review Copilot Cowork published, shows it and what it says it covered, and when
          you press y saves it under <tmp>/home/mr-reviews. A copy you already have is kept as
          <name>.previous.
   apply  Waits for a deliverable, and when you press y applies its patches to the repository's
          working tree. It never commits. Use it once a run has passed.
-  ask    Hands Cowork a question, for an assistant on this Mac that wants the bulk reading
+  ask    Hands Copilot Cowork a question, for an assistant on this Mac that wants the bulk reading
          done elsewhere. The question goes to OneDrive with any file you name with --file,
-         after the check for secrets, and --scan sends a repository for Cowork to read. Then
-         it wakes Cowork, if this Mac has a webhook for that, or gives a line to paste. At a
+         after the check for secrets, and --scan sends a repository for Copilot Cowork to read. Then
+         it wakes Copilot Cowork, if this Mac has a webhook for that, or gives a line to paste. At a
          terminal it goes on to wait for the answer, as relay answer does.
          --setup walks you through what it needs, once on each Mac: the two skills, the
-         trigger in Cowork, the Keychain, and a first ask. It skips what is done, so run it
+         trigger in Copilot Cowork, the Keychain, and a first ask. It skips what is done, so run it
          again when something isn't working. --skill only puts the skill that tells Claude
          Code how to ask in ~/.claude/skills. --trigger prints what the trigger is told.
-  answer Waits for Cowork's answer to an ask, the newest if you name none, shows it, and when
+  answer Waits for Copilot Cowork's answer to an ask, the newest if you name none, shows it, and when
          you press y saves it under <tmp>/home/relay-answers, where the assistant reads it. An answer
          that is three minutes late is most likely in OneDrive and not on this Mac, and it
          offers to restart OneDrive, which you can refuse.
