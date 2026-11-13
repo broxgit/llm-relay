@@ -1,0 +1,20 @@
+[32m✓[0m installed: <tmp>/home/Library/CloudStorage/OneDrive-Example/Documents/Cowork/skills/remote-pair-run
+[32m✓[0m installed: <tmp>/home/Library/CloudStorage/OneDrive-Example/Documents/Cowork/skills/relay-field-test
+[32m✓[0m installed: <tmp>/home/Library/CloudStorage/OneDrive-Example/Documents/Cowork/skills/relay-answer
+[2mrelay setting: reviews=<tmp>/home/mr-reviews[0m
+[2mrelay setting: clones=<tmp>/home/dev[0m
+[2mrelay setting: palette=default[0m
+[2mrelay setting: theme=auto[0m
+[1mWhat you can do on this Mac:[0m
+  [32m✓[0m Try a practice round first                     ready
+  [32m✓[0m Change code with Cowork                        ready
+  [1m[33m![0m Review a merge request                         needs glab: [36mbrew install glab[0m, then sign in with: [36mglab auth login[0m
+  [32m✓[0m Review a branch before the merge request       ready
+  [1m[33m![0m Start from a Jira ticket                       needs acli: [36mbrew tap atlassian/homebrew-acli && brew install acli[0m, then sign in with: [36macli auth login[0m
+  [1m[33m![0m Run Go checks in a review                      needs go: [36mbrew install go[0m
+  [1m[33m![0m Lint a review with the repository's pre-commit needs pre-commit: [36mbrew install pre-commit[0m
+  [1m[33m![0m Send a repository's wiki with it               needs wiki: optional, from github.com/broxgit/llm-wiki
+  [1m[33m![0m Have Claude Code ask Cowork                    set up with: [36mrelay ask --setup[0m
+Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps.
+[1m[36mNext:[0m run [36mrelay start[0m. It puts a prompt for Cowork on your clipboard.
+To let Claude Code ask Cowork questions: [36mrelay ask --setup[0m

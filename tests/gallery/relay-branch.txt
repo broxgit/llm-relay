@@ -1,0 +1,10 @@
+No wiki command here, so no wiki copy goes with this.
+[32m✓[0m Packed branch ABC-12-work of svc against main: 1 commits, 1 changed files, [2m<n> bytes[0m
+Checks: not run, because the relay found nothing it knows how to run here. Name the test command once, with --test, and the relay remembers it
+[32m✓[0m Sent to OneDrive: Documents/Cowork/relay/branches/svc-ABC-12-work.txt and svc-ABC-12-work.tar.gz
+[33m◆[0m [1m[33mYOUR TURN[0m
+
+[1m[36mNext:[0m back in Copilot Cowork, reply [36mdone[0m
+  Starting a new Copilot Cowork session instead? Its prompt is on your clipboard.
+
+   [1m[36m[p][0m print the prompt  [1m[36m[Enter][0m finish  [1m[33m›[0m 

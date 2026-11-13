@@ -1,0 +1,6 @@
+No wiki command here, so no wiki copy goes with this.
+[32m✓[0m Scanned svc: ABC-12-work at <sha>, [2m<n> bytes[0m, uncommitted changes: no
+[1m[33m![0m Check this is what you mean to send: ABC-12-work isn't on origin, and has everything origin/main has. To send origin's main without switching branch: [36mrelay scan ~/dev/svc --branch main[0m
+[32m✓[0m Sent to OneDrive: Documents/Cowork/relay/scans/svc.txt and svc.tar.gz
+That's on your clipboard to paste, with any other scan from the last two minutes.
+Now tell Cowork: read Documents/Cowork/relay/scans/svc.txt
