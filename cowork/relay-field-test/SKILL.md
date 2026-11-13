@@ -107,7 +107,7 @@ Then tell them the parts and the minutes each takes, and ask how long they have.
 
 ### B. One round
 
-1. Have them run: `cd ~/relay-field-test && relay scan`. Expect `Scanned`, `Sent to OneDrive:` and `Now tell Cowork: read Documents/Cowork/relay/scans/relay-field-test.txt`.
+1. Have them run: `cd ~/relay-field-test && relay scan`. Expect `SCANNED`, `SENT` and `Next: tell Copilot Cowork: read Documents/Cowork/relay/scans/relay-field-test.txt`.
 2. Read that note and get its archive, with nothing attached. Record the tools you used, how long after the note's `taken` time you could read each, how many tries it took, whether the hash matched, whether the clone's HEAD matches the note, and whether `generate.sh` is mode 100755 in the clone.
 3. Make `generate.sh` also write `gen/second.txt` containing `second`, and prove `gen/hello.txt` stays byte-identical. Build the patch from the clone. Publish, and read the manifest back. Record how long the read-back took to match.
 4. As soon as the manifest matches, have them run the `relay run` command right away, without waiting for OneDrive. In the same block, give the order: when it asks `Run it?`, take the screenshot first, then press **v** and read, **q** if a pager opened, then **y**, and reply only after that. Expect `Relay run started at`, the list of files, `Run it? [y]es, [v]iew the files, [n]o:`, then `Sent to OneDrive:` and `Now tell Cowork: done`. Record what it listed, what the `runlib.sh` line said, whether it printed `Waiting for OneDrive` and for how long, and the verdict.
@@ -119,7 +119,7 @@ Then tell them the parts and the minutes each takes, and ask how long they have.
 
 ### C. Another branch, and the wiki
 
-1. Have them run: `cd ~/relay-field-test && relay scan --branch side`. Expect `Scanned`, `from your local side, not on origin`, and `uncommitted changes left out`.
+1. Have them run: `cd ~/relay-field-test && relay scan --branch side`. Expect `SCANNED`, `from your local side, not on origin`, and `uncommitted changes left out`.
 2. Read the note again. Record its `source`, `branch` and `taken` lines, and whether your download gave you the new copy or an old one. Record the note's `wiki:` line.
 
 ### D. A merge request

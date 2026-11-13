@@ -12,9 +12,9 @@ What the relay's commands print at a terminal, made by `scripts/gallery.sh`. Don
 
 - `relay --dir <tmp>/home/Library/CloudStorage/OneDrive-Example skills`: kit. Pieces: detail typed. [relay-skills.txt](relay-skills.txt)
 
-- `relay --dir <tmp>/home/Library/CloudStorage/OneDrive-Example scan <tmp>/home/dev/svc`: old look. Pieces: typed. [relay-scan.txt](relay-scan.txt)
+- `relay --dir <tmp>/home/Library/CloudStorage/OneDrive-Example scan <tmp>/home/dev/svc`: kit. Pieces: detail item next stage turn typed. [relay-scan.txt](relay-scan.txt)
 
-- `relay --dir <tmp>/home/Library/CloudStorage/OneDrive-Example branch <tmp>/home/dev/svc --against main --no-checks --no-plan`: mixed. Pieces: detail keys next turn typed. [relay-branch.txt](relay-branch.txt)
+- `relay --dir <tmp>/home/Library/CloudStorage/OneDrive-Example branch <tmp>/home/dev/svc --against main --no-checks --no-plan`: kit. Pieces: detail keys next stage turn typed. [relay-branch.txt](relay-branch.txt)
 
 - `relay --dir <tmp>/home/Library/CloudStorage/OneDrive-Example field-test`: kit. Pieces: card detail stage step turn typed. [relay-field-test.txt](relay-field-test.txt)
 
