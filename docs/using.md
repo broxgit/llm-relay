@@ -123,8 +123,10 @@ Most of the relay needs no settings. These are the ones you can change.
 - **`--clones`:** where `relay mr` looks for your clones, with several folders separated by colons. The default is `~/dev`.
 - **`--plans`:** where `relay review` saves a plan Cowork wrote, and where `relay branch` looks for one. The default is `~/plans`.
 - **`--skills` and `--skills-from`:** the skills of your own that Cowork gets a copy of, and where they live. [Your own skills in Cowork](#your-own-skills-in-cowork) has them.
+- **`--palette`:** `default`, or `colorblind` for blue and magenta in place of green and red, which stay apart for most kinds of colour blindness. The marks and words are the same either way.
+- **`--theme`:** `auto`, `dark` or `light`, the terminal's background, so the colours read on it. `auto` takes the terminal's word for it where it gives one, and is dark otherwise. macOS's Terminal gives none, so say `light` there if yours is light.
 
-At a terminal, `setup` asks about reviews and clones the first time, with the default in brackets. Pressing Return takes it. The flags answer for you. The relay also remembers, in the same folder, the clones it has used, the test command you named for a repository with `--test`, and the repositories where you said yes to the secrets question.
+At a terminal, `setup` asks about reviews, clones, the palette and the theme the first time, with the default in brackets. Pressing Return takes it. The flags answer for you. With `LLM_PALETTE` or `LLM_THEME` set, it doesn't ask about that one, since the variable decides. The relay also remembers, in the same folder, the clones it has used, the test command you named for a repository with `--test`, and the repositories where you said yes to the secrets question.
 
 **The clones it remembers.** Each time you scan a repository or `relay mr` finds a clone, the relay keeps where it is and the day you used it. `relay start` gives Cowork that list, so it can put a folder in a command for you. A clone stays on the list until its folder is gone. To drop one you're done with, so Cowork stops offering it: `relay setup --forget ~/code/thing`. Nothing in the folder changes, and the relay remembers it again the next time you use it.
 
@@ -274,6 +276,7 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 - The relay finds your clone in the folder you're in, or under the folders `relay setup --clones` names. If it's somewhere else, name it once with `--repo` and the relay remembers it.
 - It asks whether to run the repository's checks first, and sends the results. That is `go build`, `go vet`, `go test` and `go mod tidy -diff` where there's a `go.mod`. It is the repository's pre-commit hooks, on the files the merge request changes, where it has a `.pre-commit-config.yaml` and you have `pre-commit`. And it is the tests, by a `runtests.sh` or a `make test` target, in a repository that isn't Go. For a repository with none of those, name the test command once with `--test 'COMMAND'`, and the relay remembers it for that repository. `--test none` forgets it. They run on a temporary copy of the branch with git hooks off, so your clone and uncommitted work stay out of it, but the branch's code does run on your Mac. Each check stops after 10 minutes. `--checks` and `--no-checks` answer for you. `--checks` is the one place the relay runs code without asking, so it's yours to add. Cowork is told never to give you a command with it, so don't run one that has it.
 - It reviews what's pushed, and warns if your local branch has commits the merge request doesn't.
+- What it prints is a timeline, the look llm-wiki shares: the question about the checks, then `CHECKS` with a line for each, `PACKED` and `SENT`, each a stage on a rail, and then what you do. While a check runs, one line says so, with a spinner and a clock, and its result takes that line's place. `relay mr` is the first command with it; the others follow. The colours follow `relay setup --palette` and `--theme`. `LLM_PALETTE` and `LLM_THEME`, which llm-wiki reads too, win over both for one shell.
 - Cowork publishes the review, and gives you `relay review`. The same command saves a plan Cowork wrote, when the deliverable has it under `plans/`, to `~/plans/<ticket>/`. `relay setup --plans FOLDER` moves that. It shows you the file and its Coverage section, which says what Cowork read and skipped, and saves it where you keep your reviews when you press `y`. Your earlier copy is kept beside it as `.previous`. Run that one in Apple's Terminal.
 - For a fix you've proven, `relay apply` leaves its patches in your working tree when you press `y`, and never commits.
 
@@ -281,7 +284,7 @@ It's built for GitLab and Go. Cowork still can't see production data, and it rea
 
 ## How mr, ticket and branch end
 
-Usually a Copilot Cowork session gave you the command, and it knows where the note goes. So each one ends with:
+Usually a Copilot Cowork session gave you the command, and it knows where the note goes. So each one ends at `YOUR TURN`, with:
 
 ```
 Next: back in Copilot Cowork, reply done
@@ -290,7 +293,7 @@ Next: back in Copilot Cowork, reply done
 For the times you start one on your own, the prompt for a new session is on your clipboard. At a terminal, it stays off the screen, and one key does the rest:
 
 - **s** copies the Slackbot prompt in its place, for `relay mr` and `relay ticket`. Paste it into Slackbot, and its answer into Copilot Cowork. It's optional, and something small may not need it.
-- **p** prints the prompts.
+- **p** prints the prompts, each as a numbered step with the prompt on a card. A card wraps at spaces only, so a link in it is never split.
 - **Enter** finishes.
 
 When an assistant runs it, or there's no clipboard, it prints both prompts and ends with the same `Next:` line.
@@ -501,7 +504,7 @@ relay [--dir ONEDRIVE_FOLDER] start
 
 - `--dir ONEDRIVE_FOLDER`: the OneDrive folder to use.
 
-It takes nothing else. [Start here](#start-here) has what it does.
+It takes nothing else. [Start here](#start-here) has what it does. Under "Where things are" it gives your clones, reviews and plans folders, and the colours: the palette and theme `relay setup` records.
 
 ### `practice`
 

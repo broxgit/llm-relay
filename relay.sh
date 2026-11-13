@@ -33,58 +33,19 @@ OWN_SKILLS="remote-pair-run relay-field-test relay-answer"
 
 # ---- how it looks -------------------------------------------------------------
 
-# docs/conventions.md is the guide, shared with llm-wiki, and this block is its block. A test
-# holds the two together. Colour and marks go around the words and never replace one, so a
-# report, a note for Cowork and the clipboard never hold a colour code, and what a user pastes
-# reads the same either way.
-# --- style helpers: docs/conventions.md, version 2. Copy, don't edit. ---
-STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}" # the one line a tool changes: its own variable
-# style_wanted <fd>: style on? LLM_<TOOL>_STYLE=on or off decides; else a terminal, no NO_COLOR, TERM not dumb.
-style_wanted() {
-  case "$STYLE_OVERRIDE" in on) return 0 ;; off) return 1 ;; esac
-  [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]
+# ui.sh is the kit, shared with llm-wiki, which keeps the original: docs/conventions.md has the
+# rules, and a test holds the copy to the guide. Commands print through its pieces, never a colour
+# code. Colour and marks go around the words and never replace one, so a report, a note for
+# Copilot Cowork and the clipboard never hold a colour code, and what a user pastes reads the same
+# either way. The palette and theme settings live in the settings file relay setup writes.
+# shellcheck disable=SC2034 # ui.sh reads them
+{
+  STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}"
+  STYLE_PALETTE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/llm-relay/settings"
+  STYLE_THEME_FILE="$STYLE_PALETTE_FILE"
 }
-style_utf8() {
-  case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *[Uu][Tt][Ff]-8* | *[Uu][Tt][Ff]8*) return 0 ;; esac
-  return 1
-}
-style_set() {
-  S_BOLD="" S_DIM="" S_GREEN="" S_YELLOW="" S_CYAN="" S_OFF="" M_OK="" M_WARN=""
-  [ "$STYLE" = yes ] || return 0
-  S_BOLD=$'\033[1m' S_DIM=$'\033[2m' S_GREEN=$'\033[32m' S_YELLOW=$'\033[33m' S_CYAN=$'\033[36m' S_OFF=$'\033[0m'
-  if style_utf8; then M_OK="${S_GREEN}✓${S_OFF} "; else M_OK="${S_GREEN}+${S_OFF} "; fi
-  M_WARN="${S_BOLD}${S_YELLOW}!${S_OFF} "
-}
-STYLE=no STYLE_ERR=no
-if style_wanted 1; then STYLE=yes; fi
-if style_wanted 2; then STYLE_ERR=yes; fi
-style_set
-# style_off: for a command whose output an agent or a program reads. Nothing is styled, errors included.
-style_off() { STYLE=no STYLE_ERR=no; style_set; }
-say_ok() { printf '%s%s\n' "$M_OK" "$*"; }
-say_warn() { printf '%s%s\n' "$M_WARN" "$*"; }
-say_head() { printf '%s%s%s\n' "$S_BOLD" "$*" "$S_OFF"; }
-say_dim() { printf '%s%s%s\n' "$S_DIM" "$*" "$S_OFF"; }
-say_next() { printf '%sNext:%s %s\n' "$S_BOLD$S_CYAN" "$S_OFF" "$*"; }
-typed() { printf '%s%s%s' "$S_CYAN" "$*" "$S_OFF"; }
-die() {
-  if [ "$STYLE_ERR" = yes ]; then printf '\033[31merror:\033[0m %s\n' "$*" >&2; else echo "error: $*" >&2; fi
-  exit 1
-}
-# die_usage <words>: the tool was called wrongly: an unknown command or option, a missing argument. Exits 2.
-die_usage() {
-  if [ "$STYLE_ERR" = yes ]; then printf '\033[31merror:\033[0m %s\n' "$*" >&2; else echo "error: $*" >&2; fi
-  exit 2
-}
-# say_warn_err <words>: a warning on standard error, styled as standard error is, whatever standard output is.
-say_warn_err() {
-  if [ "$STYLE_ERR" = yes ]; then printf '\033[1m\033[33m!\033[0m %s\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi
-}
-# typed_err <command>: something to type, inside a line that goes to standard error.
-typed_err() {
-  if [ "$STYLE_ERR" = yes ]; then printf '\033[36m%s\033[0m' "$*"; else printf '%s' "$*"; fi
-}
-# --- end of style helpers ---
+# shellcheck source=ui.sh
+. "$REPO/ui.sh"
 # wait_draw <seconds> <state>, wait_clear: the one line a wait keeps up to date at a terminal.
 wait_draw() {
   local f
@@ -223,10 +184,11 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          button gives, as many times as you like. A
          ticket's links to pages don't come with it, so name the ones that matter. It asks
          before sending anything that looks like a secret, and puts a prompt on the clipboard.
-  mr     Fetches a GitLab merge request with glab, and puts it in OneDrive for Cowork to review:
-         its discussions and diff, its source and target branches, the libraries its go.mod
-         pins, your earlier review if there is one, and its wiki. It only fetches in your
-         clone, finds the clone under $CLONES_DIRS, and puts a prompt for Cowork on the clipboard.
+  mr     Fetches a GitLab merge request with glab, and puts it in OneDrive for Copilot Cowork
+         to review: its discussions and diff, its source and target branches, the libraries
+         its go.mod pins, your earlier review if there is one, and its wiki. It only fetches
+         in your clone, finds the clone under $CLONES_DIRS, and puts a prompt for Copilot
+         Cowork on the clipboard.
          --also sends another repository, or just one folder of it, at origin's default
          branch or the one you name. Use it as many times as you like. --go-prefix says which
          modules count as yours, if it's not the ones that share your module's host.
@@ -712,7 +674,7 @@ scratch_fetch() {
 
 # Scans have reached Cowork at up to 50 MB. Past that, nobody knows, so say so.
 size_warning() {
-  [ "$1" -le 52428800 ] || say_warn "That's over 50 MB, the largest size tried with Cowork. If it can't read it, try without the wiki or with fewer repositories."
+  [ "$1" -le 52428800 ] || ui_item warn "That's over 50 MB, the largest size tried with Copilot Cowork. If it can't read it, try without the wiki or with fewer repositories."
 }
 
 list_tools() {
@@ -1553,17 +1515,22 @@ want_checks() {
     CHECKS_LINE="not run, because there was no terminal to ask at"
     return 1
   fi
-  {
-    if [ -n "$PLAN_GO" ] && [ -z "$PLAN_TEST" ] && [ -z "$PLAN_PRECOMMIT" ]; then
-      echo "Run go build, vet, test and mod tidy on a temporary copy of ${CHECK_SUBJECT:-!$MR_IID} at $commit, by ${author:-an unknown author}?"
-    else
-      echo "Run these on a temporary copy of ${CHECK_SUBJECT:-!$MR_IID} at $commit, by ${author:-an unknown author}, with git hooks off?"
-      printf '%s\n' "$PLAN_LIST"
-    fi
-    echo "This runs that branch's code on this Mac, and sends the output to OneDrive."
-  } >/dev/tty
+  local l d
+  local -a details=()
+  if [ -n "$PLAN_GO" ] && [ -z "$PLAN_TEST" ] && [ -z "$PLAN_PRECOMMIT" ]; then
+    l="Run go build, vet, test and mod tidy on a temporary copy of ${CHECK_SUBJECT:-!$MR_IID} at $commit, by ${author:-an unknown author}?"
+  else
+    l="Run these on a temporary copy of ${CHECK_SUBJECT:-!$MR_IID} at $commit, by ${author:-an unknown author}, with git hooks off?"
+    while IFS= read -r d; do
+      [ -z "$d" ] || details+=("- ${d#"${d%%[! ]*}"}")
+    done <<EOF
+$PLAN_LIST
+EOF
+  fi
+  details+=("This runs that branch's code on this Mac, and sends the output to OneDrive.")
+  ui_question "$l" "${details[@]}" >/dev/tty
   while :; do
-    ask_key '[y]es, [n]o: ' || KEY=n
+    ask_key "$(ui_keys yes no)" || KEY=n
     case "$KEY" in
       y | Y) return 0 ;;
       n | N)
@@ -1580,9 +1547,10 @@ want_checks() {
 run_check() {
   local dir="$1" label="$2" out="$3" start="$SECONDS" rc result
   shift 3
-  [ ! -t 1 ] || printf '%s: running...' "$label"
+  ui_wait_start "$label: running..." "nothing more to answer until the checks finish"
   (cd "$dir" && limited "$CHECK_LIMIT" "$@") >"$out" 2>&1
   rc=$?
+  ui_wait_stop
   CHECKS_RUN=$((CHECKS_RUN + 1))
   case "$rc" in
     0) result=passed ;;
@@ -1604,12 +1572,11 @@ run_check() {
     tail -c 1000000 "$out" >"$out.end"
     mv "$out.end" "$out"
   fi
-  [ ! -t 1 ] || printf '\r\033[K'
   echo "$label: $result ($((SECONDS - start))s)" >>"$CHECKS_DIR/summary.txt"
   case "$result" in
-    passed) say_ok "$label: $result ${S_DIM}($((SECONDS - start))s)${S_OFF}" ;;
-    FAILED* | stopped*) say_warn "$label: $result ${S_DIM}($((SECONDS - start))s)${S_OFF}" ;;
-    *) echo "$label: $result ${S_DIM}($((SECONDS - start))s)${S_OFF}" ;;
+    passed) ui_item ok "$label: $result" "$((SECONDS - start))s" ;;
+    FAILED* | stopped*) ui_item error "$label: $result" "$((SECONDS - start))s" ;;
+    *) ui_item warn "$label: $result" "$((SECONDS - start))s" ;;
   esac
 }
 
@@ -1627,12 +1594,12 @@ run_checks() {
     ! git -C "$tree" config core.hooksPath "$hooks" ||
     ! git -C "$tree" checkout -q --detach "$commit" 2>/dev/null; then
     CHECKS_LINE="not run, because git couldn't make a temporary copy"
-    say_warn "Checks $CHECKS_LINE."
+    ui_item warn "Checks $CHECKS_LINE."
     return 0
   fi
   if [ -n "$(git -C "$tree" status --porcelain --untracked-files=all)" ]; then
     CHECKS_LINE="not run, because the temporary copy didn't match the commit"
-    say_warn "Checks $CHECKS_LINE."
+    ui_item warn "Checks $CHECKS_LINE."
     return 0
   fi
   mkdir -p "$CHECKS_DIR"
@@ -1644,8 +1611,8 @@ run_checks() {
       echo "ran on: $(uname -sm)"
     fi
   } >"$CHECKS_DIR/summary.txt"
-  # Not dim: it is there so nobody takes the wait for a question.
-  echo "Running them now. There is nothing more to answer until they finish."
+  # Said in words, not only by the spinner, so nobody takes the wait for a question.
+  ui_stage CHECKS "running them now" "there is nothing more to answer until they finish"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     d="$(dirname "$f")"
@@ -1664,8 +1631,10 @@ EOF
   changed="$(git -C "$tree" status --porcelain --untracked-files=no)"
   if [ -n "$changed" ]; then
     CHECKS_BAD=$((CHECKS_BAD + 1))
-    say_warn "Warning: the checks changed tracked files, so later results may not be of this commit:"
-    printf '%s\n' "$changed" | head -n 10 | sed 's/^/  /'
+    ui_item warn "Warning: the checks changed tracked files, so later results may not be of this commit:"
+    while IFS= read -r f; do ui_detail "$f"; done <<EOF
+$(printf '%s\n' "$changed" | head -n 10)
+EOF
     {
       echo "the checks changed tracked files, so later results may not be of this commit:"
       printf '%s\n' "$changed"
@@ -1681,7 +1650,7 @@ EOF
 $(git -C "$tree" diff --name-only --diff-filter=ACMR "origin/$target...$commit" 2>/dev/null)
 EOF
     if [ "${#files[@]}" -eq 0 ]; then
-      say_warn "pre-commit: not run, because the relay couldn't list the files the merge request changes"
+      ui_item warn "pre-commit: not run, because the relay couldn't list the files the merge request changes"
       echo "pre-commit: not run, because the relay couldn't list the files the merge request changes" >>"$CHECKS_DIR/summary.txt"
     else
       run_check "$tree" "pre-commit, on ${#files[@]} changed files" "$CHECKS_DIR/pre-commit.txt" pre-commit run --files "${files[@]}"
@@ -1699,6 +1668,7 @@ EOF
   chmod -R u+w "$tree" 2>/dev/null
   rm -rf "$tree"
   CHECKS_LINE="$CHECKS_RUN run, $CHECKS_BAD failed or stopped, in mr/checks/summary.txt"
+  if [ "$CHECKS_BAD" = 0 ]; then ui_item ok "Checks: $CHECKS_LINE"; else ui_item error "Checks: $CHECKS_LINE"; fi
 }
 
 # local_branch_line <clone> <branch> <commit>: whether this Mac has work the review won't see.
@@ -1737,9 +1707,9 @@ pack_mr() {
   if [ -n "$test_cmd" ]; then
     remember_test "$test_cmd"
     if [ "$test_cmd" = none ]; then
-      say_ok "Forgot how to test $MR_PROJECT."
+      ui_item ok "Forgot how to test $MR_PROJECT."
     else
-      say_ok "Remembered how to test $MR_PROJECT, so --test isn't needed for it next time: $test_cmd"
+      ui_item ok "Remembered how to test $MR_PROJECT, so --test isn't needed for it next time: $test_cmd"
     fi
   fi
   if [ -n "$repo_arg" ]; then
@@ -1747,7 +1717,7 @@ pack_mr() {
     prev="$(known_clone)" || prev=""
     remember_clone "$clone"
     if [ "$prev" != "$clone" ]; then
-      say_ok "Remembered where $MR_PROJECT is, so --repo isn't needed for it next time."
+      ui_item ok "Remembered where $MR_PROJECT is, so --repo isn't needed for it next time."
     fi
   else
     clone="$(find_clone)" || die "no clone of $MR_PROJECT under $CLONES_DIRS. Name it once with --repo PATH and the relay remembers it, or add the folder that holds it to where the relay looks: relay setup --clones '$CLONES_DIRS:FOLDER'"
@@ -1902,15 +1872,16 @@ EOF
   mkdir -p "$dest" || die "can't create $dest"
   cp "$WORK/$name.tar.gz" "$dest/" || die "couldn't copy the archive to $dest"
   cp "$WORK/$name.txt" "$dest/" || die "couldn't copy the note to $dest"
-  say_ok "Packed $MR_PROJECT !$MR_IID: $source at $commit, against $target, ${S_DIM}$size bytes${S_OFF}"
-  [ -z "$WIKI_PART" ] || say_ok "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
-  [ -z "$MODULES_PART" ] || echo "Go modules: $MODULES_LINE"
-  echo "Checks: $CHECKS_LINE"
-  [ "$existing" = none ] || say_ok "Included your earlier review, $REVIEWS_DIR/$review"
-  [ -z "$head" ] || [ "$head" = "$commit" ] || say_warn "Warning: the branch here is at $commit, but GitLab says the merge request's head is $head."
-  case "$local_line" in differs*) say_warn "Warning: your local $source $local_line. Cowork will review $commit, so push first if you want the rest reviewed." ;; esac
+  ui_stage PACKED "$MR_PROJECT !$MR_IID: $source at $commit, against $target" "$size bytes"
+  [ -z "$WIKI_PART" ] || ui_item ok "Included the $WIKI_NAME wiki (compiled pages: $WIKI_PAGES, no raw notes). Add --no-wiki to leave it out."
+  [ -z "$MODULES_PART" ] || ui_detail "Go modules: $MODULES_LINE"
+  # When they ran, the CHECKS stage above says how they went.
+  case "$CHECKS_LINE" in "not run"*) ui_detail "Checks: $CHECKS_LINE" ;; esac
+  [ "$existing" = none ] || ui_item ok "Included your earlier review, $REVIEWS_DIR/$review"
+  [ -z "$head" ] || [ "$head" = "$commit" ] || ui_item warn "Warning: the branch here is at $commit, but GitLab says the merge request's head is $head."
+  case "$local_line" in differs*) ui_item warn "Warning: your local $source $local_line. Copilot Cowork will review $commit, so push first if you want the rest reviewed." ;; esac
   size_warning "$size"
-  say_ok "Sent to OneDrive: Documents/Cowork/relay/mrs/$name.txt and $name.tar.gz"
+  ui_stage SENT "OneDrive: Documents/Cowork/relay/mrs/$name.txt and $name.tar.gz"
 }
 
 cmd_mr() {
@@ -2000,6 +1971,9 @@ If I have a skill for reviewing merge requests, follow all of it for the review 
   first_ticket="$(sed -n 2p "$slack_file")"
   rm -f "$slack_file"
   [ "$first_ticket" != no-ticket ] || first_ticket=""
+  # pack_mr drew its stages in a subshell, which took the kit's note that a rail is open with it.
+  # The last was SENT, so the rail goes on to YOUR TURN.
+  _UI_RAIL=yes
   finish_prompts "$prompt" "$(slack_prompt "$first_url" "$first_title" "$first_ticket")"
 }
 
@@ -2455,7 +2429,6 @@ secret_places_in() {
 # slack_prompt <key> <title> <linked keys>: a prompt for the user to paste into Slackbot, Slack's
 # own assistant, for what the team said about this work. Cowork can't read Slack, so the user
 # carries the answer back. The relay never talks to Slack itself.
-SLACK_INTRO="And this one is for Slackbot, if your team talks in Slack. Paste its answer into Copilot Cowork with the prompt above:"
 SLACK_LAYOUT="Answer under these headings, so I can hand it to another assistant: THREADS, one line each with its link, channel and date. DECISIONS, each with the thread it came from. OPEN QUESTIONS. PEOPLE, with what each knows about. NOT FOUND, for anything you searched for and found nothing on. Quote the exact words where a decision turns on them."
 slack_prompt() {
   local key="$1" title="$2" linked="$3" p
@@ -2474,29 +2447,30 @@ slack_prompt() {
 finish_prompts() {
   local prompt="$1" slack="${2:-}" clipped=no
   if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then clipped=yes; fi
-  echo
+  ui_turn
   if [ "$AT_TERMINAL" != yes ] || [ "$clipped" != yes ]; then
     print_prompts "$prompt" "$slack" "$clipped"
-    echo
-    say_next "back in Copilot Cowork, reply $(typed "done")"
+    ui_next "back in Copilot Cowork, reply $(typed "done")"
     return 0
   fi
-  say_next "back in Copilot Cowork, reply $(typed "done")"
-  echo "Starting a new Copilot Cowork session instead? Its prompt is on your clipboard."
+  ui_next "back in Copilot Cowork, reply $(typed "done")"
+  ui_detail "Starting a new Copilot Cowork session instead? Its prompt is on your clipboard."
+  echo
+  [ -z "$slack" ] || ui_question "Want Slack context too?" >/dev/tty
   while :; do
     if [ -n "$slack" ]; then
-      ask_key "Want Slack context too? Copy the Slackbot prompt [s], print both prompts [p], or finish [Enter]: " || KEY=""
+      ask_key "$(ui_keys "s=copy the Slackbot prompt" "p=print both prompts" "Enter=finish")" || KEY=""
     else
-      ask_key "Print the prompt [p], or finish [Enter]: " || KEY=""
+      ask_key "$(ui_keys "p=print the prompt" "Enter=finish")" || KEY=""
     fi
     case "$KEY" in
       s | S)
         [ -n "$slack" ] || continue
         if printf '%s\n' "$slack" | pbcopy 2>/dev/null; then
-          say_ok "Copied the Slackbot prompt. Paste it into Slackbot, and its answer into Copilot Cowork."
+          ui_item ok "Copied the Slackbot prompt. Paste it into Slackbot, and its answer into Copilot Cowork."
         else
           echo
-          printf '%s\n' "$slack"
+          ui_card "$slack"
         fi
         return 0
         ;;
@@ -2511,19 +2485,19 @@ finish_prompts() {
 }
 
 # print_prompts <prompt for a new session> <prompt for Slackbot, or empty> <yes if on the clipboard>
+# Each is a step of the user's turn, with the prompt on a card.
 print_prompts() {
   if [ "$3" = yes ]; then
-    say_head "Starting a new Copilot Cowork session instead? Paste this. It's on your clipboard:"
+    ui_step --done --emoji "📋" 1 "Starting a new Copilot Cowork session instead? Paste this." "It's on your clipboard."
   else
-    say_head "Starting a new Copilot Cowork session instead? Paste this:"
+    ui_step 1 "Starting a new Copilot Cowork session instead? Paste this."
   fi
+  ui_card "$1"
   echo
-  printf '%s\n' "$1"
   [ -n "$2" ] || return 0
+  ui_step --optional 2 "Ask Slackbot, if your team talks in Slack." "Paste its answer into Copilot Cowork with the prompt above."
+  ui_card "$2"
   echo
-  say_head "$SLACK_INTRO"
-  echo
-  printf '%s\n' "$2"
 }
 
 cmd_ticket() {
@@ -3583,6 +3557,7 @@ begin_session() {
   printf '  %sclones%s   %s\n' "$S_DIM" "$S_OFF" "$(tilde "$CLONES_DIRS")"
   printf '  %sreviews%s  %s\n' "$S_DIM" "$S_OFF" "$(tilde "$REVIEWS_DIR")"
   printf '  %splans%s    %s\n' "$S_DIM" "$S_OFF" "$(tilde "$PLANS_DIR")"
+  printf '  %scolours%s  palette %s, theme %s\n' "$S_DIM" "$S_OFF" "$PALETTE" "$THEME"
   printf '  %s changes any of them.\n' "$(typed "relay setup")"
   # Reviews and plans are made when the first is saved. Clones have to be there already.
   if ! clones_folder_there; then
@@ -3763,9 +3738,30 @@ relay_setting() {
   save_setting "$key" "$answer"
 }
 
+# relay_choice <key> <passed> <default> <variable> <question> <name>...: a setting that is one of a
+# few names, asked at a terminal the first time, as relay_setting asks for a folder. An answer
+# that is no name is asked again. With the variable set, such as LLM_PALETTE, it isn't asked: the
+# variable wins over the setting anyway.
+relay_choice() {
+  local key="$1" passed="$2" default="$3" variable="$4" question="$5" answer
+  shift 5
+  answer="$passed"
+  if [ -z "$answer" ] && [ -z "$(setting "$key" "")" ] && [ -z "$(printenv "$variable")" ] && [ "$AT_TERMINAL" = yes ]; then
+    while :; do
+      printf '%s [%s]: ' "$question" "$default" >/dev/tty
+      IFS= read -r answer </dev/tty || answer=""
+      answer="${answer:-$default}"
+      case " $* " in *" $answer "*) break ;; esac
+      printf '  Answer one of: %s.\n' "$*" >/dev/tty
+    done
+  fi
+  [ -n "$answer" ] || return 0
+  save_setting "$key" "$answer"
+}
+
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget=""
+  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget="" palette="" theme=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -3789,6 +3785,14 @@ cmd_setup() {
         plans="$2"
         shift 2
         ;;
+      --palette)
+        case "${2:-}" in default | colorblind) palette="$2" ;; *) die_usage "--palette needs default or colorblind" ;; esac
+        shift 2
+        ;;
+      --theme)
+        case "${2:-}" in auto | dark | light) theme="$2" ;; *) die_usage "--theme needs auto, dark or light" ;; esac
+        shift 2
+        ;;
       --forget)
         [ -n "${2:-}" ] || die_usage "--forget needs the folder of a clone the relay remembers"
         forget="$2"
@@ -3809,6 +3813,7 @@ cmd_setup() {
         cat <<EOF
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
+                   [--palette default|colorblind] [--theme auto|dark|light]
        relay setup --forget FOLDER
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
@@ -3819,6 +3824,12 @@ folder if there are several, or it syncs elsewhere. Run it again to update the s
 looks for your clones, with several folders separated by colons. At a terminal, it asks
 for each the first time. --plans is where relay review saves a plan Cowork wrote, and
 where relay branch looks for one. It's ~/plans unless you say otherwise.
+
+--palette colorblind uses blue and magenta for ok and an error, in place of green and red,
+which stay apart for most kinds of colour blindness. --theme light suits a terminal with a
+light background; auto reads the terminal's word for it where it gives one, and is dark
+otherwise. At a terminal, it asks for each the first time. LLM_PALETTE and LLM_THEME, which
+llm-wiki reads too, win over both for one shell.
 
 --forget drops one clone from the ones the relay remembers and tells Cowork about, and
 does nothing else. The folder isn't touched. relay start lists them.
@@ -3851,7 +3862,9 @@ EOF
   relay_setting reviews "$reviews" "$HOME/mr-reviews" "Where should merge request reviews go?"
   relay_setting clones "$clones" "$HOME/dev" "Where are your clones?"
   [ -z "$plans" ] || relay_setting plans "$plans" "$HOME/plans" ""
-  for key in reviews clones plans; do
+  relay_choice palette "$palette" default LLM_PALETTE "Colours: default, or colorblind for blue and magenta in place of green and red?" default colorblind
+  relay_choice theme "$theme" auto LLM_THEME "Your terminal's background: auto, dark or light?" auto dark light
+  for key in reviews clones plans palette theme; do
     value="$(setting "$key" "")"
     [ -z "$value" ] || say_dim "relay setting: $key=$value"
   done
@@ -3897,7 +3910,7 @@ cmd_complete() {
     return 0
   fi
   case "$sub" in
-    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--forget\n' ;;
+    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--palette\n--theme\n--forget\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;

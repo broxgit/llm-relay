@@ -159,8 +159,12 @@ tap="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay-tap.XXXXXX")" || die "can't make a s
 trap 'rm -rf "$tap"' EXIT
 git clone -q "$tap_url" "$tap/tap" || die "couldn't clone the tap from $tap_url. The release is made. Run this again for the rest."
 sed -i.bak -e "s#refs/tags/v[0-9.]*\\.tar\\.gz#refs/tags/$tag.tar.gz#" -e "s#sha256 \"[0-9a-f]*\"#sha256 \"$hash\"#" "$tap/tap/$FORMULA" || die "couldn't edit the formula"
+# relay.sh sources ui.sh, the look it shares with llm-wiki, from beside itself, so the formula
+# installs it too. Formulas up to 0.2.26 don't.
+grep -q '"ui.sh"' "$tap/tap/$FORMULA" || sed -i.bak 's#libexec.install "relay.sh", #libexec.install "relay.sh", "ui.sh", #' "$tap/tap/$FORMULA" || die "couldn't edit the formula"
 rm -f "$tap/tap/$FORMULA.bak"
 grep -q "refs/tags/$tag.tar.gz" "$tap/tap/$FORMULA" && grep -q "sha256 \"$hash\"" "$tap/tap/$FORMULA" || die "the formula doesn't have the new address and hash, so it wasn't pushed"
+grep -q 'libexec.install "relay.sh", "ui.sh", ' "$tap/tap/$FORMULA" || die "the formula doesn't install ui.sh beside relay.sh, so it wasn't pushed. Add it to libexec.install in $FORMULA, then run this again"
 if [ -z "$(git -C "$tap/tap" status --porcelain)" ]; then
   echo "the formula already points at $tag"
 else

@@ -26,6 +26,9 @@ IFS="$old_ifs"
 export HOME="$T/home"
 # The tests read plain words. The ones about colour take this away again.
 export NO_COLOR=1
+# Set, as they would be in the user's shell, so relay setup doesn't ask about colours in every test
+# that runs it at a terminal. The setup tests that ask unset them.
+export LLM_PALETTE=default LLM_THEME=auto
 export WIKIS_DIR="$T/wikis"
 unset XDG_CONFIG_HOME
 mkdir -p "$HOME" "$WIKIS_DIR/global/wiki" "$T/fake-wiki"
@@ -88,6 +91,17 @@ no_codes_in() {
 }
 # plain_words: what a terminal showed, with the codes, the marks and the live wait taken out.
 plain_words() { sed "s/${ESC_BYTE}\[[0-9;]*[mK]//g; s/^\( *\)✓ /\1/; s/^\( *\)[!+] /\1/" | tr -d '\r' | grep -v 'Waiting for Cowork  '; }
+# kit_words: the words of what a command on the kit printed, one a line, as ui.sh's ui_words
+# reads them: codes, glyphs and marks out, and what a live wait drew over left out too.
+kit_words() { sed 's/^.*\r\(.\)/\1/' | bash -c ". '$REPO/ui.sh'; ui_words"; }
+# same_kit_words <name> <styled output> <piped output>: the same, for a command whose ending, or
+# more, is on the kit, by kit_words. A run's time and an archive's size are left out.
+same_kit_words() {
+  local a b
+  a="$(printf '%s\n' "$2" | sed "s/${ESC_BYTE}\[[0-9;]*m//g; s/, [0-9][0-9]* bytes//" | kit_words | grep -v -x -e '[0-9]*s' -e '[0-9]*')"
+  b="$(printf '%s\n' "$3" | sed "s/${ESC_BYTE}\[[0-9;]*m//g; s/, [0-9][0-9]* bytes//" | kit_words | grep -v -x -e '[0-9]*s' -e '[0-9]*')"
+  if [ -n "$a" ] && [ "$a" = "$b" ]; then ok "$1"; else bad "$1" "$(diff <(printf '%s\n' "$a") <(printf '%s\n' "$b") | head -n 12)"; fi
+}
 # same_words <name> <styled output> <piped output>: the words never change.
 same_words() {
   if [ "$(printf '%s\n' "$2" | plain_words)" = "$(printf '%s\n' "$3")" ]; then ok "$1"; else bad "$1" "$(diff <(printf '%s\n' "$2" | plain_words) <(printf '%s\n' "$3") | head -n 12)"; fi
@@ -1143,7 +1157,7 @@ mkdir -p "$RH/.config/llm-relay"
 printf 'reviews=%s\nclones=%s\n' "$RV" "$T/clones" >"$RH/.config/llm-relay/settings"
 mr() { env HOME="$RH" PATH="$FG:$PATH" "$W" mr "$@" </dev/null; }
 MD="$OD/Documents/Cowork/relay/mrs"
-expect "relay mr says what it packed" "Packed team/svc !7: ABC-12-work at $MR_HEAD, against master" mr "$MRU"
+expect "relay mr says what it packed" "PACKED  team/svc !7: ABC-12-work at $MR_HEAD, against master" mr "$MRU"
 check "it found the clone by its origin" test -f "$MD/svc-7.txt"
 check "the clone's checkout didn't move" bash -c "[ \"\$(git -C '$MC' symbolic-ref --short HEAD)\" = master ] && [ \"\$(git -C '$MC' rev-parse HEAD)\" = '$MR_BASE' ]"
 check "its uncommitted work is still there" grep -q uncommitted "$MC/a.txt"
@@ -1187,7 +1201,7 @@ check "it puts a prompt on the clipboard" grep -q 'Documents/Cowork/relay/mrs/sv
 check "and the prompt asks for a verdict" grep -q 'Finish with a verdict' "$T/clipboard"
 check "and for what wasn't covered" grep -q "Say what you didn't cover" "$T/clipboard"
 out="$(mr "$MRU" 2>&1)"
-case "$out" in *"Starting a new Copilot Cowork session instead? Paste this. It's on your clipboard:"*"Documents/Cowork/relay/mrs/svc-7.txt"*) ok "and prints it" ;; *) bad "and prints it" "$out" ;; esac
+case "$out" in *"YOUR TURN"*"Starting a new Copilot Cowork session instead? Paste this.  It's on your clipboard."*"Documents/Cowork/relay/mrs/svc-7.txt"*) ok "and prints it, as a step of the user's turn" ;; *) bad "and prints it, as a step of the user's turn" "$out" ;; esac
 # Copilot Cowork asked for most runs, and needs only "done", so that is the last line.
 case "$(printf '%s\n' "$out" | tail -n 1)" in "Next: back in Copilot Cowork, reply done") ok "and ends by saying to reply done" ;; *) bad "and ends by saying to reply done" "$out" ;; esac
 # The same prompt for Slackbot as a ticket gets, with the merge request's address in place of a key.
@@ -1199,7 +1213,7 @@ refuse "an MR glab can't read is refused" mr https://gitlab.com/team/svc/-/merge
 refuse "an MR with no clone says so" mr https://gitlab.com/team/other/-/merge_requests/7
 out="$(mr https://gitlab.com/team/other/-/merge_requests/7 2>&1)"
 case "$out" in *"add the folder that holds it to where the relay looks: relay setup --clones '"*":FOLDER'"*) ok "and how to add the folder that holds it" ;; *) bad "and how to add the folder that holds it" "$out" ;; esac
-expect "and --repo names one" "Packed team/other !7" mr https://gitlab.com/team/other/-/merge_requests/7 --repo "$MC"
+expect "and --repo names one" "PACKED  team/other !7" mr https://gitlab.com/team/other/-/merge_requests/7 --repo "$MC"
 # A clone kept outside the clones folders needed --repo on every review, so the relay now keeps
 # where each project's clone is, and a clone it finds by searching, so the search is paid once.
 MRO=https://gitlab.com/team/other/-/merge_requests/7
@@ -1208,7 +1222,7 @@ rm -f "$KC"
 out="$(mr "$MRO" --repo "$MC" 2>&1)"
 case "$out" in *"Remembered where team/other is, so --repo isn't needed for it next time."*) ok "the first --repo run says the relay remembered the clone" ;; *) bad "the first --repo run says the relay remembered the clone" "$out" ;; esac
 check "the known clones file has a line for it, with the day" grep -Eq "^gitlab.com/team/other	$MC	[0-9]{4}-[0-9]{2}-[0-9]{2}\$" "$KC"
-expect "the same merge request then works with no --repo" "Packed team/other !7" mr "$MRO"
+expect "the same merge request then works with no --repo" "PACKED  team/other !7" mr "$MRO"
 out="$(mr "$MRO" --repo "$MC" 2>&1)"
 case "$out" in *Remembered*) bad "naming the same clone again says nothing more" "$out" ;; *) ok "naming the same clone again says nothing more" ;; esac
 check "and keeps one line for the project" bash -c "[ \"\$(grep -c '^gitlab.com/team/other	' '$KC')\" = 1 ]"
@@ -1225,7 +1239,7 @@ refuse "relay mr needs a URL" mr
 # A partial clone can't hand over files it never downloaded.
 git -C "$MO" config uploadpack.allowFilter true
 git clone -q --filter=blob:none "file://$MO" "$T/partial-clone" 2>/dev/null
-expect "a partial clone still sends a whole MR" "Packed team/partial !7" mr https://gitlab.com/team/partial/-/merge_requests/7 --repo "$T/partial-clone"
+expect "a partial clone still sends a whole MR" "PACKED  team/partial !7" mr https://gitlab.com/team/partial/-/merge_requests/7 --repo "$T/partial-clone"
 MP="$T/partial-unpacked"
 mkdir -p "$MP"
 tar -xzf "$MD/partial-7.tar.gz" -C "$MP" repo.bundle
@@ -1268,13 +1282,13 @@ check "the summary says which commit, and on what" bash -c "grep -q '^commit: $M
 check "each check's output comes" bash -c "grep -q 'fine from test' '$MK/mr/checks/root-go-test.txt' && grep -q 'fine from build' '$MK/mr/checks/sub-go-build.txt'"
 check "the archive has no macOS attributes" bash -c "! gzip -dc '$MD/svc-7.tar.gz' | LC_ALL=C grep -qa 'LIBARCHIVE.xattr'"
 out="$(FAKE_GO_FAIL="test" mr "$MRU" --checks 2>&1)"
-case "$out" in *"go test: FAILED, exit 1"*"Packed team/svc"*"Checks: 8 run, 2 failed"*) ok "a failed check is reported, and it still packs" ;; *) bad "a failed check is reported, and it still packs" "$out" ;; esac
+case "$out" in *"go test: FAILED, exit 1"*"Checks: 8 run, 2 failed"*"PACKED  team/svc"*) ok "a failed check is reported, and it still packs" ;; *) bad "a failed check is reported, and it still packs" "$out" ;; esac
 tar -xzf "$MD/svc-7.tar.gz" -C "$MK" mr/checks
 check "with its output" grep -q 'boom from test' "$MK/mr/checks/root-go-test.txt"
 out="$(FAKE_GO_NODIFF=1 mr "$MRU" --checks 2>&1)"
 case "$out" in *"go mod tidy -diff: skipped"*"Checks: 6 run, 0 failed"*) ok "an old Go without tidy -diff isn't a failure" ;; *) bad "an old Go without tidy -diff isn't a failure" "$out" ;; esac
 out="$(FAKE_GO_HANG="test" RELAY_CHECK_LIMIT=1 mr "$MRU" --checks 2>&1)"
-case "$out" in *"go test: stopped after 1s"*"Packed team/svc"*) ok "a check that hangs is stopped" ;; *) bad "a check that hangs is stopped" "$out" ;; esac
+case "$out" in *"go test: stopped after 1s"*"PACKED  team/svc"*) ok "a check that hangs is stopped" ;; *) bad "a check that hangs is stopped" "$out" ;; esac
 mr_key() { local keys="$1"; shift; env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" "$keys" "$W" mr "$@" 2>&1; }
 rm -f "$T/go.log"
 out="$(mr_key n "$MRU")"
@@ -1284,7 +1298,7 @@ check "and the note says so" grep -q '^checks: not run, because the user chose n
 out="$(mr_key y "$MRU")"
 case "$out" in *"go test: passed"*) ok "y runs them" ;; *) bad "y runs them" "$out" ;; esac
 # A real user took a bare "go build: " for a question, and waited to be asked something.
-case "$out" in *"Running them now. There is nothing more to answer until they finish."*"go build: running..."*"go build: passed"*) ok "and a check that is running says so, with nothing left to answer" ;; *) bad "and a check that is running says so, with nothing left to answer" "$out" ;; esac
+case "$out" in *"CHECKS  running them now"*"there is nothing more to answer until they finish"*"go build: running..."*"go build: passed"*) ok "and a check that is running says so, with nothing left to answer" ;; *) bad "and a check that is running says so, with nothing left to answer" "$out" ;; esac
 rm -f "$T/go.log"
 out="$(mr_key y "$MRU" --no-checks)"
 case "$out" in *"Run go build"*) bad "--no-checks doesn't ask" "$out" ;; *) ok "--no-checks doesn't ask" ;; esac
@@ -1295,17 +1309,33 @@ case "$out" in *"Run go build"*) bad "--checks doesn't ask" "$out" ;; *"go test:
 # so the plain words are what is left after the last carriage return.
 mrp() { local keys="$1"; shift; env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" "$keys" "$W" mr "$@" 2>&1; }
 mrs() { local keys="$1"; shift; styled "$keys" env HOME="$RH" PATH="$FG:$PATH" "$W" mr "$@"; }
-tty_plain() { sed 's/^.*\r\(.\)/\1/' | plain_words | sed 's/ ([0-9]*s)$//; s/, [0-9][0-9]* bytes//'; }
 rm -f "$T/clipboard"
 sty_out="$(mrs y "$MRU")"
-same_words "a styled merge request says what a plain one does" "$(printf '%s\n' "$sty_out" | tty_plain)" "$(mrp y "$MRU" | tty_plain)"
+same_kit_words "a styled merge request says what a plain one does" "$sty_out" "$(mrp y "$MRU")"
+case "$sty_out" in *"⠋${ESC_BYTE}[0m go build: running..."*"nothing more to answer until the checks finish"*) ok "a styled check that is running has a spinner, drawn over by its result" ;; *) bad "a styled check that is running has a spinner, drawn over by its result" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[43m${ESC_BYTE}[30m ? ${ESC_BYTE}[0m ${ESC_BYTE}[1m${ESC_BYTE}[33mRun go build"*"${ESC_BYTE}[1m${ESC_BYTE}[32m[y]${ESC_BYTE}[0mes  ${ESC_BYTE}[1m${ESC_BYTE}[31m[n]${ESC_BYTE}[0mo"*) ok "the question has the kit's ? label and its [y]es [n]o" ;; *) bad "the question has the kit's ? label and its [y]es [n]o" "$sty_out" ;; esac
+case "$sty_out" in *" CHECKS ${ESC_BYTE}[0m"*" PACKED ${ESC_BYTE}[0m"*" SENT ${ESC_BYTE}[0m"*"◆${ESC_BYTE}[0m ${ESC_BYTE}[1m${ESC_BYTE}[33mYOUR TURN"*) ok "it is a timeline: CHECKS, PACKED and SENT on a rail, then YOUR TURN" ;; *) bad "it is a timeline: CHECKS, PACKED and SENT on a rail, then YOUR TURN" "$sty_out" ;; esac
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m go build: passed"*) ok "a styled check that passed has a mark" ;; *) bad "a styled check that passed has a mark" "$sty_out" ;; esac
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/mrs/svc-7.txt"*) ok "a styled merge request marks what it sent" ;; *) bad "a styled merge request marks what it sent" "$sty_out" ;; esac
+case "$sty_out" in *" SENT ${ESC_BYTE}[0m  ${ESC_BYTE}[1mOneDrive: Documents/Cowork/relay/mrs/svc-7.txt"*) ok "a styled merge request marks what it sent" ;; *) bad "a styled merge request marks what it sent" "$sty_out" ;; esac
+# The stages are drawn in a subshell, and the rail still runs on from SENT to YOUR TURN.
+between="${sty_out#*" SENT "}"
+between="${between%%YOUR TURN*}"
+case "$between" in *"${ESC_BYTE}[2m│${ESC_BYTE}[0m"*) ok "the rail joins SENT to YOUR TURN" ;; *) bad "the rail joins SENT to YOUR TURN" "$between" ;; esac
+# A check that runs a while has a spinner that turns and a clock that counts, then its result.
+sty_slow="$(FAKE_GO_HANG="test" RELAY_CHECK_LIMIT=1 mrs y "$MRU")"
+case "$sty_slow" in *"⠋${ESC_BYTE}[0m go test: running..."*"⠙${ESC_BYTE}[0m go test: running..."*"go test: stopped after 1s"*) ok "a styled check that runs a while has a spinner that turns" ;; *) bad "a styled check that runs a while has a spinner that turns" "$(printf '%s' "$sty_slow" | tr '\r' '\n' | grep -a 'go test' | head -n 6)" ;; esac
+# With NO_COLOR at a terminal, a running check still says so, in plain words, so it never looks hung.
+plain_slow="$(FAKE_GO_HANG="test" RELAY_CHECK_LIMIT=1 mr_key y "$MRU")"
+case "$plain_slow" in *"go test: running...  "*"go test: stopped after 1s"*) case "$plain_slow" in *"${ESC_BYTE}[3"* | *"${ESC_BYTE}[1m"* | *"${ESC_BYTE}[2m"*) bad "with NO_COLOR at a terminal, a running check says so, with no colour" "$plain_slow" ;; *) ok "with NO_COLOR at a terminal, a running check says so, with no colour" ;; esac ;; *) bad "with NO_COLOR at a terminal, a running check says so, with no colour" "$plain_slow" ;; esac
+# The question about Slack goes to the terminal with its keys, though the output goes to a file.
+out="$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" $'\n' sh -c '"$1" mr "$2" --no-checks >"$3" 2>&1' sh "$W" "$MRU" "$T/mr-redirected.txt" 2>&1)"
+case "$out" in *"? Want Slack context too?"*"[s] copy the Slackbot prompt"*) ok "with the output in a file, the Slack question shows at the terminal with its keys" ;; *) bad "with the output in a file, the Slack question shows at the terminal with its keys" "$out" ;; esac
+if grep -q 'Want Slack context' "$T/mr-redirected.txt"; then bad "and isn't in the file" "$(cat "$T/mr-redirected.txt")"; else ok "and isn't in the file"; fi
 case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "and makes the next step stand out" ;; *) bad "and makes the next step stand out" "$sty_out" ;; esac
 no_codes_in "a styled merge request writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
 check "nor into the checks' summary inside the archive" bash -c "! tar -xzOf '$MD/svc-7.tar.gz' mr/checks/summary.txt | grep -q '$ESC_BYTE'"
 sty_out="$(FAKE_GO_FAIL="test" mrs y "$MRU")"
-case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[33m!${ESC_BYTE}[0m go test: FAILED, exit 1"*) ok "a styled check that failed is marked as needing attention" ;; *) bad "a styled check that failed is marked as needing attention" "$sty_out" ;; esac
+case "$sty_out" in *"${ESC_BYTE}[1m${ESC_BYTE}[31m✗${ESC_BYTE}[0m go test: FAILED, exit 1"*) ok "a styled check that failed has the error mark" ;; *) bad "a styled check that failed has the error mark" "$sty_out" ;; esac
 check "and the summary in the archive says it in plain words" bash -c "tar -xzOf '$MD/svc-7.tar.gz' mr/checks/summary.txt | grep -q '^go test: FAILED, exit 1 ('"
 # A global hook has to stay off in the temporary copy, as it would rewrite go.mod there.
 GH="$T/global-hooks"
@@ -1405,7 +1435,7 @@ nogo_commit make
 out="$(nogo --checks)"
 case "$out" in *"tests, with make test: passed"*) ok "a make test target is run when there's no runtests.sh" ;; *) bad "a make test target is run when there's no runtests.sh" "$out" ;; esac
 out="$(mr_key n "$NGU" --repo "$MNG")"
-case "$out" in *"Run these on a temporary copy of !7 at "*"with git hooks off?"*"  the tests, with: make test"*"  pre-commit, on the files the merge request changes"*"runs that branch's code"*) ok "at a terminal it lists what it would run, and asks" ;; *) bad "at a terminal it lists what it would run, and asks" "$out" ;; esac
+case "$out" in *"Run these on a temporary copy of !7 at "*"with git hooks off?"*"   - the tests, with: make test"*"   - pre-commit, on the files the merge request changes"*"runs that branch's code"*) ok "at a terminal it lists what it would run, and asks" ;; *) bad "at a terminal it lists what it would run, and asks" "$out" ;; esac
 case "$out" in *"make test: passed"* | *"pre-commit, on"*"passed"*) bad "and n runs none of it" "$out" ;; *) ok "and n runs none of it" ;; esac
 # A repository whose tests start some other way: name the command once.
 out="$(nogo --checks --test 'echo custom-tests')"
@@ -1651,8 +1681,22 @@ rm -f "$AR2/c.txt"
 check "setup records where reviews go" env HOME="$RH" "$W" setup --dir "$OD" --reviews "$T/elsewhere" --clones "$T/c1:$T/c2"
 check "and it's in the settings" grep -q "^reviews=$T/elsewhere$" "$RH/.config/llm-relay/settings"
 check "with the clones" grep -q "^clones=$T/c1:$T/c2$" "$RH/.config/llm-relay/settings"
-out="$(env HOME="$T/fresh-relay-home" python3 "$TTY" $'\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
+out="$(env -u LLM_PALETTE -u LLM_THEME HOME="$T/fresh-relay-home" python3 "$TTY" $'\n\n\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
 case "$out" in *"Where should merge request reviews go?"*"relay setting: reviews=$T/fresh-relay-home/mr-reviews"*) ok "setup asks once at a terminal" ;; *) bad "setup asks once at a terminal" "$out" ;; esac
+case "$out" in *"Colours: default, or colorblind"*"[default]: "*"Your terminal's background: auto, dark or light? [auto]: "*"relay setting: palette=default"*"relay setting: theme=auto"*) ok "and asks for the palette and the theme, with the defaults in brackets" ;; *) bad "and asks for the palette and the theme, with the defaults in brackets" "$out" ;; esac
+check "which go in the settings" grep -qx 'palette=default' "$T/fresh-relay-home/.config/llm-relay/settings"
+check "both of them" grep -qx 'theme=auto' "$T/fresh-relay-home/.config/llm-relay/settings"
+out="$(env -u LLM_PALETTE -u LLM_THEME HOME="$T/fresh-relay-home" python3 "$TTY" '' "$W" setup --dir "$OD" 2>&1)"
+case "$out" in *"Colours:"* | *"background:"*) bad "setup asks only once" "$out" ;; *) ok "setup asks only once" ;; esac
+out="$(env -u LLM_THEME LLM_PALETTE=colorblind HOME="$T/fresh-relay-home2" python3 "$TTY" $'\n\n' "$W" setup --dir "$OD" --clones "$T/c1" 2>&1)"
+case "$out" in *"Colours:"*) bad "with LLM_PALETTE set, setup doesn't ask about the palette, which the variable decides" "$out" ;; *"background:"*) ok "with LLM_PALETTE set, setup doesn't ask about the palette, which the variable decides" ;; *) bad "with LLM_PALETTE set, setup doesn't ask about the palette, which the variable decides" "$out" ;; esac
+check "--palette and --theme answer for you" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --palette colorblind --theme light
+check "and are recorded" grep -qx 'palette=colorblind' "$T/fresh-relay-home/.config/llm-relay/settings"
+check "both" grep -qx 'theme=light' "$T/fresh-relay-home/.config/llm-relay/settings"
+check "relay.sh gives the kit the settings file for both" grep -q '^  STYLE_THEME_FILE="\$STYLE_PALETTE_FILE"$' "$W"
+case "$(env -u LLM_PALETTE -u LLM_THEME LC_ALL=en_US.UTF-8 bash -c 'STYLE_OVERRIDE=on STYLE_PALETTE_FILE="$1" STYLE_THEME_FILE="$1" COLORTERM=truecolor; . "$2"; ui_item ok x' sh "$T/fresh-relay-home/.config/llm-relay/settings" "$REPO/ui.sh")" in *"38;2;0;114;178m"*) ok "and the kit reads them from it: ok is the colour-blind light theme's blue" ;; *) bad "and the kit reads them from it: ok is the colour-blind light theme's blue" ;; esac
+expect "--palette takes only a palette's name" "--palette needs default or colorblind" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --palette pink
+expect "--theme takes only a theme's name" "--theme needs auto, dark or light" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --theme grey
 printf 'reviews=%s\nclones=%s\n' "$RV" "$T/clones" >"$RH/.config/llm-relay/settings"
 check "the skill reads MR archives" grep -q 'Documents/Cowork/relay/mrs/<repo>-<iid>.txt' "$SK/SKILL.md"
 check "the skill keeps checkouts untouched" grep -q 'must never change the user.s checkout' "$SK/SKILL.md"
@@ -1770,7 +1814,7 @@ out="$(xmr "$MRU" 2>&1)"; rc=$?
 case "$rc:$out" in 0:*) bad "a merge request whose branch looks like it holds secrets isn't sent with no terminal" "$out" ;; *"tls.txt:1: a private key"*"needs a terminal"*) ok "a merge request whose branch looks like it holds secrets isn't sent with no terminal" ;; *) bad "a merge request whose branch looks like it holds secrets isn't sent with no terminal" "$out" ;; esac
 case "$out" in *"Packed "*) bad "and nothing is packed" "$out" ;; *) ok "and nothing is packed" ;; esac
 git -C "$MO" update-ref refs/merge-requests/7/head "$X_OLD"
-expect "with the branch as it was, the merge request goes again" "Packed team/svc !7: ABC-12-work at $X_OLD" xmr "$MRU"
+expect "with the branch as it was, the merge request goes again" "PACKED  team/svc !7: ABC-12-work at $X_OLD" xmr "$MRU"
 
 # Two repositories can share a folder name, as a service's code and its deployment folder do.
 # Their scans replaced each other twice in one real session on 2026-11-06.
@@ -2243,8 +2287,8 @@ case "$out" in *"on a temporary copy of your branch ABC-12-work at $MR_HEAD, by 
 rm -f "$T/clipboard"
 sty_out="$(styled $'\n' env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks)"
 # At a terminal the end asks a question that a pipe doesn't, so styled and plain are compared there.
-same_words "a styled branch says what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" $'\n' "$W" --dir "$OD" branch "$BC" --no-checks 2>&1 | plain_words | sed 's/, [0-9][0-9]* bytes//')"
-case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed branch ABC-12-work of svc"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork"*"Its prompt is on your clipboard."*"Print the prompt [p], or finish [Enter]: "*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
+same_kit_words "a styled branch says what a plain one does" "$sty_out" "$(env HOME="$RH" PATH="$FG:$PATH" python3 "$TTY" $'\n' "$W" --dir "$OD" branch "$BC" --no-checks 2>&1)"
+case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed branch ABC-12-work of svc"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/branches/"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork"*"Its prompt is on your clipboard."*"[p]${ESC_BYTE}[0m print the prompt  "*"[Enter]${ESC_BYTE}[0m finish  "*) ok "a styled branch marks what it packed and sent" ;; *) bad "a styled branch marks what it packed and sent" "$sty_out" ;; esac
 styled "" env HOME="$RH" PATH="$FG:$PATH" "$W" --dir "$OD" branch "$BC" --no-checks >/dev/null
 no_codes_in "a styled branch writes no code to OneDrive, the home folder or the clipboard" "$RH" "$T/clipboard"
 check "nor into the note inside the archive" bash -c "! tar -xzOf '$BD/svc-ABC-12-work.tar.gz' branch/diff.patch | grep -q '$ESC_BYTE'"
@@ -2353,6 +2397,7 @@ out="$(env HOME="$GH" "$W" setup --dir "$GO" --reviews "$T/start-reviews" --clon
 case "$out" in *"What you can do on this Mac:"*"Change code with Cowork"*"Next: run relay start."*"To let Claude Code ask Cowork questions: relay ask --setup"*) ok "relay setup lists the same things, and points at relay start" ;; *) bad "relay setup lists the same things, and points at relay start" "$out" ;; esac
 out="$(gs)"
 case "$out" in *"Where things are:"*"  clones   $T/start-clones"*"  reviews  $T/start-reviews"*"  plans    "*"/plans"*"  relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
+case "$out" in *"  colours  palette "*", theme "*"  relay setup changes any of them."*) ok "and the palette and theme" ;; *) bad "and the palette and theme" "$out" ;; esac
 # A practice round: the same beginning, with a repository made for it.
 gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
 rm -f "$T/clipboard"
@@ -2538,7 +2583,7 @@ out="$(tk ABC-12)"; rc=$?
 case "$rc:$out" in 0:*"Packed ABC-12: comments 1, linked tickets 1, attachments 1, Confluence pages 1"*"Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt and ABC-12.tar.gz"*) ok "relay ticket packs a ticket, though acli answered on the error stream" ;; *) bad "relay ticket packs a ticket, though acli answered on the error stream" "$out" ;; esac
 check "the prompt for Cowork is on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 # Cowork can't read Slack, so the user carries a prompt to Slackbot. It is printed, and never put on the clipboard.
-case "$out" in *"And this one is for Slackbot, if your team talks in Slack. Paste its answer into Copilot Cowork with the prompt above:"*) ok "relay ticket prints a prompt for Slackbot too" ;; *) bad "relay ticket prints a prompt for Slackbot too" "$out" ;; esac
+case "$out" in *"2  Ask Slackbot, if your team talks in Slack.  Paste its answer into Copilot Cowork with the prompt above."*) ok "relay ticket prints a prompt for Slackbot too" ;; *) bad "relay ticket prints a prompt for Slackbot too" "$out" ;; esac
 case "$out" in *'Find the discussions that mention ABC-12 or "Make the widget faster", and the tickets '*ABC-13*) ok "and it names the ticket, its title and a linked ticket" ;; *) bad "and it names the ticket, its title and a linked ticket" "$out" ;; esac
 case "$out" in *'and the tickets ABC-13, ABC-1. Answer under these headings'*) ok "and the parent" ;; *) bad "and the parent" "$out" ;; esac
 case "$out" in *'THREADS, one line each with its link, channel and date. DECISIONS'*'OPEN QUESTIONS. PEOPLE'*'NOT FOUND'*) ok "and asks for a layout Cowork can read back" ;; *) bad "and asks for a layout Cowork can read back" "$out" ;; esac
@@ -2547,20 +2592,20 @@ refuse "and the clipboard keeps the prompt for Cowork only" grep -q -e 'Slackbot
 rm -f "$T/clipboard"
 sty_out="$(styled $'\n' env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12)"
 tkt() { local keys="$1"; shift; env HOME="$TH" PATH="$TB:$FB:$PATH" python3 "$TTY" "$keys" "$W" --dir "$TO" ticket "$@" 2>&1; }
-same_words "a styled ticket says what a plain one does" "$(printf '%s\n' "$sty_out" | plain_words | sed 's/, [0-9][0-9]* bytes//')" "$(tkt $'\n' ABC-12 | plain_words | sed 's/, [0-9][0-9]* bytes//')"
+same_kit_words "a styled ticket says what a plain one does" "$sty_out" "$(tkt $'\n' ABC-12)"
 case "$sty_out" in *"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Packed ABC-12:"*"${ESC_BYTE}[32m✓${ESC_BYTE}[0m Sent to OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt"*"${ESC_BYTE}[1m${ESC_BYTE}[36mNext:${ESC_BYTE}[0m back in Copilot Cowork, reply ${ESC_BYTE}[36mdone${ESC_BYTE}[0m"*) ok "a styled ticket marks what it packed and sent, and its next step" ;; *) bad "a styled ticket marks what it packed and sent, and its next step" "$sty_out" ;; esac
 # At a terminal the prompts stay off the screen. Enter finishes, s swaps in the Slackbot prompt,
 # and p prints both.
 rm -f "$T/clipboard"
 out="$(tkt $'\n' ABC-12)"
-case "$out" in *"Want Slack context too? Copy the Slackbot prompt [s], print both prompts [p], or finish [Enter]: "*) ok "at a terminal a ticket offers the Slackbot prompt" ;; *) bad "at a terminal a ticket offers the Slackbot prompt" "$out" ;; esac
+case "$out" in *"? Want Slack context too?"*"[s] copy the Slackbot prompt  [p] print both prompts  [Enter] finish"*) ok "at a terminal a ticket offers the Slackbot prompt" ;; *) bad "at a terminal a ticket offers the Slackbot prompt" "$out" ;; esac
 case "$out" in *"Find the discussions"* | *"start from this ticket"*) bad "and Enter prints neither prompt" "$out" ;; *) ok "and Enter prints neither prompt" ;; esac
 check "and leaves the prompt for a new session on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 out="$(tkt s ABC-12)"
 case "$out" in *"Copied the Slackbot prompt. Paste it into Slackbot, and its answer into Copilot Cowork."*) ok "s copies the Slackbot prompt" ;; *) bad "s copies the Slackbot prompt" "$out" ;; esac
 check "onto the clipboard" grep -q 'Find the discussions that mention ABC-12' "$T/clipboard"
 out="$(tkt p ABC-12)"
-case "$out" in *"Paste this. It's on your clipboard:"*"start from this ticket"*"Find the discussions that mention ABC-12"*) ok "p prints both prompts" ;; *) bad "p prints both prompts" "$out" ;; esac
+case "$out" in *"Paste this.  It's on your clipboard."*"start from this ticket"*"Ask Slackbot"*"Find the discussions that mention ABC-12"*) ok "p prints both prompts" ;; *) bad "p prints both prompts" "$out" ;; esac
 check "and keeps the prompt for a new session on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 styled "" env HOME="$TH" PATH="$TB:$FB:$PATH" "$W" --dir "$TO" ticket ABC-12 >/dev/null
 no_codes_in "a styled ticket writes no code to OneDrive, the home folder or the clipboard" "$TO" "$TH" "$T/clipboard"
@@ -3227,15 +3272,24 @@ check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.m
 check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"
 
 section "The conventions shared with llm-wiki"
-# docs/conventions.md is a copy of llm-wiki's guide, and relay.sh has the guide's helpers. Only
-# the line that names the tool's own variable may differ. Nothing here fetches llm-wiki.
+# docs/conventions.md is a copy of llm-wiki's guide, and ui.sh a copy of its kit. The guide gives
+# the kit's sha256, so a kit that matches it is llm-wiki's, byte for byte. Nothing here fetches llm-wiki.
 CG="$REPO/docs/conventions.md"
-helper_block() { sed -n '/^# --- style helpers/,/^# --- end of style helpers ---$/p' "$1" | grep -v '^STYLE_OVERRIDE='; }
-if [ -n "$(helper_block "$CG")" ] && [ "$(helper_block "$CG")" = "$(helper_block "$W")" ]; then ok "relay.sh has the guide's style helpers, line for line"; else bad "relay.sh has the guide's style helpers, line for line" "$(diff <(helper_block "$CG") <(helper_block "$W") | head -n 10)"; fi
-check "with its own variable in the one line a tool changes" grep -qx 'STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}" # the one line a tool changes: its own variable' "$W"
-if [ "$(grep -c '^# --- style helpers' "$W")" = 1 ] && [ "$(grep -c '^die() {' "$W")" = 1 ]; then ok "and one copy of them, with one die"; else bad "and one copy of them, with one die"; fi
+kit_sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d ' ' -f 1; else sha256sum "$1" | cut -d ' ' -f 1; fi; }
+kv="$(sed -n 's/^Kit version \([0-9][0-9]*\)\. sha256 `\([0-9a-f]*\)`\.$/\1 \2/p' "$CG")"
+if [ -n "$kv" ] && [ "${kv#* }" = "$(kit_sha "$REPO/ui.sh")" ]; then ok "ui.sh is the kit the guide names, byte for byte"; else bad "ui.sh is the kit the guide names, byte for byte" "the guide says ${kv#* }, ui.sh is $(kit_sha "$REPO/ui.sh"): copy both from llm-wiki"; fi
 cv="$(sed -n '1s/^Conventions version \([0-9][0-9]*\)\..*/\1/p' "$CG")"
-if [ -n "$cv" ] && grep -q "^# --- style helpers: docs/conventions.md, version $cv\. " "$W"; then ok "the copy's version is the one the helpers name"; else bad "the copy's version is the one the helpers name" "the guide says ${cv:-nothing}"; fi
+case "$(sed -n 2p "$REPO/ui.sh")" in *"Kit version ${kv%% *}, for docs/conventions.md version $cv."*) ok "the kit names the guide's version" ;; *) bad "the kit names the guide's version" "the guide says ${cv:-nothing}" ;; esac
+check "relay.sh sources the kit" grep -q '^\. "\$REPO/ui.sh"$' "$W"
+check "with its own variable" grep -qx '  STYLE_OVERRIDE="${LLM_RELAY_STYLE:-}"' "$W"
+if ! grep -q '^style_set() {' "$W" && ! grep -q '^die() {' "$W"; then ok "and no style helpers of its own"; else bad "and no style helpers of its own"; fi
+# The lint is a report until every command has moved to the kit. relay mr is the first.
+if out="$("$REPO/tests/ui-lint.sh" --functions)"; then
+  case "$out" in *cmd_mr* | *pack_mr* | *want_checks* | *run_check* | *finish_prompts* | *print_prompts*) bad "relay mr prints through the kit alone" "$out" ;; *) ok "relay mr prints through the kit alone" ;; esac
+  printf 'note  %s\n' "the lint is a report until every command has moved: $(printf '%s\n' "$out" | grep -c .) function(s) left"
+else
+  bad "the lint runs" "$out"
+fi
 check "the copy says where the original is" grep -q '^Conventions version [0-9]*\. llm-wiki keeps the original\.' "$CG"
 check "AGENTS.md sends an agent to the guide before it changes what a command prints" grep -q 'docs/conventions.md' "$REPO/AGENTS.md"
 check "the user guide names the switch" grep -q 'LLM_RELAY_STYLE' "$REPO/docs/using.md"
