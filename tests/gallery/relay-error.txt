@@ -29,7 +29,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
   setup  Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive.
          Run it again to update the skill. --skills copies your own Claude skills there too,
          each with a note on what to do differently in Cowork. setup --help has more.
-  skills Says where Cowork's copy of each of your skills stands, and changes nothing.
+  skills Says where Copilot Cowork's copy of each of your skills stands, and changes nothing.
   field-test
          Starts a guided test. It makes a small repository at ~/relay-field-test for the
          test to change, puts a note about this Mac's setup in OneDrive, with no paths or

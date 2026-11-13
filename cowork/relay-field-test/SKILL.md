@@ -166,8 +166,8 @@ Then tell them the parts and the minutes each takes, and ask how long they have.
 Only if `relay skills` named a skill of theirs.
 
 1. Have them add a blank line to the end of that skill's `SKILL.md` on the Mac.
-2. Have them run: `relay skills`. Expect `your skill has changed since Cowork's copy was made`.
-3. Have them run: `cd ~/relay-field-test && relay scan`. Expect `Cowork's copy was out of date, so it was made again`.
+2. Have them run: `relay skills`. Expect `your skill has changed since Copilot Cowork's copy was made`.
+3. Have them run: `cd ~/relay-field-test && relay scan`. Expect `Copilot Cowork's copy was out of date, so it was made again`.
 4. Read that skill's `SKILL.md` from `Documents/Cowork/skills` in their OneDrive. Compare its "write this one as" line with the one in the copy you loaded at the start. Record both, and which is newer.
 5. Have them take the blank line out and run `relay setup`.
 

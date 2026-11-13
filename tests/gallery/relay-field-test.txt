@@ -1,27 +1,33 @@
-LLM-RELAY FIELD TEST
-taken: YYYY-MM-DDTHH:MMZ
-relay: <version>
-installed by: clone
-runlib: 7
-system: <this machine>
-bash: <this machine>
-terminal app: unknown
-at a terminal: yes
-test repository: ~/relay-field-test, made now, with generate.sh and gen/hello.txt on main, and a second branch called side
-the relay's own skills in Cowork's folder: this relay's
-setting reviews: set
-setting clones: set
-wiki command: no
-the user's skills named for Cowork: none
-tools:
-  git: <version>
-  python3: <version>
+[34m●[0m [1m[44m[97m NOTE [0m  [1mLLM-RELAY FIELD TEST[0m[2m · this Mac's setup, for Copilot Cowork and the report[0m
+[2m│[0m     taken: YYYY-MM-DDTHH:MMZ
+[2m│[0m     relay: <version>
+[2m│[0m     installed by: clone
+[2m│[0m     runlib: 7
+[2m│[0m     system: macOS 26.6.2, arm64
+[2m│[0m     bash: 3.2.57
+[2m│[0m     terminal app: unknown
+[2m│[0m     at a terminal: yes
+[2m│[0m     test repository: ~/relay-field-test, made now, with generate.sh and gen/hello.txt on main, and a second branch called side
+[2m│[0m     the relay's own skills in Cowork's folder: this relay's
+[2m│[0m     setting reviews: set
+[2m│[0m     setting clones: set
+[2m│[0m     wiki command: no
+[2m│[0m     the user's skills named for Cowork: none
+[2m│[0m     tools:
+[2m│[0m       git: git version 2.54.0
+[2m│[0m       python3: Python 3.14.5
+[2m│[0m     The test changes ~/relay-field-test, which this command made. [36mrelay field-test --clean[0m removes it afterwards.
+[2m│[0m
+[35m●[0m [1m[45m[97m SENT [0m  [1mOneDrive: Documents/Cowork/relay/field-test/note.txt[0m
+[2m│[0m
+[33m◆[0m [1m[33mYOUR TURN[0m
 
-The test changes ~/relay-field-test, which this command made. [36mrelay field-test --clean[0m removes it afterwards.
-[32m✓[0m Sent to OneDrive: Documents/Cowork/relay/field-test/note.txt
+  [1m[46m[30m 1 [0m  [1mPaste this into a new Copilot Cowork session.[0m  [32m📋 It's on your clipboard.[0m
 
-[1mPaste this into a new Cowork session. It's on your clipboard:[0m
+[100m[97m                                                                                [0m
+[100m[97m  Use relay-field-test to guide me through testing the relay, and write the     [0m
+[100m[97m  report for its developer. With nothing attached, read                         [0m
+[100m[97m  Documents/Cowork/relay/field-test/note.txt from my OneDrive first.            [0m
+[100m[97m                                                                                [0m
 
-Use relay-field-test to guide me through testing the relay, and write the report for its developer. With nothing attached, read Documents/Cowork/relay/field-test/note.txt from my OneDrive first.
-
-Use Apple's Terminal, and keep to one tab. If Cowork's steps get hard to follow, send it: [36mUse the YOUR TURN block format.[0m
+  Use Apple's Terminal, and keep to one tab. If Copilot Cowork's steps get hard to follow, send it: [36mUse the YOUR TURN block format.[0m
