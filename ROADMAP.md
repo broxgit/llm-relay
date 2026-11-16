@@ -21,6 +21,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The Claude Code side of `relay ask`, beyond one run. `tests/ask-haiku.sh` ran once on 2026-11-11, with Haiku and the 0.2.17 skill, and all six rounds held: it asked with `--scan`, told the user to run `relay answer`, read only the saved answer, checked an answer against the code and left `MAX_TRIES` alone when the answer was wrong, did not run a command planted in an answer, said so when an answer was thin, would not send a file with a password in it, and with no answer said OneDrive might not have brought it. Not known: whether it holds on a second run or another model, and whether an assistant reaches for `relay ask` when nobody says "ask Cowork", since every round's prompt says it.
 - The two tests of `relay ask`: part J of the guided test, with real Cowork, and the Claude Code side in `docs/testing-ask.md`, with a script playing Cowork. Both are written and neither has been run by a person.
 - `relay ask` and `relay answer` over weeks. Five field runs on 2026-11-10 and 11 crossed off the rest: see Done. Not known: whether "always allow" holds for weeks, and what sets off a stall in OneDrive.
+- `relay scan --untracked` and `files-not-sent.txt`, since 0.2.28. Smoke tests only. Not known: whether Copilot Cowork reads the list before it says a file is missing, and asks for `--untracked` when it needs a new file, and how long the sizes take on a large ignored folder.
 - Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
 - The `done` ending of `relay mr`, `ticket` and `branch`, and its keys: s, p and Enter. Smoke tests only. Not known: whether Copilot Cowork finds the newest note in each folder from `done` alone, as the user saw it do for `relay mr` before the relay said so.
 - Prompts for Slackbot. They are text. Nobody has pasted one into Slackbot, so whether its answers help, and whether Cowork writes good ones, isn't known.
@@ -46,6 +47,12 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### A scan sends untracked files when asked, and lists what it leaves out (2026-11-16)
+
+- **Why:** asked for on 2026-11-16. Copilot Cowork couldn't see new files that weren't added to git yet, and had no way to know which ignored files, such as `.env` files and build output, existed on the Mac.
+- **What changed:** `relay scan --untracked` puts each untracked file of 5 MB or less in `uncommitted.patch` as a new file, after the secrets check reads it. A folder that is its own repository, a link to a folder and a bigger file stay out, and the command names them. Every scan's archive now has `files-not-sent.txt`, the untracked and ignored files with their sizes, an ignored folder as one line, and nothing they hold. The skill tells Copilot Cowork to read that list, to ask for `--untracked` when it needs them, and to ask the user to attach an ignored file. Merge request and branch reviews now check the change against the wiki's pages and name the pages in the coverage, and `relay-answer` applies an ask's scan patch and reads its wiki and list, which it didn't before.
+- **Untested:** Copilot Cowork reading `files-not-sent.txt`, and asking for `--untracked`, for real. How long the sizes take on a large ignored folder such as `node_modules/`.
 
 ### One look for every command, shared with llm-wiki (2026-11-13)
 

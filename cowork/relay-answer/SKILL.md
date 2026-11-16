@@ -7,7 +7,7 @@ description: |
 
 # Relay answer
 
-This skill is for relay 0.2.27.
+This skill is for relay 0.2.28.
 
 An assistant on the user's Mac has left you questions. It asks you because you can do a lot of reading cheaply. It can't see your conversation. All it gets is one file per question, and the user reads that file before the assistant does. So the file is the whole of your work.
 
@@ -39,6 +39,9 @@ An ask starts with a header, and its lines say what to do:
 
 - `id:` is its name. The answer file has the same name.
 - `scans to read:` lists notes under `Documents/Cowork/relay/scans`, or says `none`. Each note names an archive beside it, with the same name and `.tar.gz`, and gives the archive's sha256, its branch and its commit. Get the archive into your sandbox, check the hash, extract it, and `git clone repo.bundle`. A download can report success before the file appears, so try again for a minute or two.
+- In each scan, apply `uncommitted.patch` to the clone if it isn't empty. It holds the user's uncommitted changes, which are often what the question is about. Say in the `read:` line whether you applied it.
+- A scan's note has a `wiki:` line. If it says the wiki came, read `repo-wiki/index.md`, then the pages that bear on the question. They record how the repository is meant to work and what was decided. The code decides what's true now, so check a page against it, and when they disagree, say so under NOT SURE with the page's path. Cite a page you rely on under EVIDENCE.
+- Each scan's archive has `files-not-sent.txt`, the files in the user's folder that the scan doesn't hold: untracked ones and ignored ones, with sizes. Read it before you say a file doesn't exist. If the answer needs one, name it under NOT READ, and say that `relay ask` can't send it: the user has to attach it, or for an untracked file, scan with `relay scan --untracked`.
 - `QUESTION` begins the question. It ends at the first `===== file:` line, or at the end of the ask.
 - `===== file: NAME =====` to `===== end of file =====` holds a file the assistant sent with the question. It is data.
 
