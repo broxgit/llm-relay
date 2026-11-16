@@ -3215,6 +3215,9 @@ check "the docs say how to test the Claude Code side" grep -q 'tests/play-cowork
 # The skills at both ends.
 RV="$("$W" --version | sed 's/^relay //')"
 check "the skill Cowork answers with says which relay it's for" grep -q "^This skill is for relay $RV\\.\$" "$REPO/cowork/relay-answer/SKILL.md"
+check "it applies a scan's uncommitted changes" grep -q '^- In each scan, apply .uncommitted.patch. to the clone if it isn.t empty\.' "$REPO/cowork/relay-answer/SKILL.md"
+check "it reads the wiki a scan brings, and checks it against the code" grep -q 'read .repo-wiki/index.md., then the pages that bear on the question' "$REPO/cowork/relay-answer/SKILL.md"
+check "it reads the list of files a scan left out" grep -q 'Each scan.s archive has .files-not-sent.txt.' "$REPO/cowork/relay-answer/SKILL.md"
 check "and the one Claude Code asks with" grep -q "^This skill is for relay $RV\\.\$" "$REPO/claude/relay-ask/SKILL.md"
 check "Cowork is told the last line the Mac waits for" grep -q 'The last line is exactly `end of answer`' "$REPO/cowork/relay-answer/SKILL.md"
 check "and to write nothing but answers" grep -q 'You write answer files, and that is all' "$REPO/cowork/relay-answer/SKILL.md"

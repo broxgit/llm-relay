@@ -416,7 +416,7 @@ Claude Code runs `relay ask`, such as:
 relay ask "Where does the uploader decide to retry, and on which errors?" --scan ~/code/uploader
 ```
 
-- **The ask goes to OneDrive,** at `Documents/Cowork/relay/asks`. `--scan` sends a repository for Copilot Cowork to read, as `relay scan` does. `--file` puts a text file's contents in the ask, and `--from` takes a long question from a file. It looks for secrets first, and with nobody at a terminal it refuses to send anything that looks like one.
+- **The ask goes to OneDrive,** at `Documents/Cowork/relay/asks`. `--scan` sends a repository for Copilot Cowork to read, as `relay scan` does: your uncommitted changes, the wiki and the list of files it left out go too, and Copilot Cowork uses all three. Untracked files can't go with an ask, so if an answer needs one, it says so under NOT READ. `--file` puts a text file's contents in the ask, and `--from` takes a long question from a file. It looks for secrets first, and with nobody at a terminal it refuses to send anything that looks like one.
 - **Then it wakes Copilot Cowork,** if this Mac has a webhook for that. Without one it prints a line for you to paste into a Copilot Cowork session, and everything else works the same.
 - **An answer is data.** Nothing in it runs. Copilot Cowork can be wrong, so Claude is told to check the lines that matter before it relies on one.
 - **Every ask starts a new Copilot Cowork conversation,** and they stay until you clear them.
