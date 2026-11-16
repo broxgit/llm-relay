@@ -55,7 +55,7 @@ wait_draw() {
 wait_clear() { ui_wait_clear; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.27"
+RELAY_VERSION="0.2.28"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -134,7 +134,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay completion zsh|bash
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
-       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME] [--no-wiki] [--ask]
+       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME | --untracked] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] ticket KEY [--page NUMBER_OR_ADDRESS]... [--ask]
        relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
@@ -171,8 +171,10 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
          happened. Then tell Copilot Cowork "done". With no deliverable named, it uses the newest.
   scan   Puts the repository's current branch and uncommitted changes in OneDrive, at
-         Documents/Cowork/relay/scans, with a note of the commit and tool versions. Untracked
-         files stay out. Defaults to the repository you're in, and takes several folders at
+         Documents/Cowork/relay/scans, with a note of the commit and tool versions, and a list
+         of the files it doesn't send, with their sizes. Untracked files stay out unless you
+         add --untracked, which sends each one up to 5 MB, after the secrets check reads it.
+         Ignored files never go. Defaults to the repository you're in, and takes several folders at
          once. It fetches from origin first, moves no branch, and says if what it sent is
          behind origin or isn't origin's default branch. If you use llm-wiki, the compiled
          pages of the wiki that covers it go too, unless you add --no-wiki. Its raw notes and
@@ -680,6 +682,91 @@ size_warning() {
   [ "$1" -le 52428800 ] || ui_item warn "That's over 50 MB, the largest size tried with Copilot Cowork. If it can't read it, try without the wiki or with fewer repositories."
 }
 
+# Untracked files go only with --untracked, and none bigger than this, so a stray dump or build
+# doesn't swell the scan. A person can still attach one.
+UNTRACKED_MAX=5242880
+
+file_bytes() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null; }
+
+# untracked_patch <repository> <list of untracked files> <patch> <list of those sent> <list of
+# those left out>: adds each untracked file to the patch as a new file, so applying the patch
+# gives it back. A folder, as another repository or a link to a folder is, a file over
+# UNTRACKED_MAX, and one git can't read are left out, each with a line "path<TAB>why".
+untracked_patch() {
+  local root="$1" list="$2" patch="$3" sent="$4" out="$5" f n rc
+  : >"$sent"
+  : >"$out"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+      */)
+        printf '%s\t%s\n' "$f" "a repository of its own" >>"$out"
+        continue
+        ;;
+    esac
+    if [ -d "$root/$f" ]; then
+      printf '%s\t%s\n' "$f" "a link to a folder" >>"$out"
+      continue
+    fi
+    n="$(file_bytes "$root/$f")"
+    if [ -n "$n" ] && [ "$n" -gt "$UNTRACKED_MAX" ]; then
+      printf '%s\t%s\n' "$f" "over 5 MB" >>"$out"
+      continue
+    fi
+    # git diff says 1 when the files differ, which is the answer here.
+    rc=0
+    git -C "$root" diff --no-index --no-color --no-ext-diff --binary -- /dev/null "$f" >"$patch.one" 2>/dev/null || rc=$?
+    if [ "$rc" -le 1 ] && grep -q '^diff --git ' "$patch.one"; then
+      cat "$patch.one" >>"$patch"
+      printf '%s\n' "$f" >>"$sent"
+    else
+      printf '%s\t%s\n' "$f" "git couldn't read it" >>"$out"
+    fi
+  done <"$list"
+  rm -f "$patch.one"
+}
+
+# sizes <repository> <list of paths, or of "path<TAB>why">: each with its size on disk, the
+# largest 500 or fewer. Nothing in the files is read.
+sizes() {
+  local root="$1" list="$2" n p why s
+  n="$(grep -c . "$list" 2>/dev/null || true)"
+  if [ "${n:-0}" -eq 0 ]; then
+    echo "  none"
+    return 0
+  fi
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    why=""
+    case "$p" in *"	"*) why="${p#*	}" && p="${p%%	*}" ;; esac
+    s="$(cd "$root" && du -sh -- "$p" 2>/dev/null | cut -f 1)"
+    printf '  %6s  %s%s\n' "${s:-?}" "$p" "${why:+  ($why)}"
+  done <<EOF
+$(head -n 500 "$list")
+EOF
+  [ "$n" -le 500 ] || echo "  and $((n - 500)) more"
+}
+
+# files_not_sent <repository> <untracked files not sent> <untracked files left out, with why>:
+# what's in the repository's folder that a scan doesn't hold, so Copilot Cowork knows it exists
+# and can ask for it. Ignored folders are one line each.
+files_not_sent() {
+  local root="$1" unsent="$2" left="$3"
+  git -C "$root" -c core.quotepath=off ls-files --others --ignored --exclude-standard --directory >"$unsent.ignored" 2>/dev/null || : >"$unsent.ignored"
+  echo "FILES NOT SENT"
+  echo "What's in this repository's folder on the Mac that this scan doesn't hold, with sizes on disk. Only names and sizes: nothing in these files was read or sent."
+  echo
+  echo "untracked, not sent. relay scan --untracked sends them:"
+  sizes "$root" "$unsent"
+  echo
+  echo "untracked, left out even with --untracked:"
+  sizes "$root" "$left"
+  echo
+  echo "ignored, by .gitignore or the repository's own exclude rules. The relay never sends these:"
+  sizes "$root" "$unsent.ignored"
+  rm -f "$unsent.ignored"
+}
+
 list_tools() {
   local t
   for t in go git buf protoc python3 node glab; do
@@ -713,18 +800,20 @@ secret_cut() {
   sed -n "s|^${1:+$1:}\\([^:]*\\):\\([0-9][0-9]*\\):.*|\\1:\\2: $2|p"
 }
 
-# secret_places <repository> <commit> [folder]: a line for each place in that commit's files that
-# is shaped like a secret. With no commit, it reads the tracked files as they are on disk.
+# secret_places <repository> <commit> [folder] [untracked]: a line for each place in that commit's
+# files that is shaped like a secret. With no commit, it reads the tracked files as they are on
+# disk, and with "untracked" too, the untracked files that .gitignore doesn't name.
 secret_places() {
-  local root="$1" at="$2" in="${3:-}" ext f
+  local root="$1" at="$2" in="${3:-}" ext f u=""
   local specs=()
-  git -C "$root" grep -n -I -E -e "$SECRET_KEY_BLOCK" ${at:+"$at"} -- ${in:+"$in"} 2>/dev/null | secret_cut "$at" "a private key"
-  git -C "$root" grep -n -I -E -e "$SECRET_TOKENS" ${at:+"$at"} -- ${in:+"$in"} 2>/dev/null | secret_cut "$at" "text shaped like an access token"
+  [ -n "$at" ] || [ "${4:-}" != untracked ] || u=--untracked
+  git -C "$root" grep -n -I -E ${u:+"$u"} -e "$SECRET_KEY_BLOCK" ${at:+"$at"} -- ${in:+"$in"} 2>/dev/null | secret_cut "$at" "a private key"
+  git -C "$root" grep -n -I -E ${u:+"$u"} -e "$SECRET_TOKENS" ${at:+"$at"} -- ${in:+"$in"} 2>/dev/null | secret_cut "$at" "text shaped like an access token"
   for ext in $SECRET_SETTINGS; do
     specs+=(":(glob)${in:+$in/}**/*.$ext")
   done
   specs+=(":(glob)${in:+$in/}**/.env*")
-  git -C "$root" grep -n -I -i -E -e "$SECRET_SETS" ${at:+"$at"} -- "${specs[@]}" 2>/dev/null |
+  git -C "$root" grep -n -I -i -E ${u:+"$u"} -e "$SECRET_SETS" ${at:+"$at"} -- "${specs[@]}" 2>/dev/null |
     grep -v -i -E -e "$SECRET_NOT" | secret_cut "$at" "a line that looks like it sets a password or key"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
@@ -736,6 +825,21 @@ secret_places() {
     esac
   done <<EOF
 $(if [ -n "$at" ]; then git -C "$root" ls-tree -r --name-only "$at" -- ${in:+"$in"} 2>/dev/null; else git -C "$root" ls-files 2>/dev/null; fi)
+$([ -z "$u" ] || git -C "$root" ls-files --others --exclude-standard -- ${in:+"$in"} 2>/dev/null)
+EOF
+}
+
+# secret_places_untracked <repository> <file of untracked files being sent>: the same places in
+# those files, as they are on disk.
+secret_places_untracked() {
+  local root="$1" sent="$2" line
+  [ -s "$sent" ] || return 0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    grep -Fxq -- "${line%%:*}" "$sent" || continue
+    echo "$line, in an untracked file"
+  done <<EOF
+$(secret_places "$root" "" "" untracked)
 EOF
 }
 
@@ -971,10 +1075,12 @@ scan_name() {
 
 cmd_scan() {
   local dir="." dirs="" many=0 failed=0 d root name plain branch commit size hash dest dirty=no no_wiki="" want="" def="" behind=""
+  local untracked="" u_all=0 u_sent=0 u_left=0 u_line="" p
   while [ $# -gt 0 ]; do
     case "$1" in
       -h | --help) usage; return 0 ;;
       --no-wiki) no_wiki=1; shift ;;
+      --untracked) untracked=1; shift ;;
       --ask) SECRETS_ASK=1; shift ;;
       --branch)
         [ -n "${2:-}" ] || die_usage "--branch needs a branch name"
@@ -991,12 +1097,13 @@ cmd_scan() {
         ;;
     esac
   done
+  [ -z "$untracked" ] || [ -z "$want" ] || die_usage "relay scan: --untracked can't go with --branch, which leaves the files in your folder out"
   # Several repositories: each is its own scan, with its own secrets check, and one that is
   # refused or fails doesn't stop the rest. The clipboard ends up naming all that were sent.
   if [ "$many" -gt 1 ]; then
     while IFS= read -r d; do
       [ -n "$d" ] || continue
-      (cmd_scan "$d" ${want:+--branch "$want"} ${no_wiki:+--no-wiki} ${SECRETS_ASK:+--ask}) || failed=$((failed + 1))
+      (cmd_scan "$d" ${want:+--branch "$want"} ${no_wiki:+--no-wiki} ${untracked:+--untracked} ${SECRETS_ASK:+--ask}) || failed=$((failed + 1))
       echo
     done <<EOF
 $dirs
@@ -1045,6 +1152,29 @@ EOF
   if [ -z "$want" ]; then
     git -C "$root" diff HEAD --binary >"$WORK/uncommitted.patch" || die "git couldn't read the uncommitted changes"
     [ -s "$WORK/uncommitted.patch" ] && dirty=yes
+    # Untracked files go in the same patch, as new files, only when asked for. Either way the
+    # scan lists what it doesn't hold, so Copilot Cowork knows to ask.
+    git -C "$root" -c core.quotepath=off ls-files --others --exclude-standard >"$WORK/untracked.txt" 2>/dev/null || : >"$WORK/untracked.txt"
+    u_all="$(grep -c . "$WORK/untracked.txt" || true)"
+    if [ -n "$untracked" ]; then
+      untracked_patch "$root" "$WORK/untracked.txt" "$WORK/uncommitted.patch" "$WORK/untracked-sent.txt" "$WORK/untracked-left.txt"
+      : >"$WORK/untracked-unsent.txt"
+    else
+      : >"$WORK/untracked-sent.txt"
+      : >"$WORK/untracked-left.txt"
+      cp "$WORK/untracked.txt" "$WORK/untracked-unsent.txt"
+    fi
+    u_sent="$(grep -c . "$WORK/untracked-sent.txt" || true)"
+    u_left="$(grep -c . "$WORK/untracked-left.txt" || true)"
+    files_not_sent "$root" "$WORK/untracked-unsent.txt" "$WORK/untracked-left.txt" >"$WORK/files-not-sent.txt"
+    if [ "${u_all:-0}" -eq 0 ]; then
+      u_line="none"
+    elif [ -z "$untracked" ]; then
+      u_line="$u_all, not sent, and listed in files-not-sent.txt. If you need them, ask the user to run relay scan --untracked"
+    else
+      u_line="$u_sent sent, as new files in uncommitted.patch"
+      [ "${u_left:-0}" -eq 0 ] || u_line="$u_line. $u_left left out, as files-not-sent.txt says"
+    fi
   fi
 
   secret_places "$root" "$commit" >"$WORK/secrets.txt"
@@ -1052,7 +1182,12 @@ EOF
     secret_places_uncommitted "$root" "$WORK/secrets.txt" >"$WORK/secrets-now.txt"
     cat "$WORK/secrets-now.txt" >>"$WORK/secrets.txt"
   fi
-  secrets_gate "$name" "$WORK/secrets.txt" "$root" || return 1
+  [ "${u_sent:-0}" -eq 0 ] || secret_places_untracked "$root" "$WORK/untracked-sent.txt" >>"$WORK/secrets.txt"
+  if [ "${u_sent:-0}" -gt 0 ]; then
+    secrets_gate "$name" "$WORK/secrets.txt" "$root" "It reads the files at the commit being sent, your changes to them, and the untracked files going with them. It doesn't read the history, which goes too." || return 1
+  else
+    secrets_gate "$name" "$WORK/secrets.txt" "$root" || return 1
+  fi
 
   collect_wiki "$root" "" "$no_wiki"
   {
@@ -1074,15 +1209,21 @@ EOF
     else
       echo "uncommitted changes: no, uncommitted.patch is empty"
     fi
-    if [ -z "$want" ]; then
-      echo "status (untracked files, marked ??, are not in the archive):"
+    if [ -n "$want" ]; then
+      echo "untracked files: left out, because this is a scan of another branch"
+    else
+      echo "untracked files: $u_line"
+      echo "files not sent: listed in files-not-sent.txt, with untracked and ignored files and their sizes"
+      echo "status (untracked files are marked ??):"
       git -C "$root" status --short | head -n 200 | sed 's/^/  /'
     fi
     echo "tools:"
     list_tools
   } >"$WORK/scan.txt"
+  local listing=""
+  [ -n "$want" ] || listing="files-not-sent.txt"
   # COPYFILE_DISABLE keeps macOS's tar from adding ._ files.
-  make_archive "$WORK/$name.tar.gz" -C "$WORK" repo.bundle uncommitted.patch scan.txt ${WIKI_PART:+"$WIKI_PART"} || die "tar couldn't make the archive"
+  make_archive "$WORK/$name.tar.gz" -C "$WORK" repo.bundle uncommitted.patch scan.txt ${listing:+"$listing"} ${WIKI_PART:+"$WIKI_PART"} || die "tar couldn't make the archive"
   hash="$(sha256_of "$WORK/$name.tar.gz")"
   size="$(wc -c <"$WORK/$name.tar.gz" | tr -d ' ')"
   {
@@ -1101,7 +1242,19 @@ EOF
   if [ -n "$want" ]; then
     ui_stage SCANNED "$name: $want at $commit, from $SCAN_SOURCE" "$size bytes" "uncommitted changes left out"
   else
-    ui_stage SCANNED "$name: ${branch:-detached HEAD} at $commit" "$size bytes" "uncommitted changes: $dirty"
+    ui_stage SCANNED "$name: ${branch:-detached HEAD} at $commit" "$size bytes" "uncommitted changes: $dirty" ${untracked:+"untracked files sent: $u_sent"}
+    if [ -z "$untracked" ] && [ "${u_all:-0}" -gt 0 ]; then
+      ui_detail "Untracked files left out: $u_all. Add --untracked to send them."
+    fi
+    if [ "${u_left:-0}" -gt 0 ]; then
+      ui_item warn "Untracked files left out even so: $u_left. The scan's files-not-sent.txt names them."
+      while IFS= read -r p; do
+        [ -z "$p" ] || ui_detail "${p%%	*} (${p#*	})"
+      done <<EOF
+$(head -n 5 "$WORK/untracked-left.txt")
+EOF
+      [ "$u_left" -le 5 ] || ui_detail "and $((u_left - 5)) more"
+    fi
     case "$behind" in
       "" | "level with"*) ;;
       *) ui_item warn "Check this is what you mean to send: $behind. To send origin's $def without switching branch: $(typed "relay scan $(tilde "$root") --branch $def")" ;;
@@ -3918,7 +4071,7 @@ cmd_complete() {
   case "$sub" in
     setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--palette\n--theme\n--forget\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
-    scan) printf -- '--branch\n--no-wiki\n--ask\n' ;;
+    scan) printf -- '--branch\n--untracked\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;
     review) echo --expect ;;
     ticket) printf -- '--page\n--ask\n' ;;

@@ -941,6 +941,43 @@ check "the bundle keeps the branch" bash -c "[ \"\$(git -C '$T/unpack/clone' sym
 check "the patch applies to the clone" git -C "$T/unpack/clone" apply "$T/unpack/uncommitted.patch"
 check "and gives the working copy, tabs and all" cmp "$SR/a.txt" "$T/unpack/clone/a.txt"
 check "untracked files stay out" bash -c "! grep -rq secret '$T/unpack/clone' && ! tar -tzf '$SD/scan-me.tar.gz' | grep -q untracked"
+check "the note says how many untracked files stayed out, and how to send them" grep -q '^untracked files: 1, not sent, and listed in files-not-sent.txt. If you need them, ask the user to run relay scan --untracked$' "$SD/scan-me.txt"
+check "the archive lists what it doesn't hold" bash -c "tar -xzOf '$SD/scan-me.tar.gz' files-not-sent.txt | grep -q '  untracked.env\$'"
+# What it doesn't send: untracked files, sent only with --untracked, and ignored ones, never sent.
+mkdir -p "$SR/new" "$SR/build/deep"
+printf 'new\ttabbed\n' >"$SR/new/b.txt"
+echo built >"$SR/build/deep/out.o"
+echo 'build/' >>"$SR/.git/info/exclude"
+head -c 5300000 /dev/zero >"$SR/huge.bin"
+expect "a scan says untracked files stayed out, and how to send them" "Untracked files left out: 3. Add --untracked to send them." sc "$SR"
+FN="$T/files-not-sent.txt"
+tar -xzOf "$SD/scan-me.tar.gz" files-not-sent.txt >"$FN"
+check "it lists untracked files inside a new folder, one by one" grep -q '  new/b.txt$' "$FN"
+check "an ignored folder is one line" grep -q '  build/$' "$FN"
+check "and what's in it isn't listed" bash -c "! grep -q out.o '$FN'"
+check "the list gives sizes" grep -q '^ *[0-9.]*[BKMG]  huge.bin$' "$FN"
+check "and nothing the files hold" bash -c "! grep -q -e built -e tabbed '$FN'"
+out="$(sc --untracked "$SR" 2>&1)"
+case "$out" in *"untracked files sent: 2"*"Untracked files left out even so: 1"*"huge.bin (over 5 MB)"*) ok "--untracked says what it sent and what it left out" ;; *) bad "--untracked says what it sent and what it left out" "$out" ;; esac
+check "the note says so too" grep -q '^untracked files: 2 sent, as new files in uncommitted.patch. 1 left out, as files-not-sent.txt says$' "$SD/scan-me.txt"
+rm -rf "$T/unpack-u"
+mkdir -p "$T/unpack-u"
+tar -xzf "$SD/scan-me.tar.gz" -C "$T/unpack-u"
+git clone -q "$T/unpack-u/repo.bundle" "$T/unpack-u/clone" 2>/dev/null
+check "the patch applies, untracked files and all" git -C "$T/unpack-u/clone" apply "$T/unpack-u/uncommitted.patch"
+check "and gives each untracked file back, tabs and all" cmp "$SR/new/b.txt" "$T/unpack-u/clone/new/b.txt"
+check "and the tracked change too" cmp "$SR/a.txt" "$T/unpack-u/clone/a.txt"
+check "a file over 5 MB stays out" test ! -e "$T/unpack-u/clone/huge.bin"
+check "ignored files stay out, even with --untracked" test ! -e "$T/unpack-u/clone/build"
+check "the list still names what was left out, and why" grep -q 'huge.bin  (over 5 MB)$' "$T/unpack-u/files-not-sent.txt"
+U_TOKEN="gl""pat-abcdefghij0123456789"
+printf 'tok: %s\n' "$U_TOKEN" >"$SR/new/notes.md"
+out="$(sc --untracked "$SR" </dev/null 2>&1)"; rc=$?
+case "$rc:$out" in 0:*) bad "the secrets check reads untracked files before it sends them" "$out" ;; *"new/notes.md:1: text shaped like an access token, in an untracked file"*"needs a terminal"*) ok "the secrets check reads untracked files before it sends them" ;; *) bad "the secrets check reads untracked files before it sends them" "$out" ;; esac
+expect "but not untracked files it isn't sending" "SCANNED  scan-me" sc "$SR"
+out="$(sc --untracked --branch main "$SR" 2>&1)"; rc=$?
+case "$rc:$out" in "2:"*"--untracked can't go with --branch"*) ok "--untracked can't go with --branch" ;; *) bad "--untracked can't go with --branch" "$rc:$out" ;; esac
+rm -rf "$SR/new" "$SR/build" "$SR/huge.bin"
 git -C "$SR" checkout -q -- a.txt
 git -C "$SR" checkout -q --detach
 expect "a detached HEAD can be scanned" "detached HEAD" sc "$SR"
@@ -1019,6 +1056,8 @@ git -C "$GR" commit -qm one
 sc "$GR" >/dev/null 2>&1
 check "a repository named global doesn't send the shared wiki" bash -c "! tar -tzf '$SD/global.tar.gz' | grep -q repo-wiki"
 check "the skill reads the wiki from the scan" grep -q 'read .repo-wiki/index.md. before you plan' "$SK/SKILL.md"
+check "and checks a merge request or branch against it" grep -q 'read .repo-wiki/index.md. before the diff, then the pages that bear on what the change touches' "$SK/SKILL.md"
+check "and says in its coverage which pages it checked" grep -q '^- The wiki pages you checked the change against, or that no wiki came\.$' "$SK/SKILL.md"
 
 # Scanning a named branch: origin is ahead of the local main, and the checkout is on another branch.
 BO="$T/branch-origin.git"

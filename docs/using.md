@@ -188,7 +188,11 @@ relay scan ~/code/thing ~/code/other
 
 With no folder, it scans the one you are in. Each repository is its own scan with its own secrets question, and one you refuse doesn't stop the rest. The prompt on your clipboard names every scan that was sent.
 
-It puts the current branch and your uncommitted changes in OneDrive, at `Documents/Cowork/relay/scans`, so you don't have to attach anything. That includes the branch's whole history. Untracked files stay out.
+It puts the current branch and your uncommitted changes in OneDrive, at `Documents/Cowork/relay/scans`, so you don't have to attach anything. That includes the branch's whole history.
+
+**Untracked files stay out unless you ask.** Add `--untracked` and each untracked file goes too, as a new file in the same patch, if it's 5 MB or less. The secrets check reads them first. A folder that is a repository of its own, a link to a folder, and a bigger file stay out, and the command names them. Files that `.gitignore` names never go.
+
+Every scan also lists what it doesn't hold, in `files-not-sent.txt`: untracked files and ignored ones, with their sizes, and each ignored folder as one line, such as `node_modules/`. Only names and sizes go: nothing in those files is read or sent. So Copilot Cowork knows a file exists, and can ask you for it, instead of guessing.
 
 **It looks for secrets first.** Before `relay scan` or `relay mr` sends code, it looks in the files for private keys, access tokens, lines in settings files that set a password or key, and files named like keys or credentials. If it finds any, it lists where they are, without printing them, and asks before it sends. That question needs a terminal, and no flag answers it for you. Say no, and nothing is sent.
 
@@ -270,7 +274,7 @@ relay mr <url> --also ~/dev/some-service --also ~/dev/deployments/my-service
 ```
 
 - Copilot Cowork also looks in your Teams chats, email and SharePoint for the discussion behind a change, and says what it found. That's Copilot Cowork's own reach: the relay sends none of it.
-- It sends the merge request's discussions and diff, its source and target branches, your own Go libraries at the versions `go.mod` pins, your earlier review, and the wiki if there is one. It only fetches in your clone. It ends as [mr, ticket and branch end](#how-mr-ticket-and-branch-end) says.
+- It sends the merge request's discussions and diff, its source and target branches, your own Go libraries at the versions `go.mod` pins, your earlier review, and the wiki if there is one. Copilot Cowork checks the change against the wiki's pages, counts a change that goes against one as a finding, and says in the review's coverage which pages it checked. `relay branch` reviews do the same. It only fetches in your clone. It ends as [mr, ticket and branch end](#how-mr-ticket-and-branch-end) says.
 - `--also` sends another repository at origin's default branch, or only one folder of it, and `PATH@BRANCH` names a branch. Use it as many times as you like.
 - `--go-prefix PREFIX` says which Go modules count as yours, so their versions are sent. Without it, they are the modules that share your own module's host, or on github.com, gitlab.com and bitbucket.org, its owner. Use it as many times as you like.
 - The relay finds your clone in the folder you're in, or under the folders `relay setup --clones` names. If it's somewhere else, name it once with `--repo` and the relay remembers it.
@@ -567,12 +571,13 @@ relay [--dir ONEDRIVE_FOLDER] field-test [--clean | --asks]
 Puts a repository's current branch and uncommitted changes in OneDrive for Copilot Cowork to read.
 
 ```bash
-relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME] [--no-wiki] [--ask]
+relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME | --untracked] [--no-wiki] [--ask]
 ```
 
 - `--dir ONEDRIVE_FOLDER`: the OneDrive folder to use.
 - `REPOSITORY`: the folder to scan, as many as you like. With none, the one you are in.
 - `--branch NAME`: scan that branch instead, as origin has it after a fetch, or your local copy if origin doesn't have it. Uncommitted changes stay out.
+- `--untracked`: send untracked files too, each up to 5 MB. Ignored files still stay out.
 - `--no-wiki`: leave out the compiled pages of the llm-wiki that covers the repository.
 - `--ask`: ask the secrets question again, even if you said yes before.
 

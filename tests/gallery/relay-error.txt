@@ -7,7 +7,7 @@
        relay completion zsh|bash
        relay --version
        relay [--dir ONEDRIVE_FOLDER] run [TASK-FOLDER/DELIVERABLE] [--expect VERSION] [--no-install]
-       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME] [--no-wiki] [--ask]
+       relay [--dir ONEDRIVE_FOLDER] scan [REPOSITORY]... [--branch NAME | --untracked] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] mr URL... [--also PATH[@BRANCH]]... [--repo PATH] [--go-prefix PREFIX]... [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] ticket KEY [--page NUMBER_OR_ADDRESS]... [--ask]
        relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
@@ -44,8 +44,10 @@
          goes to Documents/Cowork/relay/<task-folder>/reports in OneDrive, only if a run
          happened. Then tell Copilot Cowork "done". With no deliverable named, it uses the newest.
   scan   Puts the repository's current branch and uncommitted changes in OneDrive, at
-         Documents/Cowork/relay/scans, with a note of the commit and tool versions. Untracked
-         files stay out. Defaults to the repository you're in, and takes several folders at
+         Documents/Cowork/relay/scans, with a note of the commit and tool versions, and a list
+         of the files it doesn't send, with their sizes. Untracked files stay out unless you
+         add --untracked, which sends each one up to 5 MB, after the secrets check reads it.
+         Ignored files never go. Defaults to the repository you're in, and takes several folders at
          once. It fetches from origin first, moves no branch, and says if what it sent is
          behind origin or isn't origin's default branch. If you use llm-wiki, the compiled
          pages of the wiki that covers it go too, unless you add --no-wiki. Its raw notes and
