@@ -665,6 +665,7 @@ expect "setup finds the work OneDrive" "installed: $CW/Library/CloudStorage/OneD
 SKT="$CW/Library/CloudStorage/OneDrive-Acme/Documents/Cowork/skills/remote-pair-run"
 check "it copies the skill" cmp "$SK/SKILL.md" "$SKT/SKILL.md"
 check "it copies the library" cmp "$SK/runlib.sh" "$SKT/runlib.sh"
+check "and the debrief" cmp "$SK/debrief.md" "$SKT/debrief.md"
 echo stale >"$SKT/runlib.sh"
 check "running it again succeeds" cw
 check "running it again updates the skill" cmp "$SK/runlib.sh" "$SKT/runlib.sh"
@@ -985,6 +986,7 @@ check "with nothing uncommitted, it says so" grep -q '^uncommitted changes: no, 
 out="$(cd "$SR/sub" && env HOME="$RH" "$W" scan 2>&1)"
 case "$out" in *"SCANNED  scan-me"*) ok "scan defaults to the repository you're in" ;; *) bad "scan defaults to the repository you're in" "$out" ;; esac
 check "a repository with no wiki says so" grep -q '^wiki: none covers this repository$' "$SD/scan-me.txt"
+check "a scan's note says whether Copilot Cowork may offer a debrief" grep -qx 'debrief: ask' "$SD/scan-me.txt"
 check "and its archive has no wiki" bash -c "! tar -tzf '$SD/scan-me.tar.gz' | grep -q repo-wiki"
 # How a scan looks at a terminal: the same words, with a mark and a colour, and no code in what
 # it writes. The clipboard here is a fake, so a real one is never touched.
@@ -1058,6 +1060,14 @@ check "a repository named global doesn't send the shared wiki" bash -c "! tar -t
 check "the skill reads the wiki from the scan" grep -q 'read .repo-wiki/index.md. before you plan' "$SK/SKILL.md"
 check "and checks a merge request or branch against it" grep -q 'read .repo-wiki/index.md. before the diff, then the pages that bear on what the change touches' "$SK/SKILL.md"
 check "and says in its coverage which pages it checked" grep -q '^- The wiki pages you checked the change against, or that no wiki came\.$' "$SK/SKILL.md"
+check "the skill offers a debrief only when a note says so" grep -q 'Offer only if the latest relay note you read in this conversation has `debrief: ask`' "$SK/SKILL.md"
+check "in one line at the end of a message" grep -q "write: \`If you're wrapping up: a five-minute debrief on how relay did helps its developer" "$SK/SKILL.md"
+check "and only once" grep -q "If they ignore it or say no, don't offer again in this conversation" "$SK/SKILL.md"
+check "the debrief asks the user before it writes" grep -q '^2\. \*\*Ask the user two things,\*\*' "$SK/debrief.md"
+check "keeps their work out" grep -q '^4\. \*\*Leave their work out\.\*\*' "$SK/debrief.md"
+check "counts a workaround as a problem" grep -q 'A workaround is not a pass' "$SK/debrief.md"
+check "has the Coverage relay review shows" grep -qx '## Coverage' "$SK/debrief.md"
+check "and comes back through relay review, to debrief/ under the reviews" grep -q 'reviews/debrief/relay-debrief-<date>.md' "$SK/debrief.md"
 
 # Scanning a named branch: origin is ahead of the local main, and the checkout is on another branch.
 BO="$T/branch-origin.git"
@@ -1736,6 +1746,7 @@ check "relay.sh gives the kit the settings file for both" grep -q '^  STYLE_THEM
 case "$(env -u LLM_PALETTE -u LLM_THEME LC_ALL=en_US.UTF-8 bash -c 'STYLE_OVERRIDE=on STYLE_PALETTE_FILE="$1" STYLE_THEME_FILE="$1" COLORTERM=truecolor; . "$2"; ui_item ok x' sh "$T/fresh-relay-home/.config/llm-relay/settings" "$REPO/ui.sh")" in *"38;2;0;114;178m"*) ok "and the kit reads them from it: ok is the colour-blind light theme's blue" ;; *) bad "and the kit reads them from it: ok is the colour-blind light theme's blue" ;; esac
 expect "--palette takes only a palette's name" "--palette needs default or colorblind" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --palette pink
 expect "--theme takes only a theme's name" "--theme needs auto, dark or light" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --theme grey
+expect "--debrief takes only ask or off" "--debrief needs ask or off" env HOME="$T/fresh-relay-home" "$W" setup --dir "$OD" --debrief maybe
 printf 'reviews=%s\nclones=%s\n' "$RV" "$T/clones" >"$RH/.config/llm-relay/settings"
 check "the skill reads MR archives" grep -q 'Documents/Cowork/relay/mrs/<repo>-<iid>.txt' "$SK/SKILL.md"
 check "the skill keeps checkouts untouched" grep -q 'must never change the user.s checkout' "$SK/SKILL.md"
@@ -2304,6 +2315,7 @@ check "the prompt asks for a review before the merge request" grep -q 'review my
 check "the note names the branch" grep -qx 'branch: ABC-12-work' "$BD/svc-ABC-12-work.txt"
 check "and the target, at its tip" grep -qx "against: master, at $MR_TIP" "$BD/svc-ABC-12-work.txt"
 check "and the merge base" grep -qx "merge base: $MR_BASE" "$BD/svc-ABC-12-work.txt"
+check "and whether Copilot Cowork may offer a debrief" grep -qx 'debrief: ask' "$BD/svc-ABC-12-work.txt"
 check "and the ticket, read from the branch's name" grep -qx 'ticket: ABC-12' "$BD/svc-ABC-12-work.txt"
 check "and where the review goes" grep -qx 'review goes in the deliverable at: reviews/ABC-12/svc-ABC-12-work.md' "$BD/svc-ABC-12-work.txt"
 check "the note's hash matches the archive" grep -q "^archive sha256: $(rl_sha "$BD/svc-ABC-12-work.tar.gz")\$" "$BD/svc-ABC-12-work.txt"
@@ -2438,6 +2450,14 @@ case "$out" in *"What you can do on this Mac"*"Change code with Copilot Cowork"*
 out="$(gs)"
 case "$out" in *"Where things are"*"  clones   $T/start-clones"*"  reviews  $T/start-reviews"*"  plans    "*"/plans"*"  relay setup changes any of them."*) ok "start says where clones, reviews and plans are" ;; *) bad "start says where clones, reviews and plans are" "$out" ;; esac
 case "$out" in *"  colours  palette "*", theme "*"  relay setup changes any of them."*) ok "and the palette and theme" ;; *) bad "and the palette and theme" "$out" ;; esac
+case "$out" in *"  debrief  ask"*"  relay setup changes any of them."*) ok "and whether Copilot Cowork offers a debrief" ;; *) bad "and whether Copilot Cowork offers a debrief" "$out" ;; esac
+check "the start note says Copilot Cowork may offer one" grep -qx 'debrief: ask' "$GN"
+env HOME="$GH" "$W" setup --dir "$GO" --debrief off </dev/null >/dev/null 2>&1
+out="$(gs)"
+case "$out" in *"  debrief  off"*) ok "relay setup --debrief off turns the offer off" ;; *) bad "relay setup --debrief off turns the offer off" "$out" ;; esac
+check "and the note tells Copilot Cowork" grep -qx 'debrief: off' "$GN"
+env HOME="$GH" "$W" setup --dir "$GO" --debrief ask </dev/null >/dev/null 2>&1
+check "--debrief ask turns it back on" grep -qx 'debrief=ask' "$GH/.config/llm-relay/settings"
 # A practice round: the same beginning, with a repository made for it.
 gp() { env HOME="$GH" PATH="$FB:$PATH" TERM_PROGRAM=Apple_Terminal "$W" --dir "$GO" practice "$@" 2>&1; }
 rm -f "$T/clipboard"
@@ -2621,6 +2641,7 @@ tk_unpack() { rm -rf "$T/ticket-unpack" && mkdir -p "$T/ticket-unpack" && tar -x
 rm -f "$T/clipboard"
 out="$(tk ABC-12)"; rc=$?
 case "$rc:$out" in 0:*"PACKED  ABC-12: comments 1, linked tickets 1, attachments 1, Confluence pages 1"*"SENT  OneDrive: Documents/Cowork/relay/tickets/ABC-12.txt and ABC-12.tar.gz"*) ok "relay ticket packs a ticket, though acli answered on the error stream" ;; *) bad "relay ticket packs a ticket, though acli answered on the error stream" "$out" ;; esac
+check "its note says whether Copilot Cowork may offer a debrief" grep -qx 'debrief: ask' "$TD/ABC-12.txt"
 check "the prompt for Cowork is on the clipboard" grep -q 'start from this ticket' "$T/clipboard"
 # Cowork can't read Slack, so the user carries a prompt to Slackbot. It is printed, and never put on the clipboard.
 case "$out" in *"2  Ask Slackbot, if your team talks in Slack.  Paste its answer into Copilot Cowork with the prompt above."*) ok "relay ticket prints a prompt for Slackbot too" ;; *) bad "relay ticket prints a prompt for Slackbot too" "$out" ;; esac
@@ -3444,6 +3465,7 @@ check "a WIKIS_DIR of your own goes along" grep -q '^wiki: none covers this repo
 out="$(env HOME="$RH" PATH="$FG:$NO_WIKI_PATH" "$W" --dir "$NOD" mr "$MRU" --no-checks </dev/null 2>&1)"; rc=$?
 case "$rc:$out" in 0:*"No wiki command here"*) ok "a merge request works with no wiki command, and says so" ;; *) bad "a merge request works with no wiki command, and says so" "exit $rc: $out" ;; esac
 check "its note says why there's no wiki" grep -q '^wiki: left out, because this machine has no wiki command$' "$NOD/Documents/Cowork/relay/mrs/svc-${MRU##*/}.txt"
+check "and whether Copilot Cowork may offer a debrief" grep -qx 'debrief: ask' "$NOD/Documents/Cowork/relay/mrs/svc-${MRU##*/}.txt"
 HW="$T/home-wikis"
 mkdir -p "$HOME/w/tilde-repo/wiki" "$HW/tilde-repo"
 echo '# Index' >"$HOME/w/tilde-repo/index.md"
