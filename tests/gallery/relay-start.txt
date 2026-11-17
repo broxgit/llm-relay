@@ -9,6 +9,7 @@
 [2m│[0m   [1m[33m![0m Run Go checks in a review                      needs go: [36mbrew install go[0m
 [2m│[0m   [1m[33m![0m Lint a review with the repository's pre-commit needs pre-commit: [36mbrew install pre-commit[0m
 [2m│[0m   [1m[33m![0m Send a repository's wiki with it               needs wiki: optional, from github.com/broxgit/llm-wiki
+[2m│[0m   [32m✓[0m Let Copilot Cowork ask for scans and runs      ready
 [2m│[0m   [1m[33m![0m Have Claude Code ask Copilot Cowork            set up with: [36mrelay ask --setup[0m
 [2m│[0m
 [32m●[0m [1m[42m[30m WHERE [0m  [1mWhere things are[0m

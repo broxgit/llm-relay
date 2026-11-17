@@ -1,6 +1,6 @@
 # `relay watch`
 
-**Status: adopted on 2026-11-17, and revised the same day after a second review. Nothing is built. The usual mode keeps the rule that nothing from the cloud runs or lands on the Mac without a keypress there. The unattended mode, which Brock asked for, is a named exception to that rule. Every decision is made, and they are listed at the end.**
+**Status: adopted on 2026-11-17, and revised the same day after a second review. The core of the usual mode is built, at 0.2.30: requests, replies, the keypress and the chain. What changed since the last yes, the tally and the unattended mode are not. The usual mode keeps the rule that nothing from the cloud runs or lands on the Mac without a keypress there. The unattended mode, which Brock asked for, is a named exception to that rule. Every decision is made, and they are listed at the end.**
 
 Brock asked for an "auto" mode, so that Copilot Cowork could do its work without him running a scan, a run and an apply for every change. This note has two modes:
 

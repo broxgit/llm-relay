@@ -3337,6 +3337,373 @@ check "the guided test says where the unattended asks fit" grep -q 'relay field-
 check "and the user guide" grep -q 'relay field-test --asks' "$REPO/docs/using.md"
 check "the Haiku test that runs itself is in the docs" grep -q 'tests/ask-haiku.sh' "$REPO/docs/testing-ask.md"
 
+section "Watching with relay watch"
+# relay watch stays open and does what Copilot Cowork asks for in numbered request files. These
+# start it at a pseudo-terminal, in the background, write requests as Copilot Cowork would, and
+# read the replies. Keys are typed one to a question, in the order the questions come.
+WH="$T/watch-home"
+WO="$WH/Library/CloudStorage/OneDrive-Acme"
+WC="$WO/Documents/Cowork"
+WB="$T/watch-bin"
+WRE="$T/watch-repos"
+WLOG="$T/watch.log"
+WHOLD="$T/watch-hold"
+mkdir -p "$WC" "$WH/.config/llm-relay" "$WB" "$WRE" "$T/watch-tmp"
+printf 'reviews=%s\n' "$T/watch-reviews" >"$WH/.config/llm-relay/settings"
+# Stand-ins for the clipboard and for macOS's notifications, so the suite touches neither.
+printf '#!/bin/sh\ncat >"%s/watch-clip"\n' "$T" >"$WB/pbcopy"
+printf '#!/bin/sh\necho "$@" >>"%s/watch-notices"\n' "$T" >"$WB/osascript"
+chmod +x "$WB/pbcopy" "$WB/osascript"
+for n in wa-one wa-two we; do
+  git init -q "$WRE/$n"
+  printf 'one\n' >"$WRE/$n/a.txt"
+  git -C "$WRE/$n" add -A
+  git -C "$WRE/$n" commit -qm one
+done
+W1HEAD="$(git -C "$WRE/wa-one" rev-parse HEAD)"
+W2HEAD="$(git -C "$WRE/wa-two" rev-parse HEAD)"
+
+# w_new <task> <deliverable> <run.sh body> [patch]: a deliverable as Copilot Cowork would publish
+# it. With a patch, it adds "two" to a.txt. WD is the folder, WV its version.
+w_new() {
+  local d="$WC/Tasks/$1/output/$2"
+  mkdir -p "$d"
+  cp "$LIB" "$d/runlib.sh"
+  {
+    printf '#!/usr/bin/env bash\nset -u\nhere="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n. "$here/runlib.sh"\nreport_start demo "$@"\n'
+    printf '%s\n' "$3"
+  } >"$d/run.sh"
+  if [ -n "${4:-}" ]; then
+    printf 'one\ntwo\n' >"$WRE/we/a.txt"
+    git -C "$WRE/we" diff >"$d/1-a.patch"
+    git -C "$WRE/we" checkout -q -- a.txt
+  fi
+  bash "$LIB" manifest "$d" >/dev/null
+  WD="$d"
+  WV="$(sed -n '1s/^version //p' "$d/manifest.txt")"
+}
+# w_wait <file> [seconds]: until the file is there.
+w_wait() {
+  local i=0
+  while [ ! -e "$1" ] && [ "$i" -lt $((${2:-30} * 5)) ]; do sleep 0.2; i=$((i + 1)); done
+  [ -e "$1" ]
+}
+# w_start <keys> <repository>...: relay watch, in the background at a pseudo-terminal, as fast as
+# it can poll, with a shell in front to leave its process id.
+w_start() {
+  local keys="$1"
+  shift
+  local i=0
+  rm -rf "$WC/relay/watch" "$T/watch-notices" "$WHOLD" "$T/watch-pid" "$T/watch-clip"
+  env HOME="$WH" TMPDIR="$T/watch-tmp" PATH="$WB:$PATH" PAGER=cat RELAY_WAIT="${WWAIT:-3}" RELAY_POLL=1 RELAY_WATCH_POLL=0.4 RELAY_WATCH_IDLE="${WIDLE:-300}" \
+    python3 "$TTY" --hold "$WHOLD" "$keys" bash -c 'echo $$ >"$0"; exec "$@"' "$T/watch-pid" "$W" --dir "$WO" watch "$@" >"$WLOG" 2>&1 &
+  WPID=$!
+  WSID=""
+  while [ ! -e "$WC/relay/watch/note.txt" ] && kill -0 "$WPID" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i + 1)); done
+  [ -e "$WC/relay/watch/note.txt" ] || return 1
+  WSID="$(sed -n 's/^session: //p' "$WC/relay/watch/note.txt")"
+  WREQ="$WC/relay/watch/$WSID/requests"
+  WREP="$WC/relay/watch/$WSID/replies"
+}
+# w_end: waits for the watch to finish, and keeps its exit code in WRC.
+w_end() { wait "$WPID"; WRC=$?; }
+# w_req <n> <line>...: writes request n as Copilot Cowork would, in one piece.
+w_req() {
+  local n="$1"
+  shift
+  { printf 'LLM-RELAY REQUEST\nsession: %s\nn: %s\n' "$WSID" "$n"; [ $# -eq 0 ] || printf '%s\n' "$@"; } >"$WREQ/.$n.tmp"
+  mv "$WREQ/.$n.tmp" "$WREQ/$n.txt"
+}
+# w_do <n> <line>...: a request, and until its reply is there.
+w_do() { w_req "$@"; w_wait "$WREP/$1.txt" 60; }
+# w_says <n> <line>: the reply to request n has that line, whole.
+w_says() { grep -qxF -- "$2" "$WREP/$1.txt"; }
+# w_hasnt <n> <start of a line>: it has no line that starts so.
+w_hasnt() { ! grep -q -- "^$2" "$WREP/$1.txt"; }
+WVERSION="$("$W" --version | sed 's/^relay //')"
+
+# 1. A session: the note, the folders, scans, a run on y, a run on n, the chain, and everything
+# a request may not be.
+w_new t41 pass 'result "fine" 0
+report_end'
+V41="$WV"
+w_new t42 other 'result "fine" 0
+report_end'
+V42="$WV"
+w_new t43 fix 'result "fine" 0
+report_end' patch
+V43="$WV"
+w_new t44 bad 'result "bad" 1
+report_end' patch
+V44="$WV"
+w_new t45 fix2 'result "fine" 0
+report_end' patch
+V45="$WV"
+w_new t46 rev 'true'
+mkdir -p "$WD/reviews/ABC-12"
+printf '# a review\n\n## Coverage\n\n- Read all of it\n' >"$WD/reviews/ABC-12/r.md"
+rm -f "$WD/run.sh" "$WD/runlib.sh"
+bash "$LIB" manifest "$WD" >/dev/null
+V46="$(sed -n '1s/^version //p' "$WD/manifest.txt")"
+# One key for each question, in order: request 2 y, 3 n, 4 y, 5 y, 6 r, 7 n, 8 y, 9 y.
+if w_start ynyyrnyy "$WRE/wa-one" "$WRE/wa-two"; then ok "relay watch starts, and writes its note"; else bad "relay watch starts, and writes its note" "$(cat "$WLOG")"; fi
+WN="$WC/relay/watch/note.txt"
+check "the note says it is a watch" grep -qx 'LLM-RELAY WATCH' "$WN"
+check "and which relay" grep -qx "relay: $WVERSION" "$WN"
+check "and which runlib" grep -q '^runlib: [0-9][0-9]*$' "$WN"
+check "and when it started" grep -q '^started: 20[0-9-]*T[0-9:]*Z$' "$WN"
+check "and which repositories" grep -qx 'repositories: wa-one, wa-two' "$WN"
+check "and where requests go" grep -qx "requests: Documents/Cowork/relay/watch/$WSID/requests" "$WN"
+check "and where replies come" grep -qx "replies: Documents/Cowork/relay/watch/$WSID/replies" "$WN"
+check "and what the first request is" grep -qx 'next request: 1' "$WN"
+check "and the debrief setting" grep -qx 'debrief: ask' "$WN"
+check "the session id is a UTC date and time" grep -Eqx '[0-9]{8}-[0-9]{6}' <<EOF
+$WSID
+EOF
+check "the requests folder has a file in it, for Copilot Cowork to list" test -s "$WREQ/README.txt"
+check "and so does the replies folder" test -s "$WREP/README.txt"
+check "it scanned each repository first" test -f "$WC/relay/scans/wa-one.txt" -a -f "$WC/relay/scans/wa-two.txt"
+w_wait "$T/watch-clip" 10
+check "the prompt for Copilot Cowork is on the clipboard" grep -qx 'relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/note.txt from my OneDrive.' "$T/watch-clip"
+check "nothing but the watch's prompt was put there by the scans" test "$(grep -c . "$T/watch-clip")" = 1
+
+# A scan needs no key.
+w_do 1 'do: scan' 'repository: wa-one'
+check "a scan request is answered with no key" w_says 1 'outcome: done'
+check "and names what it sent" w_says 1 'scan: Documents/Cowork/relay/scans/wa-one.txt'
+check "and says what did not change since" w_says 1 'changed since its scan: wa-one: no, wa-two: no'
+check "and what comes next" w_says 1 'next request: 2'
+check "the reply says it is one" grep -qx 'LLM-RELAY REPLY' "$WREP/1.txt"
+check "of this session" w_says 1 "session: $WSID"
+check "and what it did" w_says 1 'did: scan'
+check "the seen file said what it was doing" grep -qx 'doing: scanning wa-one' "$WREP/1.seen"
+check "and begins as a seen file does" grep -qx 'LLM-RELAY SEEN' "$WREP/1.seen"
+
+# A run, on y. The seen file is there before the key.
+touch "$WHOLD"
+w_req 2 'do: run' 'deliverable: t41/pass' "expect: $V41"
+if w_wait "$WREP/2.seen" 30 && [ ! -e "$WREP/2.txt" ]; then ok "the seen file is there before the key is pressed"; else bad "the seen file is there before the key is pressed"; fi
+check "and says a key is being waited for" grep -qx 'doing: asking the user to press a key, to run t41/pass' "$WREP/2.seen"
+sleep 1
+[ ! -e "$WREP/2.txt" ] && ok "nothing is done until the key" || bad "nothing is done until the key"
+rm -f "$WHOLD"
+w_wait "$WREP/2.txt" 60
+check "a run on y is done" w_says 2 'outcome: done'
+check "with its result" w_says 2 'result: PASS'
+check "and where its report is" grep -q "^report: Documents/Cowork/relay/t41/reports/demo-v$V41-" "$WREP/2.txt"
+check "and the report is there" bash -c "ls '$WC'/relay/t41/reports/demo-v$V41-*.txt"
+w_hasnt 2 'applied:' && ok "a plain run says nothing of applying" || bad "a plain run says nothing of applying"
+
+# A run, on n.
+echo hello >"$WRE/wa-two/new.txt"
+w_do 3 'do: run' 'deliverable: t42/other' "expect: $V42"
+check "a run on n says the user said no" w_says 3 'outcome: the user said no'
+w_hasnt 3 'result:' && ok "with no result" || bad "with no result"
+check "and nothing ran: no report went to OneDrive" test ! -e "$WC/relay/t42"
+check "and the reply says the other repository moved" w_says 3 'changed since its scan: wa-one: no, wa-two: yes'
+
+# A run that is applied if it passes, on y: applied, scanned again, nothing committed.
+w_do 4 'do: run' 'deliverable: t43/fix' "expect: $V43" 'then: apply' 'repository: wa-one'
+check "run then apply on y is done" w_says 4 'outcome: done'
+check "it passed" w_says 4 'result: PASS'
+check "and was applied" w_says 4 'applied: yes'
+check "and the repository was scanned again" w_says 4 'scan: Documents/Cowork/relay/scans/wa-one.txt'
+check "so it has not moved since" w_says 4 'changed since its scan: wa-one: no, wa-two: yes'
+check "the patch is in the working tree" grep -qx two "$WRE/wa-one/a.txt"
+check "and nothing is committed" test "$(git -C "$WRE/wa-one" rev-parse HEAD)" = "$W1HEAD"
+check "the new scan holds the applied change" grep -qx 'uncommitted changes: yes, in uncommitted.patch' "$WC/relay/scans/wa-one.txt"
+check "the seen file says what was asked" grep -qx 'doing: asking the user to press a key, to run t43/fix and apply it to wa-one' "$WREP/4.seen"
+
+# The same, when the run fails: nothing is applied, whatever was pressed.
+w_do 5 'do: run' 'deliverable: t44/bad' "expect: $V44" 'then: apply' 'repository: wa-two'
+check "a failed run is still answered" w_says 5 'outcome: done'
+check "it says it failed" w_says 5 'result: FAIL'
+check "and that nothing was applied" w_says 5 'applied: no'
+check "and nothing was" test "$(cat "$WRE/wa-two/a.txt")" = one
+
+# r: run only.
+w_do 6 'do: run' 'deliverable: t45/fix2' "expect: $V45" 'then: apply' 'repository: wa-two'
+check "r runs it" w_says 6 'result: PASS'
+check "and applies nothing" w_says 6 'applied: no'
+check "so the repository is as it was" test "$(cat "$WRE/wa-two/a.txt")" = one
+
+# An apply after a run only still asks, and n changes nothing.
+w_do 7 'do: apply' 'deliverable: t45/fix2' "expect: $V45" 'repository: wa-two'
+check "an apply after run only asks, and n says no" w_says 7 'outcome: the user said no'
+check "and applied nothing" w_says 7 'applied: no'
+check "so the repository is as it was after that too" test "$(cat "$WRE/wa-two/a.txt")" = one
+w_do 8 'do: apply' 'deliverable: t45/fix2' "expect: $V45" 'repository: wa-two'
+check "an apply on y is done" w_says 8 'outcome: done'
+check "and applied" w_says 8 'applied: yes'
+check "and scanned the repository again" w_says 8 'scan: Documents/Cowork/relay/scans/wa-two.txt'
+check "the patch is in the other working tree" grep -qx two "$WRE/wa-two/a.txt"
+check "and nothing is committed there" test "$(git -C "$WRE/wa-two" rev-parse HEAD)" = "$W2HEAD"
+
+# A review.
+w_do 9 'do: review' 'deliverable: t46/rev' "expect: $V46"
+check "a review on y is done" w_says 9 'outcome: done'
+check "and saved where reviews are kept" grep -q 'a review' "$T/watch-reviews/ABC-12/r.md"
+
+# A run that never arrives, and a scan with its untracked files.
+w_do 10 'do: run' 'deliverable: t99/none' 'expect: 1'
+check "a run whose deliverable never comes fails, and says why" w_says 10 'outcome: failed'
+check "in fixed words" w_says 10 'why: the deliverable did not arrive in time'
+w_do 11 'do: scan' 'repository: wa-two' 'untracked: yes'
+check "a scan can send untracked files" bash -c "tar -xzOf '$WC/relay/scans/wa-two.tar.gz' uncommitted.patch | grep -q 'new.txt'"
+w_do 12 'do: scan' 'repository: wa-two' 'untracked: no'
+check "and can leave them out" bash -c "! tar -xzOf '$WC/relay/scans/wa-two.tar.gz' uncommitted.patch | grep -q 'new.txt'"
+
+# What a request may not be. The words in it are marked ZZ, and must come back nowhere.
+w_req 13 'do: scan' 'repository: ZZoutside'
+w_req 14 'do: scan' 'repository: wa-one' 'ZZcommand: x'
+w_req 15 'do: run' 'deliverable: ../ZZx/y' 'expect: 1'
+w_req 16 'do: run' 'deliverable: /ZZabs/x' 'expect: 1'
+w_req 17 'do: run' 'deliverable: ZZa/b/c' 'expect: 1'
+w_req 18 'do: run' 'deliverable: t41/pass' 'expect: ZZ1'
+w_req 19 'do: scan' 'repository: wa-one wa-two'
+w_req 20 'do: run' 'deliverable: t41/pass' 'expect: 1' 'then: apply'
+w_req 21 'do: run' 'deliverable: .ZZhidden/y' 'expect: 1'
+w_req 22 'do: apply' 'deliverable: t41/pass' 'expect: 1' 'repository: wa-one' 'untracked: yes'
+w_req 23 'do: ZZdo'
+w_req 24 'do: run' 'deliverable: t41/pass' 'expect: 1' 'repository: wa-one'
+w_req 25 'do: stop' 'repository: wa-one'
+w_req 26 'do: scan' 'repository: wa-one' 'repository: wa-two'
+w_req 27 'do: run' 'deliverable: -ZZdash/y' 'expect: 1'
+printf 'LLM-RELAY REQUEST\nsession: ZZother\nn: 28\ndo: scan\nrepository: wa-one\n' >"$WREQ/28.txt"
+printf 'LLM-RELAY REQUEST\nsession: %s\nn: 99\ndo: scan\nrepository: wa-one\n' "$WSID" >"$WREQ/29.txt"
+printf 'LLM-RELAY REQUESTZZ\nsession: %s\nn: 30\ndo: scan\nrepository: wa-one\n' "$WSID" >"$WREQ/30.txt"
+printf 'LLM-RELAY REQUEST\nsession: %s\nn: 31\ndo: scan\nrepository: wa-one\n\001ZZ\n' "$WSID" >"$WREQ/31.txt"
+{ printf 'LLM-RELAY REQUEST\nsession: %s\nn: 32\ndo: scan\nrepository: wa-one\n' "$WSID"; head -c 3000 /dev/zero | tr '\0' 'Z'; echo; } >"$WREQ/32.txt"
+# Twenty at once is as many as can wait, so the last goes in after the rest are done.
+w_wait "$WREP/32.txt" 90
+printf 'LLM-RELAY REQUEST\r\nsession: %s\r\nn: 33\r\ndo: scan\r\nrepository: wa-one\r\n' "$WSID" >"$WREQ/33.txt"
+w_wait "$WREP/33.txt" 30
+for n in 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32; do
+  if w_says "$n" 'outcome: refused' && grep -q '^why: ' "$WREP/$n.txt" && w_says "$n" 'did: nothing'; then ok "request $n is refused, with a reason"; else bad "request $n is refused, with a reason" "$(cat "$WREP/$n.txt" 2>&1)"; fi
+done
+check "a repository outside the session is refused in fixed words" w_says 13 'why: the repository is not one this watch was started with'
+check "another session's request is refused" w_says 28 "why: the session is not this watch's"
+check "a request that isn't numbered as its file is refused" w_says 29 "why: the number is not the file's number"
+check "a first line that isn't the request's is refused" w_says 30 'why: the first line is not LLM-RELAY REQUEST'
+check "a control character is refused" w_says 31 'why: the request has a control character'
+check "a long request is refused" w_says 32 'why: the request is longer than 2048 bytes'
+check "a request in CRLF is read like any other" w_says 33 'outcome: done'
+check "none of those had a seen file, since none was done" bash -c "! ls '$WREP'/13.seen '$WREP'/14.seen '$WREP'/25.seen 2>/dev/null"
+check "nothing was scanned that wasn't asked" test ! -e "$WC/relay/scans/ZZoutside.txt"
+if grep -rq 'ZZ' "$WREP"; then bad "no word of a refused request is in a reply" "$(grep -r ZZ "$WREP" | head -n 3)"; else ok "no word of a refused request is in a reply"; fi
+
+# A number that is skipped.
+w_do 36 'do: scan' 'repository: wa-one'
+check "a skipped number is passed over" w_says 36 'outcome: done'
+check "and its reply says what comes next" w_says 36 'next request: 37'
+# Stop.
+w_do 37 'do: stop'
+check "a request to stop is answered" w_says 37 'did: stop'
+w_end
+check "and the watch ends cleanly" test "$WRC" = 0
+check "it wrote its ended file" grep -qx 'LLM-RELAY WATCH ENDED' "$WREP/ended.txt"
+check "of this session" grep -qx "session: $WSID" "$WREP/ended.txt"
+check "with when" grep -q '^at: 20[0-9-]*T[0-9:]*Z$' "$WREP/ended.txt"
+check "and why" grep -qx 'why: Copilot Cowork asked it to stop' "$WREP/ended.txt"
+W_OUT="$(cat "$WLOG")"
+case "$W_OUT" in *"WATCH  relay $WVERSION"*"session $WSID"*"wa-one, wa-two"*) ok "the terminal says which session and which repositories" ;; *) bad "the terminal says which session and which repositories" "$W_OUT" ;; esac
+case "$W_OUT" in *"relay watch ended: Copilot Cowork asked it to stop"*) ok "and says why it ended" ;; *) bad "and says why it ended" "$W_OUT" ;; esac
+case "$W_OUT" in *"Nothing more to do here. Copilot Cowork reads the reply itself"*) ok "each request ends by saying nothing more is needed" ;; *) bad "each request ends by saying nothing more is needed" "$W_OUT" ;; esac
+case "$W_OUT" in *"Request 13 was refused: the repository is not one this watch was started with"*) ok "a refused request is one line in the terminal" ;; *) bad "a refused request is one line in the terminal" "$W_OUT" ;; esac
+case "$W_OUT" in *"Request 34 didn't come, and 36 did, so it goes on with 36."*) ok "a skipped number is said in a line" ;; *) bad "a skipped number is said in a line" "$W_OUT" ;; esac
+case "$W_OUT" in *ZZ*) bad "no word of a refused request is in the terminal" "$(printf '%s\n' "$W_OUT" | grep ZZ | head -n 3)" ;; *) ok "no word of a refused request is in the terminal" ;; esac
+case "$W_OUT" in *"? Run it, and apply it if it passes?"*"[y]es to both  [r]un only  [v]iew the files  [n]o  › "*) ok "a run that may be applied asks for both, with the keys the design gives" ;; *) bad "a run that may be applied asks for both, with the keys the design gives" "$W_OUT" ;; esac
+[ "$(printf '%s\n' "$W_OUT" | grep -c 'Apply it, uncommitted?')" = 2 ] && ok "and only the two plain applies asked their own question" || bad "and only the two plain applies asked their own question" "$(printf '%s\n' "$W_OUT" | grep -c 'Apply it, uncommitted?')"
+case "$W_OUT" in *"$(printf '\a')"*) ok "the bell rings when a key is wanted" ;; *) bad "the bell rings when a key is wanted" ;; esac
+check "and a notification is posted, with only a name that was checked" grep -qF 'display notification "relay: run t41/pass?" with title "relay watch"' "$T/watch-notices"
+check "for an apply too" grep -qF 'display notification "relay: apply t45/fix2 to wa-two?"' "$T/watch-notices"
+check "and the scratch folder is gone" test -z "$(ls -A "$T/watch-tmp")"
+
+# 2. Ctrl-C ends it, with its file.
+w_start "" "$WRE/wa-one"
+kill -INT "$(cat "$T/watch-pid")"
+w_end
+check "Ctrl-C ends the watch" test "$WRC" = 0
+check "and it says so to Copilot Cowork" grep -qx 'why: the user pressed Ctrl-C' "$WREP/ended.txt"
+case "$(cat "$WLOG")" in *"relay watch ended: the user pressed Ctrl-C"*) ok "and to the user" ;; *) bad "and to the user" "$(cat "$WLOG")" ;; esac
+check "and the scratch folder is gone after that too" test -z "$(ls -A "$T/watch-tmp")"
+
+# 3. Nothing asked for in a while ends it. The repository has a file named like a key, so the
+# secrets question comes first, and is answered as it is today.
+WS="$WRE/wa-secret"
+git init -q "$WS"
+echo x >"$WS/id_rsa"
+git -C "$WS" add -A
+git -C "$WS" commit -qm key
+w_start n "$WS"
+w_end
+check "on n to the secrets question the watch doesn't start" test "$WRC" = 1
+check "and writes nothing to OneDrive" test ! -e "$WC/relay/watch/note.txt"
+case "$(cat "$WLOG")" in *"wa-secret wasn't scanned, so the watch didn't start"*) ok "and says so" ;; *) bad "and says so" "$(cat "$WLOG")" ;; esac
+WIDLE=3 w_start y "$WS"
+w_end
+check "with nothing asked for, it ends by itself" test "$WRC" = 0
+check "and says why" grep -qx 'why: no request came for 3 seconds' "$WREP/ended.txt"
+case "$(cat "$WLOG")" in *"Send wa-secret to OneDrive anyway? [y]es, [n]o: y"*) ok "the secrets question is asked at the start, as it is for relay scan" ;; *) bad "the secrets question is asked at the start, as it is for relay scan" "$(cat "$WLOG")" ;; esac
+
+# 4. Too many requests waiting stops it.
+w_start "" "$WRE/wa-one"
+w_req 21 'do: scan' 'repository: wa-one'
+w_end
+check "twenty requests waiting stop the watch" test "$WRC" = 1
+check "and the reason is given" grep -qx 'why: too many requests were waiting' "$WREP/ended.txt"
+case "$(cat "$WLOG")" in *"Too many requests are waiting"*) ok "and said in a line" ;; *) bad "and said in a line" "$(cat "$WLOG")" ;; esac
+check "none of them was done" test ! -e "$WREP/1.seen"
+
+# 5. What is asked of the command itself.
+wcmd() { env HOME="$WH" PATH="$WB:$PATH" "$W" --dir "$WO" watch "$@" 2>&1; }
+out="$(wcmd "$WRE/wa-one" </dev/null)" && bad "relay watch needs a terminal" "$out" || case "$out" in *"Agents: tell the user to run it"*) ok "relay watch needs a terminal" ;; *) bad "relay watch needs a terminal" "$out" ;; esac
+out="$(printf y | wcmd "$WRE/wa-one")" && bad "and a pipe is no terminal" "$out" || case "$out" in *"Agents: tell the user to run it"*) ok "and a pipe is no terminal" ;; *) bad "and a pipe is no terminal" "$out" ;; esac
+check "it says what it takes" bash -c "'$W' --dir '$WO' watch --help | grep -q 'watch REPOSITORY'"
+mkdir -p "$WRE/dup1/same" "$WRE/dup2/same"
+git init -q "$WRE/dup1/same"
+git init -q "$WRE/dup2/same"
+out="$(env HOME="$WH" python3 "$TTY" "" "$W" --dir "$WO" watch "$WRE/dup1/same" "$WRE/dup2/same" 2>&1)"; rc=$?
+case "$rc:$out" in 2:*"are both called same"*) ok "two repositories with one name are a usage error" ;; *) bad "two repositories with one name are a usage error" "exit $rc: $out" ;; esac
+out="$(env HOME="$WH" python3 "$TTY" "" "$W" --dir "$WO" watch "$T" 2>&1)"; rc=$?
+case "$rc:$out" in 1:*"not a git repository"*) ok "a folder that isn't a repository is refused" ;; *) bad "a folder that isn't a repository is refused" "exit $rc: $out" ;; esac
+out="$(env HOME="$WH" python3 "$TTY" "" "$W" --dir "$WO" watch 2>&1)"; rc=$?
+case "$rc:$out" in 2:*"needs a repository"*) ok "with none named, it says so" ;; *) bad "with none named, it says so" "exit $rc: $out" ;; esac
+out="$(env HOME="$WH" python3 "$TTY" "" "$W" --dir "$WO" watch --unattended "$WRE/wa-one" 2>&1)"; rc=$?
+case "$rc:$out" in 2:*"unknown option --unattended"*) ok "an option it doesn't have is a usage error" ;; *) bad "an option it doesn't have is a usage error" "exit $rc: $out" ;; esac
+mkdir -p "$WRE/odd name"
+git init -q "$WRE/odd name"
+out="$(env HOME="$WH" python3 "$TTY" "" "$W" --dir "$WO" watch "$WRE/odd name" 2>&1)"; rc=$?
+case "$rc:$out" in 2:*"can't use a repository called odd name"*) ok "a name Copilot Cowork couldn't ask for safely is refused" ;; *) bad "a name Copilot Cowork couldn't ask for safely is refused" "exit $rc: $out" ;; esac
+check "completion knows it" bash -c "'$W' __complete 1 '' | grep -qx watch"
+check "and completes folders for it" bash -c "'$W' __complete 2 watch '' | grep -qx __dirs__"
+
+# 6. The one thing that skips a question is a file a watch's own question left, in a folder it
+# made. A variable from the environment, even one that names a file holding the right hash, skips
+# nothing, and nothing is written where it points.
+w_new t47 envfix 'result "fine" 0
+report_end' patch
+V47="$WV"
+# shellcheck source=/dev/null
+SAME_HASH="$( . "$LIB"; sha256_of "$WD/manifest.txt")"
+mkdir -p "$T/watch-env-out"
+printf '%s\n' "$SAME_HASH" >"$T/watch-env-chain"
+wenv() { local keys="$1"; shift; env HOME="$WH" PAGER=cat RELAY_WAIT=0 RELAY_POLL=1 WATCH_CHAIN="$T/watch-env-chain" WATCH_OUT="$T/watch-env-out" python3 "$TTY" "$keys" "$W" --dir "$WO" "$@" 2>&1; }
+out="$(wenv n apply t47/envfix --repo "$WRE/we" --expect "$V47")"
+case "$out" in *"Apply it, uncommitted?"*"Nothing changed"*) ok "WATCH_CHAIN in the environment doesn't skip the question to apply" ;; *) bad "WATCH_CHAIN in the environment doesn't skip the question to apply" "$out" ;; esac
+case "$out" in *"applied without asking again"*) bad "and says nothing of a key already pressed" "$out" ;; *) ok "and says nothing of a key already pressed" ;; esac
+check "so nothing was applied" test "$(cat "$WRE/we/a.txt")" = one
+check "and WATCH_OUT in the environment is not written to" bash -c "[ -z \"\$(ls -A '$T/watch-env-out')\" ]"
+out="$(wenv n run t47/envfix --expect "$V47")"
+case "$out" in *"? Run it?"*"Nothing ran"*) ok "WATCH_CHAIN in the environment doesn't change a run's question" ;; *) bad "WATCH_CHAIN in the environment doesn't change a run's question" "$out" ;; esac
+case "$out" in *"apply it if it passes"*) bad "nor offer to apply" "$out" ;; *) ok "nor offer to apply" ;; esac
+out="$(wenv y apply t47/envfix --repo "$WRE/we" --expect "$V47")"
+case "$out" in *"Apply it, uncommitted?"*"Applied, and nothing is committed"*) ok "and a y still applies it" ;; *) bad "and a y still applies it" "$out" ;; esac
+git -C "$WRE/we" checkout -q -- a.txt
+check "relay.sh gives WATCH_CHAIN its empty value before anything reads it" grep -qx 'WATCH_CHAIN=""' "$W"
+check "and WATCH_OUT" grep -qx 'WATCH_OUT=""' "$W"
+check "ask_run_and_apply is the only place that writes the chain file" bash -c "[ \"\$(grep -c '>\"\$WATCH_CHAIN\"' '$W')\" = 1 ]"
+
 section "The conventions shared with llm-wiki"
 # docs/conventions.md is a copy of llm-wiki's guide, and ui.sh a copy of its kit. The guide gives
 # the kit's sha256, so a kit that matches it is llm-wiki's, byte for byte. Nothing here fetches llm-wiki.
@@ -3375,12 +3742,12 @@ done
 [ -z "$missing" ] && ok "every flag in relay --help is in the user guide" || bad "every flag in relay --help is in the user guide" "missing:$missing"
 EVERY="$(sed -n '/^## Every command$/,/^## What.s been tried$/p' "$UG")"
 missing=""
-for c in start practice setup skills field-test scan run review apply mr branch ticket ask answer completion; do
+for c in start practice setup skills field-test scan run review apply watch mr branch ticket ask answer completion; do
   printf '%s\n' "$EVERY" | grep -qx "### \`$c\`" || missing="$missing $c"
 done
 [ -z "$missing" ] && ok "every command has an entry under Every command" || bad "every command has an entry under Every command" "missing:$missing"
 # A command the dispatch takes that the list above doesn't have would slip by, so hold the two together.
-KNOWN_COMMANDS=" start practice setup skills field-test scan run review apply mr branch ticket ask answer "
+KNOWN_COMMANDS=" start practice setup skills field-test scan run review apply watch mr branch ticket ask answer "
 for c in $(sed -n 's/^  start | practice | \(.*\))$/start practice \1/p' "$W" | tr -d '|'); do
   case "$KNOWN_COMMANDS" in *" $c "*) ;; *) bad "a command the relay takes is in the test's list: $c" ;; esac
 done

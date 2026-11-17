@@ -142,6 +142,8 @@ At a terminal, `setup` asks about reviews, clones, the palette and the theme the
 | `RELAY_ASK_AGAIN` | 120 | How long the wait for an answer lasts before the relay wakes Copilot Cowork one more time. |
 | `RELAY_ASK_STALL` | 180 | How long it waits before it says the answer is most likely in OneDrive and not on this Mac, and offers to restart OneDrive. |
 | `RELAY_ASK_PARTIAL` | 30 | How long a file that has no `end of answer` line may stop growing before the relay says the trigger has the wrong instructions. |
+| `RELAY_WATCH_POLL` | 5 | How often `relay watch` looks for the next request. |
+| `RELAY_WATCH_IDLE` | 7200 | How long `relay watch` waits with no request before it ends. |
 
 **Shell completion.** Press Tab to finish a command, a flag, or a folder. Add this to `~/.zshrc`, or the same with `bash` to `~/.bashrc`:
 
@@ -631,6 +633,21 @@ Use it once a run has passed. If the deliverable has several attempts, only the 
 **What you'll see.** The deliverable, its version, the repository and its branch, the attempt that passed if there were attempts, and the list of patches. It warns if no run of that version has passed on this Mac. Then it asks `Apply it, uncommitted?`, and you answer `y` or `n` at the terminal. After a yes it says `Applied, and nothing is committed`, prints the `git diff` command to look it over, and shows `git status --short`.
 
 **What to do next.** Read the diff, run your own tests, and commit it yourself.
+
+### `watch`
+
+Stays open, and does what Copilot Cowork asks for in numbered request files in OneDrive, so you don't carry a command to the terminal for each step. It is new, and has only run against a fake OneDrive folder.
+
+```bash
+relay [--dir ONEDRIVE_FOLDER] watch REPOSITORY [REPOSITORY]...
+```
+
+- `--dir ONEDRIVE_FOLDER`: the OneDrive folder to use.
+- `REPOSITORY`: a repository Copilot Cowork may scan and apply to. Each needs its own folder name, since Copilot Cowork asks for one by name. Required.
+
+It scans each repository as `relay scan` does, with the same question about secrets, writes a note for Copilot Cowork at `Documents/Cowork/relay/watch/note.txt`, and puts a prompt on your clipboard. A scan Copilot Cowork asks for needs no key. A run, an apply or a review still asks you at the terminal, and rings the bell and posts a notification first. A run can be offered as `Run it, and apply it if it passes?`: `y` runs it and, if it passes, applies the same files and scans the repository again, and `r` only runs it. Nothing is ever committed.
+
+A request that isn't one of the fixed kinds, or names a repository the watch wasn't started with, is refused, and the reply says why. For each request it writes `<n>.seen` and then `<n>.txt` under `replies`. It ends on Ctrl-C, on a request to stop, after two hours with no request (`RELAY_WATCH_IDLE`), or when 20 or more requests are waiting, and writes `replies/ended.txt` so Copilot Cowork goes back to handing you commands.
 
 ### `mr`
 
