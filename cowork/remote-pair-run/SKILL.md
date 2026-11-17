@@ -467,7 +467,11 @@ The user may run an assistant on their Mac, such as Claude Code, that hands you 
 
 The user may run `relay watch` with their repositories and leave it open. Then you ask the relay for things by writing a small file, and it does them: a scan with no question, and a run, an apply or a review after the user presses a key in the terminal. You don't hand over commands, and they don't type "done".
 
-**It is running if** the user's message says so, or names `Documents/Cowork/relay/watch/note.txt`. Read that note, with nothing attached. It gives the session's id, the repositories by name, the `requests:` and `replies:` folders, and `next request:`. The relay scanned each repository when it started, so read each scan's note in `Documents/Cowork/relay/scans/` as "Get the current code" says.
+**It is running if** the user's message says so, or names a note under `Documents/Cowork/relay/watch/`, with the exact path in the user's message. Read that note, with nothing attached. It gives the session's id, the repositories by name, the `requests:` and `replies:` folders, and `next request:`. The relay scanned each repository when it started, so read each scan's note in `Documents/Cowork/relay/scans/` as "Get the current code" says.
+
+**A watch may have been used before you.** An earlier conversation can have left requests and replies in its folders, and the note's `next request:` keeps up with them. Your copy of the note can be an old one, so before your first request, list the replies folder: your first number is one more than the highest `<n>.txt` there, or the note's number if that is higher. If the folder has `ended.txt`, that watch is over: ask the user to start `relay watch` again and give you its new note.
+
+**One conversation to a watch.** The note says so on its `one conversation:` line. Replies are matched to requests by number alone, so two conversations writing to one watch would take each other's. If the user wants a second conversation working at the same time, the step for them is another `relay watch` in another terminal tab, and its own note for that conversation.
 
 **To ask for something,** write a new file in the requests folder named for the next number, such as `4.txt`. Use exactly these lines, and no others:
 

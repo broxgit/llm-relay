@@ -2453,6 +2453,7 @@ case "$WATCH_IDLE" in '' | *[!0-9]*) WATCH_IDLE=7200 ;; esac
 # open, and never inside OneDrive. WATCH_NAMES are the repositories, by name, and
 # $WATCH_TMP/root.<name> holds where each is. WATCH_SCAN is the name of the scan made last.
 WATCH_ID=""
+WATCH_STARTED=""
 WATCH_TMP=""
 WATCH_NAMES=""
 WATCH_REQUESTS=""
@@ -2477,6 +2478,43 @@ watch_put() {
   if cp "$1" "$tmp" 2>/dev/null && mv -f "$tmp" "$2" 2>/dev/null; then return 0; fi
   rm -f "$tmp" 2>/dev/null
   return 1
+}
+
+# watch_note <next>: writes this session's note for Copilot Cowork, with the number of the next
+# request in it, at Documents/Cowork/relay/watch/<session>/note.txt. Each watch has its own, so
+# two at once don't overwrite each other, and it is written again after each reply, so a
+# conversation that joins later reads the number the watch is at. False when it couldn't.
+watch_note() {
+  {
+    echo "LLM-RELAY WATCH"
+    echo "session: $WATCH_ID"
+    echo "relay: $RELAY_VERSION"
+    echo "runlib: $RUNLIB_VERSION"
+    echo "started: $WATCH_STARTED"
+    echo "repositories: ${WATCH_NAMES// /, }"
+    echo "one conversation: this watch serves one Copilot Cowork conversation at a time. For a second conversation working at the same time, the user starts another relay watch"
+    echo "requests: Documents/Cowork/relay/watch/$WATCH_ID/requests"
+    echo "replies: Documents/Cowork/relay/watch/$WATCH_ID/replies"
+    echo "next request: $1"
+    echo "debrief: $DEBRIEF"
+  } >"$WATCH_TMP/note.txt" || return 1
+  watch_put "$WATCH_TMP/note.txt" "$COWORK/relay/watch/$WATCH_ID/note.txt"
+}
+
+# watch_claim_id: takes a session id, the UTC date and time, by making its folder, so two watches
+# started in the same second can't both have it. When the id is taken it waits a second and tries
+# again, five times at most.
+watch_claim_id() {
+  local tries=0
+  mkdir -p "$COWORK/relay/watch" || die "can't make Documents/Cowork/relay/watch. Run it again."
+  while :; do
+    WATCH_ID="$(date -u +%Y%m%d-%H%M%S)"
+    mkdir "$COWORK/relay/watch/$WATCH_ID" 2>/dev/null && return 0
+    [ -d "$COWORK/relay/watch/$WATCH_ID" ] || die "can't make Documents/Cowork/relay/watch/$WATCH_ID. Run it again."
+    tries=$((tries + 1))
+    [ "$tries" -lt 5 ] || die "another relay watch has taken every session id for five seconds. Run it again."
+    sleep 1
+  done
 }
 
 # watch_is_name <name>: whether it is one of this session's repositories, by exact name.
@@ -2572,6 +2610,7 @@ watch_reply() {
     echo "at: $(now)"
   } >"$WATCH_TMP/reply.txt"
   watch_put "$WATCH_TMP/reply.txt" "$WATCH_REPLIES/$1.txt" || ui_item warn "Couldn't write the reply for request $1 to OneDrive. Tell Copilot Cowork that it is done."
+  watch_note "$(($1 + 1))" || ui_item warn "Couldn't update the note in OneDrive. Copilot Cowork counts on from the reply's next request."
   ui_detail "Nothing more to do here. Copilot Cowork reads the reply itself, and says if it needs you."
 }
 
@@ -2859,6 +2898,8 @@ watch_exit() {
     ui_stage ENDED "relay watch ended: $why" "session $WATCH_ID"
     ui_detail "Copilot Cowork is told in replies/ended.txt, and goes back to handing you commands."
   fi
+  # An id claimed by a watch that never started leaves its folder empty. rmdir leaves any other.
+  [ -z "$WATCH_ID" ] || [ -z "${COWORK:-}" ] || rmdir "$COWORK/relay/watch/$WATCH_ID" 2>/dev/null
   [ -z "$WATCH_TMP" ] || rm -rf "$WATCH_TMP"
 }
 
@@ -2885,6 +2926,7 @@ watch_loop() {
       if [ "$found" -gt "$next" ]; then
         ui_wait_clear
         ui_item warn "Request $next didn't come, and $found did, so it goes on with $found."
+        watch_note "$((found + 1))" || ui_item warn "Couldn't update the note in OneDrive."
       fi
       watch_request "$found"
       next=$((found + 1))
@@ -2922,35 +2964,26 @@ cmd_watch() {
     WATCH_NAMES="${WATCH_NAMES:+$WATCH_NAMES }$name"
     printf '%s\n' "$root" >"$WATCH_TMP/root.$name"
   done
-  WATCH_ID="$(date -u +%Y%m%d-%H%M%S)"
+  watch_claim_id
+  WATCH_STARTED="$(now)"
   ui_stage WATCH "relay $RELAY_VERSION" "session $WATCH_ID" "${WATCH_NAMES// /, }"
   # Each repository is scanned as relay scan scans it, with the same questions, since a session
   # needs a scan first. One that isn't sent stops the start, with nothing written to OneDrive.
   for name in $WATCH_NAMES; do
     watch_scan "$name" "" || die "$name wasn't scanned, so the watch didn't start. Run it again, and answer the question about secrets if it asks."
   done
-  mkdir -p "$COWORK/relay/watch" && mkdir "$COWORK/relay/watch/$WATCH_ID" || die "can't make Documents/Cowork/relay/watch/$WATCH_ID. Run it again."
+  # The relay's own first build of 0.2.30 wrote one note for every watch. A stale one would send a
+  # conversation to the wrong session, so it goes.
+  rm -f "$COWORK/relay/watch/note.txt" 2>/dev/null
   WATCH_REQUESTS="$COWORK/relay/watch/$WATCH_ID/requests"
   WATCH_REPLIES="$COWORK/relay/watch/$WATCH_ID/replies"
   mkdir "$WATCH_REQUESTS" "$WATCH_REPLIES" || die "can't make the folders for requests and replies in OneDrive"
   # Copilot Cowork lists a folder to find a reply, and needs something in it to list.
   echo "Copilot Cowork writes its requests here, as 1.txt, 2.txt and so on. relay watch session $WATCH_ID." >"$WATCH_REQUESTS/README.txt"
   echo "relay watch writes its replies here, as 1.txt and 1.seen for request 1. relay watch session $WATCH_ID." >"$WATCH_REPLIES/README.txt"
-  {
-    echo "LLM-RELAY WATCH"
-    echo "session: $WATCH_ID"
-    echo "relay: $RELAY_VERSION"
-    echo "runlib: $RUNLIB_VERSION"
-    echo "started: $(now)"
-    echo "repositories: ${WATCH_NAMES// /, }"
-    echo "requests: Documents/Cowork/relay/watch/$WATCH_ID/requests"
-    echo "replies: Documents/Cowork/relay/watch/$WATCH_ID/replies"
-    echo "next request: 1"
-    echo "debrief: $DEBRIEF"
-  } >"$WATCH_TMP/note.txt"
-  watch_put "$WATCH_TMP/note.txt" "$COWORK/relay/watch/note.txt" || die "couldn't write Documents/Cowork/relay/watch/note.txt in OneDrive"
-  ui_stage NOTE "OneDrive: Documents/Cowork/relay/watch/note.txt"
-  prompt="relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/note.txt from my OneDrive."
+  watch_note 1 || die "couldn't write Documents/Cowork/relay/watch/$WATCH_ID/note.txt in OneDrive"
+  ui_stage NOTE "OneDrive: Documents/Cowork/relay/watch/$WATCH_ID/note.txt"
+  prompt="relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/$WATCH_ID/note.txt from my OneDrive."
   ui_turn
   if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
     ui_step --done --emoji "📋" 1 "Paste the prompt into Copilot Cowork." "A prompt for Copilot Cowork is on your clipboard."

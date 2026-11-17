@@ -3347,6 +3347,7 @@ WC="$WO/Documents/Cowork"
 WB="$T/watch-bin"
 WRE="$T/watch-repos"
 WLOG="$T/watch.log"
+WLOGEXT=""
 WHOLD="$T/watch-hold"
 mkdir -p "$WC" "$WH/.config/llm-relay" "$WB" "$WRE" "$T/watch-tmp"
 printf 'reviews=%s\n' "$T/watch-reviews" >"$WH/.config/llm-relay/settings"
@@ -3388,22 +3389,45 @@ w_wait() {
   while [ ! -e "$1" ] && [ "$i" -lt $((${2:-30} * 5)) ]; do sleep 0.2; i=$((i + 1)); done
   [ -e "$1" ]
 }
-# w_start <keys> <repository>...: relay watch, in the background at a pseudo-terminal, as fast as
-# it can poll, with a shell in front to leave its process id.
+# w_launch <hold file> <pid file> <keys> <repository>...: relay watch, in the background at a
+# pseudo-terminal, as fast as it can poll, with a shell in front to leave its process id. The
+# process is WLAUNCHED.
+w_launch() {
+  local hold="$1" pidf="$2" keys="$3"
+  shift 3
+  env HOME="$WH" TMPDIR="$T/watch-tmp" PATH="$WB:$PATH" PAGER=cat RELAY_WAIT="${WWAIT:-3}" RELAY_POLL=1 RELAY_WATCH_POLL=0.4 RELAY_WATCH_IDLE="${WIDLE:-300}" \
+    python3 "$TTY" --hold "$hold" "$keys" bash -c 'echo $$ >"$0"; exec "$@"' "$pidf" "$W" --dir "$WO" watch "$@" >"$WLOG$WLOGEXT" 2>&1 &
+  WLAUNCHED=$!
+}
+# w_notes: each session's note, one to a line. The shared watch/note.txt of 0.2.30's first build
+# isn't one.
+w_notes() { ls "$WC"/relay/watch/*/note.txt 2>/dev/null; }
+# w_start <keys> <repository>...: w_launch, until the session's note is there. With WSTALE set, an
+# old shared note is there first.
 w_start() {
   local keys="$1"
   shift
   local i=0
   rm -rf "$WC/relay/watch" "$T/watch-notices" "$WHOLD" "$T/watch-pid" "$T/watch-clip"
-  env HOME="$WH" TMPDIR="$T/watch-tmp" PATH="$WB:$PATH" PAGER=cat RELAY_WAIT="${WWAIT:-3}" RELAY_POLL=1 RELAY_WATCH_POLL=0.4 RELAY_WATCH_IDLE="${WIDLE:-300}" \
-    python3 "$TTY" --hold "$WHOLD" "$keys" bash -c 'echo $$ >"$0"; exec "$@"' "$T/watch-pid" "$W" --dir "$WO" watch "$@" >"$WLOG" 2>&1 &
-  WPID=$!
+  if [ -n "${WSTALE:-}" ]; then mkdir -p "$WC/relay/watch" && echo stale >"$WC/relay/watch/note.txt"; fi
+  w_launch "$WHOLD" "$T/watch-pid" "$keys" "$@"
+  WPID=$WLAUNCHED
   WSID=""
-  while [ ! -e "$WC/relay/watch/note.txt" ] && kill -0 "$WPID" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i + 1)); done
-  [ -e "$WC/relay/watch/note.txt" ] || return 1
-  WSID="$(sed -n 's/^session: //p' "$WC/relay/watch/note.txt")"
+  while [ -z "$(w_notes)" ] && kill -0 "$WPID" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i + 1)); done
+  [ -n "$(w_notes)" ] || return 1
+  WSID="$(w_notes | head -n 1)"
+  WSID="${WSID%/note.txt}"
+  WSID="${WSID##*/}"
+  WN="$WC/relay/watch/$WSID/note.txt"
   WREQ="$WC/relay/watch/$WSID/requests"
   WREP="$WC/relay/watch/$WSID/replies"
+}
+# w_next <n>: until the session's note says the next request is n. The note is rewritten just
+# after the reply it follows.
+w_next() {
+  local i=0
+  while ! grep -qx "next request: $1" "$WN" 2>/dev/null && [ "$i" -lt 50 ]; do sleep 0.2; i=$((i + 1)); done
+  grep -qx "next request: $1" "$WN"
 }
 # w_end: waits for the watch to finish, and keeps its exit code in WRC.
 w_end() { wait "$WPID"; WRC=$?; }
@@ -3445,9 +3469,14 @@ printf '# a review\n\n## Coverage\n\n- Read all of it\n' >"$WD/reviews/ABC-12/r.
 rm -f "$WD/run.sh" "$WD/runlib.sh"
 bash "$LIB" manifest "$WD" >/dev/null
 V46="$(sed -n '1s/^version //p' "$WD/manifest.txt")"
-# One key for each question, in order: request 2 y, 3 n, 4 y, 5 y, 6 r, 7 n, 8 y, 9 y.
+# One key for each question, in order: request 2 y, 3 n, 4 y, 5 y, 6 r, 7 n, 8 y, 9 y. An old
+# shared note is there first, as 0.2.30's first build left it.
+WSTALE=1
 if w_start ynyyrnyy "$WRE/wa-one" "$WRE/wa-two"; then ok "relay watch starts, and writes its note"; else bad "relay watch starts, and writes its note" "$(cat "$WLOG")"; fi
-WN="$WC/relay/watch/note.txt"
+WSTALE=""
+check "the note is the session's own, in its folder" test -f "$WC/relay/watch/$WSID/note.txt"
+check "an old shared note is removed when a watch starts" test ! -e "$WC/relay/watch/note.txt"
+check "and no shared note is written" test -z "$(find "$WC/relay/watch" -maxdepth 1 -type f)"
 check "the note says it is a watch" grep -qx 'LLM-RELAY WATCH' "$WN"
 check "and which relay" grep -qx "relay: $WVERSION" "$WN"
 check "and which runlib" grep -q '^runlib: [0-9][0-9]*$' "$WN"
@@ -3456,6 +3485,8 @@ check "and which repositories" grep -qx 'repositories: wa-one, wa-two' "$WN"
 check "and where requests go" grep -qx "requests: Documents/Cowork/relay/watch/$WSID/requests" "$WN"
 check "and where replies come" grep -qx "replies: Documents/Cowork/relay/watch/$WSID/replies" "$WN"
 check "and what the first request is" grep -qx 'next request: 1' "$WN"
+check "and that it serves one conversation at a time" grep -qx 'one conversation: this watch serves one Copilot Cowork conversation at a time. For a second conversation working at the same time, the user starts another relay watch' "$WN"
+check "that line is after the repositories" test "$(grep -n '^repositories:\|^one conversation:' "$WN" | cut -d: -f2 | tr '\n' ' ')" = 'repositories one conversation '
 check "and the debrief setting" grep -qx 'debrief: ask' "$WN"
 check "the session id is a UTC date and time" grep -Eqx '[0-9]{8}-[0-9]{6}' <<EOF
 $WSID
@@ -3464,7 +3495,7 @@ check "the requests folder has a file in it, for Copilot Cowork to list" test -s
 check "and so does the replies folder" test -s "$WREP/README.txt"
 check "it scanned each repository first" test -f "$WC/relay/scans/wa-one.txt" -a -f "$WC/relay/scans/wa-two.txt"
 w_wait "$T/watch-clip" 10
-check "the prompt for Copilot Cowork is on the clipboard" grep -qx 'relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/note.txt from my OneDrive.' "$T/watch-clip"
+check "the prompt for Copilot Cowork, naming the session's note, is on the clipboard" grep -qx "relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/$WSID/note.txt from my OneDrive." "$T/watch-clip"
 check "nothing but the watch's prompt was put there by the scans" test "$(grep -c . "$T/watch-clip")" = 1
 
 # A scan needs no key.
@@ -3473,6 +3504,7 @@ check "a scan request is answered with no key" w_says 1 'outcome: done'
 check "and names what it sent" w_says 1 'scan: Documents/Cowork/relay/scans/wa-one.txt'
 check "and says what did not change since" w_says 1 'changed since its scan: wa-one: no, wa-two: no'
 check "and what comes next" w_says 1 'next request: 2'
+check "and the note says so too, as the next request" w_next 2
 check "the reply says it is one" grep -qx 'LLM-RELAY REPLY' "$WREP/1.txt"
 check "of this session" w_says 1 "session: $WSID"
 check "and what it did" w_says 1 'did: scan'
@@ -3489,6 +3521,8 @@ sleep 1
 rm -f "$WHOLD"
 w_wait "$WREP/2.txt" 60
 check "a run on y is done" w_says 2 'outcome: done'
+check "and the note's next request is one past it" w_next 3
+check "with the rest of the note as it was" grep -qx 'repositories: wa-one, wa-two' "$WN"
 check "with its result" w_says 2 'result: PASS'
 check "and where its report is" grep -q "^report: Documents/Cowork/relay/t41/reports/demo-v$V41-" "$WREP/2.txt"
 check "and the report is there" bash -c "ls '$WC'/relay/t41/reports/demo-v$V41-*.txt"
@@ -3596,6 +3630,7 @@ if grep -rq 'ZZ' "$WREP"; then bad "no word of a refused request is in a reply" 
 w_do 36 'do: scan' 'repository: wa-one'
 check "a skipped number is passed over" w_says 36 'outcome: done'
 check "and its reply says what comes next" w_says 36 'next request: 37'
+check "and the note names no number the watch has passed" w_next 37
 # Stop.
 w_do 37 'do: stop'
 check "a request to stop is answered" w_says 37 'did: stop'
@@ -3638,7 +3673,8 @@ git -C "$WS" commit -qm key
 w_start n "$WS"
 w_end
 check "on n to the secrets question the watch doesn't start" test "$WRC" = 1
-check "and writes nothing to OneDrive" test ! -e "$WC/relay/watch/note.txt"
+check "and writes nothing to OneDrive" test -z "$(w_notes)"
+check "and leaves no session folder" test -z "$(ls "$WC"/relay/watch 2>/dev/null)"
 case "$(cat "$WLOG")" in *"wa-secret wasn't scanned, so the watch didn't start"*) ok "and says so" ;; *) bad "and says so" "$(cat "$WLOG")" ;; esac
 WIDLE=3 w_start y "$WS"
 w_end
@@ -3654,6 +3690,52 @@ check "twenty requests waiting stop the watch" test "$WRC" = 1
 check "and the reason is given" grep -qx 'why: too many requests were waiting' "$WREP/ended.txt"
 case "$(cat "$WLOG")" in *"Too many requests are waiting"*) ok "and said in a line" ;; *) bad "and said in a line" "$(cat "$WLOG")" ;; esac
 check "none of them was done" test ! -e "$WREP/1.seen"
+
+# 4b. Two watches at once, as two conversations would have, each with its own session and note.
+rm -rf "$WC/relay/watch" "$T/watch-clip"
+WLOGEXT=".a" w_launch "$T/watch-hold-a" "$T/watch-pid-a" "" "$WRE/wa-one"
+WPA=$WLAUNCHED
+WLOGEXT=".b" w_launch "$T/watch-hold-b" "$T/watch-pid-b" "" "$WRE/wa-two"
+WPB=$WLAUNCHED
+i=0
+while [ "$(w_notes | wc -l | tr -d ' ')" -lt 2 ] && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i + 1)); done
+check "two watches started together each write a note" test "$(w_notes | wc -l | tr -d ' ')" = 2
+WNA=""
+WNB=""
+for n in $(w_notes); do
+  case "$(sed -n 's/^repositories: //p' "$n")" in wa-one) WNA="$n" ;; wa-two) WNB="$n" ;; esac
+done
+WSA="$(sed -n 's/^session: //p' "$WNA")"
+WSB="$(sed -n 's/^session: //p' "$WNB")"
+check "with different session ids" test -n "$WSA" -a -n "$WSB" -a "$WSA" != "$WSB"
+check "each note is in its own session's folder" test "$WNA" = "$WC/relay/watch/$WSA/note.txt" -a "$WNB" = "$WC/relay/watch/$WSB/note.txt"
+check "and each names its own folders" grep -qx "requests: Documents/Cowork/relay/watch/$WSA/requests" "$WNA"
+WSID="$WSA"
+WREQ="$WC/relay/watch/$WSA/requests"
+WREP="$WC/relay/watch/$WSA/replies"
+WREPB="$WC/relay/watch/$WSB/replies"
+WN="$WNA"
+w_do 1 'do: scan' 'repository: wa-one'
+check "a request sent to one is answered by that one" w_says 1 'outcome: done'
+check "and is not answered by the other" test ! -e "$WREPB/1.txt" -a ! -e "$WREPB/1.seen"
+check "and the other's note still says its next request is 1" grep -qx 'next request: 1' "$WNB"
+check "while the one that was asked has moved on" w_next 2
+# A request for one watch, written in the other's folder, is refused: its session isn't that watch's.
+printf 'LLM-RELAY REQUEST\nsession: %s\nn: 2\ndo: scan\nrepository: wa-two\n' "$WSB" >"$WC/relay/watch/$WSA/requests/2.txt"
+w_wait "$WREP/2.txt" 30
+check "a request in one watch's folder with the other's session is refused" w_says 2 "why: the session is not this watch's"
+check "and the other watch didn't do it" test ! -e "$WREPB/1.txt"
+WREQ="$WC/relay/watch/$WSA/requests"
+w_do 3 'do: stop'
+wait "$WPA"
+WSID="$WSB"
+WREQ="$WC/relay/watch/$WSB/requests"
+WREP="$WREPB"
+w_do 1 'do: stop'
+wait "$WPB"
+check "both watches end, each in its own folder" test -s "$WC/relay/watch/$WSA/replies/ended.txt" -a -s "$WC/relay/watch/$WSB/replies/ended.txt"
+check "and neither left a scratch folder" test -z "$(ls -A "$T/watch-tmp")"
+WLOGEXT=""
 
 # 5. What is asked of the command itself.
 wcmd() { env HOME="$WH" PATH="$WB:$PATH" "$W" --dir "$WO" watch "$@" 2>&1; }
