@@ -13,6 +13,7 @@ Where the relay goes next, and the decisions behind it. Written 2026-11-05, agai
 | [flow.md](flow.md) | The order a piece of work goes in, from the ticket to after the merge, what the relay does at each stage, and what's missing. Adopted, and taught to Cowork by the skill. |
 | [leverage.md](leverage.md) | What Claude is used for at work, and nine steps for moving more of it to Cowork. |
 | [ask.md](ask.md) | Waking Cowork from the Mac with a webhook, and `relay ask` built on it. Built at 0.2.15, after the wake-up passed its test on the work Mac. |
+| [watch.md](watch.md) | `relay watch`: Copilot asks for scans, runs and applies through request files, and the Mac does them, keeping the keypress, and a hidden unattended mode that is a named exception to it. Adopted on 2026-11-17, not built yet. |
 
 In short: close a way round the keypress gate (done, merged on 2026-11-05), prove the standalone relay on the work Mac, then wake Cowork without typing "done". After that, [leverage.md](leverage.md). The relay stays in Bash, OneDrive stays the only channel, and nothing is added that runs without a keypress on the Mac.
 
