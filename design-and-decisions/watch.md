@@ -40,9 +40,16 @@ relay watch ~/code/thing [~/code/other]...
 It needs a terminal, and is meant to stay open in Apple's Terminal for a working session. The repositories named are the only ones it will scan or apply to. It:
 
 1. Scans each repository, as `relay scan` would, since that's the first thing a session needs anyway.
-2. Writes `Documents/Cowork/relay/watch/note.txt`: a new session id, the relay's version, the repositories by name, when it started, and where requests and replies go.
-3. Puts a prompt on the clipboard, for Copilot: "relay watch is running. Read Documents/Cowork/relay/watch/note.txt, with nothing attached."
+2. Writes `Documents/Cowork/relay/watch/<session>/note.txt`: a new session id, the relay's version, the repositories by name, when it started, where requests and replies go, and the next request's number, which it keeps current after every reply.
+3. Puts a prompt on the clipboard, for Copilot, naming that note.
 4. Waits for requests.
+
+### Several sessions
+
+Added on 2026-11-17, after Brock said engineers would want both.
+
+- **One after another.** The note's `next request:` is rewritten after every reply, so a new conversation can take over a watch an earlier one used. The skill also has it list the replies folder first, since its copy of the note can be an old one.
+- **At the same time.** Each watch has its own note, in its own session folder, so two watches don't disturb each other. A session id is claimed by making its folder, so two watches started in the same second get different ids. One watch still serves one conversation at a time, because replies are matched by number: a second conversation gets a second watch.
 
 ### Requests
 

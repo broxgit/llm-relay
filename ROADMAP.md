@@ -54,6 +54,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 
 - **Why:** asked for on 2026-11-17. Each round cost the user about seven steps of carrying text between Copilot Cowork and the terminal, and only the keypress protected anything.
 - **What changed (0.2.30):** `relay watch REPOSITORY...` stays open in a terminal. Copilot Cowork writes numbered request files, for a scan, run, apply, review or stop, and the relay refuses anything that isn't one of those with their fixed lines. A scan needs no key. A run, an apply and a review ask as before, after a bell and a notification, and one `y` at "Run it, and apply it if it passes?" covers the apply of the copy that was shown, then a fresh scan. The relay writes `<n>.seen` when it reads a request and `<n>.txt` when it's finished, and Copilot Cowork waits for the reply by listing the folder, so nobody types "done". [design-and-decisions/watch.md](design-and-decisions/watch.md) has the design. Built by a Sonnet sub-agent from a brief, and reviewed here.
+- **Several sessions (0.2.30):** each watch has its own note, at Documents/Cowork/relay/watch/<session>/note.txt, and keeps its next request number current, so a new conversation can take over a watch, and two conversations at once run a watch each.
 - **Not built yet:** showing what changed since the last yes, the session's tally, and the unattended mode.
 
 ### Copilot Cowork offers a debrief at the end of a session (2026-11-17)
