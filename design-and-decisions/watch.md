@@ -86,9 +86,16 @@ When the request is finished, it writes `replies/<n>.txt`:
 
 ### Copilot waits for the reply itself
 
-After writing a request, Copilot keeps reading `replies/<n>.txt` by name in the same turn, every 20 seconds for up to 10 minutes. The field-test skill already has it retry a read for that long. Each reply is a new file name, so a copy its download tool kept can't be mistaken for it. When the reply comes, it carries on, and nobody types "done". If it doesn't come, Copilot ends its turn with one line: what the `.seen` file says the terminal is waiting for, and "tell me done".
+After writing a request, Copilot stays in the same turn and lists the session's `replies` folder every 20 seconds, with a `sleep 20` in its sandbox between tries, for up to 10 minutes. When `<n>.txt` is in the listing, it reads it and carries on, and nobody types "done". If it doesn't come, Copilot ends its turn with one line: what the `.seen` file says the terminal is waiting for, and "tell me done".
 
-This is the largest saving, and the least proven: how long Copilot Cowork can keep one turn going isn't known. It gets a five-minute test before anything is built. See "Order".
+It lists the folder, and never reads the reply's path until the listing shows it. A test on 2026-11-17 showed why:
+
+- Copilot kept one turn going for 163 seconds and then 488 seconds, with a real `sleep 20` between tries. Nothing ended either turn early, and nothing asked for approval.
+- Reading a path that doesn't exist yet stopped after three tries. Copilot's own tooling refuses a call that has failed three times in a row with the same arguments, and kept refusing after the file existed.
+- Listing the folder isn't a failure, so it can repeat: 18 listings in a row worked, and the last showed the file 5 seconds after it was saved.
+- That is one session, with two waits. Waits longer than about 8 minutes weren't tried.
+
+So the relay makes the `requests` and `replies` folders when the watch starts, each with a small file in it, so that Copilot has a folder to list from its first request. The note gives Copilot both folders' paths.
 
 ### One keypress for the chain
 
@@ -164,11 +171,11 @@ Brock asked for a way to make the watch fully automatic, hidden so it can't be t
 
 ## Waking Copilot with a webhook
 
-Dropped from the plan unless the wait fails its test. It would have the relay POST the webhook after each reply, as `relay ask` does. The wake tests of 2026-11-09, in [ask.md](ask.md), found that a webhook run in the same conversation could not write into `Documents/Cowork`, where deliverables and requests live, and that was tried once only. Which conversation a trigger can continue isn't known either.
+Dropped from the plan, since the wait passed its test on 2026-11-17. It would have the relay POST the webhook after each reply, as `relay ask` does. The wake tests of 2026-11-09, in [ask.md](ask.md), found that a webhook run in the same conversation could not write into `Documents/Cowork`, where deliverables and requests live, and that was tried once only. Which conversation a trigger can continue isn't known either.
 
 ## Open questions
 
-1. How long Copilot can wait in one turn, and whether its reads of a new file name are fresh.
+1. Whether Copilot can wait longer than about 8 minutes in one turn, and whether the wait holds up over many rounds in one session. The first test, in "Copilot waits for the reply itself", passed for two waits.
 2. How long a request takes to reach the Mac from Copilot's write. OneDrive to the Mac took about 3 seconds for answers, with two long stalls.
 3. Whether the work Mac lets a terminal show a notification. A managed Mac can block it, and the bell still works.
 4. Whether Copilot writes requests reliably instead of slipping back into handing over commands.
@@ -176,7 +183,7 @@ Dropped from the plan unless the wait fails its test. It would have the relay PO
 
 ## Order
 
-1. **A five-minute test, with nothing built.** In a real session, Brock asks Copilot to write a small file to OneDrive and then wait for a second file that he makes by hand a few minutes later. It answers questions 1 and 2, and decides whether "done" can go.
+1. **A short test, with nothing built. Done on 2026-11-17.** Copilot waited in one turn for a file Brock made 2 and then 8 minutes later, and found each by listing the folder. "done" can go. How long Copilot's own file took to reach the Mac wasn't recorded.
 2. `relay watch` in the usual mode: requests, `.seen` files and replies, the chain, what changed since the last yes, the tally, the skill's section, and smoke tests with a fake OneDrive folder.
 3. A part in the guided field test: a session with the watch, counting Brock's steps against a session without it.
 4. The unattended mode, after the usual mode has run for real.
