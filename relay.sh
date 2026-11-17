@@ -55,7 +55,7 @@ wait_draw() {
 wait_clear() { ui_wait_clear; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.29"
+RELAY_VERSION="0.2.30"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -74,6 +74,18 @@ OLD_SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/llm-wiki/relay"
 WORK=""
 RUN_STARTED=""
 KEY=""
+
+# What relay watch hands the commands it runs for Copilot Cowork. Both are empty unless the watch
+# sets them, and they are set here, before anything reads them, so a value in the environment is
+# overwritten and means nothing. WATCH_OUT is a private folder where a command leaves word of what
+# happened: that the user said no, the report a run wrote, that a patch was applied. WATCH_CHAIN is
+# a file in that folder, for a run that asked "Run it, and apply it if it passes?". Only
+# ask_run_and_apply writes it, after reading a y from /dev/tty, and only chain_covers reads it
+# to skip a question. Nothing else may.
+# The run itself could write that file, since it runs as the user. That gives it nothing: code
+# that runs here can already change the repository directly.
+WATCH_OUT=""
+WATCH_CHAIN=""
 
 # Whether there's someone to ask. Standard input has to be a terminal, so an agent's shell is
 # refused even when it inherits one, and /dev/tty has to open, because the answers are read from
@@ -144,6 +156,7 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
        relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
+       relay [--dir ONEDRIVE_FOLDER] watch REPOSITORY [REPOSITORY]...
        relay [--dir ONEDRIVE_FOLDER] ask QUESTION... [--from FILE] [--scan REPOSITORY]... [--file FILE]... [--ask]
        relay [--dir ONEDRIVE_FOLDER] answer [ID]
        relay [--dir ONEDRIVE_FOLDER] ask --setup
@@ -217,6 +230,13 @@ Usage: relay [--dir ONEDRIVE_FOLDER] start
          <name>.previous.
   apply  Waits for a deliverable, and when you press y applies its patches to the repository's
          working tree. It never commits. Use it once a run has passed.
+  watch  Stays open, and does what Copilot Cowork asks for in requests it writes to OneDrive, so
+         you don't carry a command to the terminal for each step. It scans the repositories you
+         name, writes a note for Copilot Cowork, and puts a prompt on your clipboard. A scan
+         it is asked for needs no key. A run, an apply or a review still waits for your key
+         here, and a run can be offered as "run it, and apply it if it passes", which one y
+         answers. It never commits. It ends on Ctrl-C, on a request to stop, or after two
+         hours with no request.
   ask    Hands Copilot Cowork a question, for an assistant on this Mac that wants the bulk reading
          done elsewhere. The question goes to OneDrive with any file you name with --file,
          after the check for secrets, and --scan sends a repository for Copilot Cowork to read. Then
@@ -478,10 +498,44 @@ ask_to_run() {
     ask_key "$(ui_keys yes "view the files" no)" || return 1
     case "$KEY" in
       y | Y) return 0 ;;
-      n | N) return 1 ;;
+      n | N) watch_said_no; return 1 ;;
       v | V) view_deliverable "$copy" ;;
     esac
   done
+}
+
+# watch_said_no: tells a relay watch that the user pressed n. It changes no question.
+watch_said_no() { [ -z "$WATCH_OUT" ] || : >"$WATCH_OUT/said-no"; }
+
+# ask_run_and_apply <copy>: the question a relay watch asks for a run it may then apply. The
+# one y is the user's word for both, and the copy shown is the one it covers: the file
+# WATCH_CHAIN names gets the sha256 of that copy's manifest, and only here, after the y.
+# apply asks as usual unless the copy it fetches has that hash.
+ask_run_and_apply() {
+  local copy="$1"
+  while :; do
+    ui_question "Run it, and apply it if it passes?" >/dev/tty
+    ask_key "$(ui_keys "yes to both" "run only" "view the files" no)" || return 1
+    case "$KEY" in
+      y | Y)
+        sha256_of "$copy/manifest.txt" >"$WATCH_CHAIN" || rm -f "$WATCH_CHAIN"
+        return 0
+        ;;
+      r | R) return 0 ;;
+      n | N) watch_said_no; return 1 ;;
+      v | V) view_deliverable "$copy" ;;
+    esac
+  done
+}
+
+# chain_covers <copy>: whether the user has just pressed y, at a relay watch's question, to
+# applying exactly this copy. The question left its manifest's sha256 in the file WATCH_CHAIN
+# names, which only a watch sets, so a variable from outside matches nothing.
+chain_covers() {
+  local said
+  [ -n "$WATCH_CHAIN" ] && [ -f "$WATCH_CHAIN" ] || return 1
+  said="$(cat "$WATCH_CHAIN")"
+  [ -n "$said" ] && [ "$said" = "$(sha256_of "$1/manifest.txt")" ]
 }
 
 send_report() {
@@ -556,9 +610,10 @@ cmd_run() {
   a="${SRC%/*}"
   task="$(basename "${a%/*}")"
   show_deliverable "$copy" "$task/$(basename "$SRC")" "$version"
-  if ! ask_to_run "$copy"; then
-    ui_item ok "Nothing ran, and no report was sent."
-    return 1
+  if [ -n "$WATCH_CHAIN" ]; then
+    ask_run_and_apply "$copy" || { ui_item ok "Nothing ran, and no report was sent."; return 1; }
+  else
+    ask_to_run "$copy" || { ui_item ok "Nothing ran, and no report was sent."; return 1; }
   fi
 
   mkdir -p "$REPORTS" || die "can't create $REPORTS"
@@ -580,6 +635,7 @@ cmd_run() {
     [ "$rc" -ne 0 ] || rc=1
     return "$rc"
   fi
+  [ -z "$WATCH_OUT" ] || printf '%s\n' "$REPORTS/$new" >"$WATCH_OUT/report"
   record_run "$copy/manifest.txt" "$task/$(basename "$SRC")" "$version" "$new"
   send_report "$REPORTS/$new" "$task" || { [ "$rc" -ne 0 ] || rc=1; }
   return "$rc"
@@ -928,6 +984,7 @@ secrets_gate() {
     y | Y) ;;
     *)
       say_warn_err "Nothing from $label was sent."
+      watch_said_no
       return 1
       ;;
   esac
@@ -2345,7 +2402,9 @@ cmd_apply() {
     ui_item warn "Warning: the last run of version $version didn't pass."
   fi
   echo
-  if ! ask_to_run "$copy" "Apply it, uncommitted?"; then
+  if chain_covers "$copy"; then
+    ui_item ok "You pressed y to run it and apply it, and this is the copy you were shown, so it is applied without asking again."
+  elif ! ask_to_run "$copy" "Apply it, uncommitted?"; then
     ui_item ok "Nothing changed."
     return 1
   fi
@@ -2367,8 +2426,543 @@ EOF
   done <<EOF
 $patches
 EOF
+  [ -z "$WATCH_OUT" ] || : >"$WATCH_OUT/applied"
   ui_item ok "Applied, and nothing is committed. Look it over with: $(typed "git -C $root diff")"
   git -C "$root" status --short
+}
+
+# ---- watch -------------------------------------------------------------------
+
+# relay watch stays open and does what Copilot Cowork asks for, in numbered request files, so
+# the user's part of a round is the one key. A request is data from the cloud: it picks from a
+# fixed list, is read as text and never run or sourced, and none of its words is shown or
+# written back. design-and-decisions/watch.md has why each part is the way it is.
+#
+# The key is as it was. Each request runs the relay's own command, in a subshell, and that
+# command asks its own question at the terminal. The one thing a watch adds is for a run that
+# asked "Run it, and apply it if it passes?" and got a y: its apply follows with no second
+# question, if it fetches the very copy the user was shown. WATCH_CHAIN is how, and its comment
+# at the top of this file says who may touch it.
+#
+# Seconds between looks for the next request, and with no request before the watch ends.
+WATCH_POLL="${RELAY_WATCH_POLL:-5}"
+WATCH_IDLE="${RELAY_WATCH_IDLE:-7200}"
+case "$WATCH_POLL" in '' | *[!0-9.]*) WATCH_POLL=5 ;; esac
+case "$WATCH_IDLE" in '' | *[!0-9]*) WATCH_IDLE=7200 ;; esac
+# Set by cmd_watch. WATCH_TMP is its private folder, made by mktemp, which only the user can
+# open, and never inside OneDrive. WATCH_NAMES are the repositories, by name, and
+# $WATCH_TMP/root.<name> holds where each is. WATCH_SCAN is the name of the scan made last.
+WATCH_ID=""
+WATCH_TMP=""
+WATCH_NAMES=""
+WATCH_REQUESTS=""
+WATCH_REPLIES=""
+WATCH_SCAN=""
+WATCH_WHY=""
+WATCH_STOP=""
+WATCH_RC=0
+# The lines a reply adds to what every reply says.
+WATCH_MORE=""
+# The keys of the request being read that it had a line for.
+WATCH_HAVE=" "
+# The reason a request was refused, in the relay's own words. Never a word of the request's.
+WHY=""
+# What a request said, once watch_parse has accepted it.
+Q_session="" Q_n="" Q_do="" Q_deliverable="" Q_expect="" Q_then="" Q_repository="" Q_untracked=""
+
+# watch_put <file> <where>: puts a file where Copilot Cowork reads it, by a rename in the same
+# folder, so it never reads half of one. False when it couldn't.
+watch_put() {
+  local tmp="${2%/*}/.${2##*/}.tmp"
+  if cp "$1" "$tmp" 2>/dev/null && mv -f "$tmp" "$2" 2>/dev/null; then return 0; fi
+  rm -f "$tmp" 2>/dev/null
+  return 1
+}
+
+# watch_is_name <name>: whether it is one of this session's repositories, by exact name.
+watch_is_name() {
+  local n
+  for n in $WATCH_NAMES; do
+    [ "$n" != "$1" ] || return 0
+  done
+  return 1
+}
+
+# watch_root <name>: where a repository of this session is. False for any other name.
+watch_root() {
+  watch_is_name "$1" || return 1
+  cat "$WATCH_TMP/root.$1"
+}
+
+# watch_state <root>: where a repository stands, as one hash: its HEAD, its status and its diff.
+watch_state() {
+  {
+    git -C "$1" rev-parse HEAD
+    git -C "$1" status --porcelain
+    git -C "$1" diff HEAD --no-ext-diff
+  } </dev/null >"$WATCH_TMP/state.now" 2>&1
+  sha256_of "$WATCH_TMP/state.now"
+}
+
+# watch_changed: for each repository, whether it has moved since the watch last scanned it.
+watch_changed() {
+  local name out=""
+  for name in $WATCH_NAMES; do
+    if [ -f "$WATCH_TMP/state.$name" ] && [ "$(watch_state "$(watch_root "$name")")" = "$(cat "$WATCH_TMP/state.$name")" ]; then
+      out="${out:+$out, }$name: no"
+    else
+      out="${out:+$out, }$name: yes"
+    fi
+  done
+  printf '%s\n' "$out"
+}
+
+# watch_scan <name> [untracked]: does what relay scan does for one repository. It sets
+# WATCH_SCAN to the scan's name in OneDrive, and keeps where the repository stood before the
+# scan, so a change made while it ran counts as a change. False when nothing was sent.
+watch_scan() {
+  local root before
+  root="$(watch_root "$1")" || return 1
+  before="$(watch_state "$root")"
+  rm -f "$WATCH_TMP/scan-name" "$WATCH_TMP/said-no"
+  # RELAY_SCAN_NAME_OUT is how relay mr learns a scan's name. It also keeps the scan from
+  # putting its own prompt on the clipboard, over the watch's.
+  (WATCH_OUT="$WATCH_TMP"; RELAY_SCAN_NAME_OUT="$WATCH_TMP/scan-name"; cmd_scan "$root" ${2:+--untracked}) || return 1
+  [ -s "$WATCH_TMP/scan-name" ] || return 1
+  WATCH_SCAN="$(head -n 1 "$WATCH_TMP/scan-name")"
+  printf '%s\n' "$before" >"$WATCH_TMP/state.$1"
+}
+
+# watch_call_user <what>: rings the bell and posts a notification, so a user in another window
+# sees a question is waiting. Best effort. The words are a name that was already checked.
+watch_call_user() {
+  { printf '\a' >/dev/tty; } 2>/dev/null
+  command -v osascript >/dev/null 2>&1 || return 0
+  limited 5 osascript -e "display notification \"relay: $1\" with title \"relay watch\"" >/dev/null 2>&1
+  return 0
+}
+
+# watch_seen <n> <what it is about to do>: tells Copilot Cowork that the request was read, and
+# what the terminal is doing about it, so it can tell a watch that waits for a key from one
+# that has died.
+watch_seen() {
+  {
+    echo "LLM-RELAY SEEN"
+    echo "session: $WATCH_ID"
+    echo "n: $1"
+    echo "at: $(now)"
+    echo "doing: $2"
+  } >"$WATCH_TMP/seen.txt"
+  watch_put "$WATCH_TMP/seen.txt" "$WATCH_REPLIES/$1.seen" || ui_item warn "Couldn't write replies/$1.seen in OneDrive."
+}
+
+# watch_reply <n> <did> <outcome> <why> <more lines>: the answer to a request. The lines that
+# don't apply are left out.
+watch_reply() {
+  {
+    echo "LLM-RELAY REPLY"
+    echo "session: $WATCH_ID"
+    echo "n: $1"
+    echo "did: $2"
+    echo "outcome: $3"
+    [ -z "$4" ] || echo "why: $4"
+    [ -z "$5" ] || printf '%s\n' "$5"
+    echo "changed since its scan: $(watch_changed)"
+    echo "next request: $(($1 + 1))"
+    echo "at: $(now)"
+  } >"$WATCH_TMP/reply.txt"
+  watch_put "$WATCH_TMP/reply.txt" "$WATCH_REPLIES/$1.txt" || ui_item warn "Couldn't write the reply for request $1 to OneDrive. Tell Copilot Cowork that it is done."
+  ui_detail "Nothing more to do here. Copilot Cowork reads the reply itself, and says if it needs you."
+}
+
+# ---- reading a request
+
+# watch_has <key>: whether the request being read had that line.
+watch_has() { case "$WATCH_HAVE" in *" $1 "*) return 0 ;; esac; return 1; }
+
+# watch_parse <file> <n>: reads a request as text, line by line, and takes nothing out of it
+# that isn't one of the fixed keys with a value of the fixed shape. Sets WHY and returns 1 for
+# anything else, and the Q_ variables for a request that is fine.
+watch_parse() {
+  local file="$1" n="$2" cr line first=yes key value k needed allowed
+  cr="$(printf '\r')"
+  WATCH_HAVE=" "
+  Q_session="" Q_n="" Q_do="" Q_deliverable="" Q_expect="" Q_then="" Q_repository="" Q_untracked=""
+  [ "$(wc -c <"$file" | tr -d ' ')" -le 2048 ] || { WHY="the request is longer than 2048 bytes"; return 1; }
+  # Printable characters and line ends, and nothing else: no control character of any kind.
+  [ "$(LC_ALL=C tr -d '[:print:]\r\n' <"$file" | wc -c | tr -d ' ')" -eq 0 ] || { WHY="the request has a control character"; return 1; }
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%"$cr"}"
+    case "$line" in *"$cr"*) WHY="the request has a control character"; return 1 ;; esac
+    if [ "$first" = yes ]; then
+      first=no
+      [ "$line" = "LLM-RELAY REQUEST" ] || { WHY="the first line is not LLM-RELAY REQUEST"; return 1; }
+      continue
+    fi
+    [ -n "$line" ] || continue
+    case "$line" in *": "*) ;; *) WHY="a line is not in the form key: value"; return 1 ;; esac
+    key="${line%%: *}"
+    value="${line#*: }"
+    watch_has "$key" && { WHY="a line is there twice"; return 1; }
+    case "$key" in
+      session) Q_session="$value" ;;
+      n) Q_n="$value" ;;
+      do) Q_do="$value" ;;
+      deliverable) Q_deliverable="$value" ;;
+      expect) Q_expect="$value" ;;
+      then) Q_then="$value" ;;
+      repository) Q_repository="$value" ;;
+      untracked) Q_untracked="$value" ;;
+      *) WHY="a line has a key the relay doesn't use"; return 1 ;;
+    esac
+    WATCH_HAVE="$WATCH_HAVE$key "
+  done <"$file"
+  [ "$first" = no ] || { WHY="the request is empty"; return 1; }
+  for k in session n "do"; do
+    watch_has "$k" || { WHY="a line the request needs is missing"; return 1; }
+  done
+  [ "$Q_session" = "$WATCH_ID" ] || { WHY="the session is not this watch's"; return 1; }
+  [ "$Q_n" = "$n" ] || { WHY="the number is not the file's number"; return 1; }
+  # What each kind of request needs, and the only other lines it may have.
+  case "$Q_do" in
+    scan) needed="repository" allowed="repository untracked" ;;
+    run) needed="deliverable expect" allowed="deliverable expect then repository" ;;
+    apply) needed="deliverable expect repository" allowed="deliverable expect repository" ;;
+    review) needed="deliverable expect" allowed="deliverable expect" ;;
+    stop) needed="" allowed="" ;;
+    *) WHY="the request asks for something the relay doesn't do"; return 1 ;;
+  esac
+  for k in $needed; do
+    watch_has "$k" || { WHY="a line the request needs is missing"; return 1; }
+  done
+  for k in $WATCH_HAVE; do
+    case " session n do $allowed " in *" $k "*) ;; *) WHY="the request has a line it may not have"; return 1 ;; esac
+  done
+  # A run is applied only when it says so, and then it says where.
+  if [ "$Q_do" = run ]; then
+    if watch_has "then"; then
+      watch_has repository || { WHY="then: apply needs a repository"; return 1; }
+    elif watch_has repository; then
+      WHY="a run takes a repository only with then: apply"
+      return 1
+    fi
+  fi
+  if watch_has repository; then
+    watch_is_name "$Q_repository" || { WHY="the repository is not one this watch was started with"; return 1; }
+  fi
+  if watch_has untracked; then
+    case "$Q_untracked" in yes | no) ;; *) WHY="untracked is not yes or no"; return 1 ;; esac
+  fi
+  if watch_has "then"; then
+    [ "$Q_then" = apply ] || { WHY="then is not apply"; return 1; }
+  fi
+  if watch_has deliverable; then
+    # TASK-FOLDER/DELIVERABLE, and no part starts with a dot or a dash.
+    printf '%s\n' "$Q_deliverable" | grep -Eq '^[A-Za-z0-9_][A-Za-z0-9._-]*/[A-Za-z0-9_][A-Za-z0-9._-]*$' || { WHY="the deliverable is not named as TASK-FOLDER/DELIVERABLE"; return 1; }
+  fi
+  if watch_has expect; then
+    printf '%s\n' "$Q_expect" | grep -Eq '^[0-9]+$' || { WHY="expect is not a whole number"; return 1; }
+  fi
+  return 0
+}
+
+# watch_load <n>: copies request <n> out of OneDrive, if it can be read and isn't empty yet.
+watch_load() {
+  limited "$READ_LIMIT" head -c 2049 "$WATCH_REQUESTS/$1.txt" >"$WATCH_TMP/request" 2>/dev/null || return 1
+  [ -s "$WATCH_TMP/request" ]
+}
+
+# ---- doing a request
+
+# watch_do_scan <n>
+watch_do_scan() {
+  local n="$1" name="$Q_repository" flag=""
+  [ "$Q_untracked" != yes ] || flag=yes
+  watch_seen "$n" "scanning $name"
+  ui_stage REQUEST "Request $n: scan $name"
+  if watch_scan "$name" "$flag"; then
+    watch_reply "$n" scan "done" "" "scan: Documents/Cowork/relay/scans/$WATCH_SCAN.txt"
+  elif [ -f "$WATCH_TMP/said-no" ]; then
+    watch_reply "$n" scan "the user said no" "" ""
+  else
+    watch_reply "$n" scan failed "the scan was not sent" ""
+  fi
+}
+
+# watch_after_apply <n> <name>: what follows an apply that landed. The repository has changed, so
+# it is scanned again. Adds to WATCH_MORE.
+watch_after_apply() {
+  if watch_scan "$2"; then
+    WATCH_MORE="$WATCH_MORE
+scan: Documents/Cowork/relay/scans/$WATCH_SCAN.txt"
+  else
+    WATCH_MORE="$WATCH_MORE
+scan: not sent"
+  fi
+}
+
+# watch_do_run <n>: relay run, and when it says so, relay apply after it.
+watch_do_run() {
+  local n="$1" d="$Q_deliverable" e="$Q_expect" name="$Q_repository" task chain="" root="" rc result report doing uploaded
+  task="${d%%/*}"
+  doing="asking the user to press a key, to run $d"
+  if [ "$Q_then" = apply ]; then
+    chain=yes
+    root="$(watch_root "$name")"
+    doing="asking the user to press a key, to run $d and apply it to $name"
+  fi
+  watch_seen "$n" "$doing"
+  ui_stage REQUEST "Request $n: run $d${chain:+ and apply it to $name}"
+  watch_call_user "run $d?"
+  rm -f "$WATCH_TMP/said-no" "$WATCH_TMP/report" "$WATCH_TMP/applied" "$WATCH_TMP/chain"
+  if [ -n "$chain" ]; then
+    (WATCH_OUT="$WATCH_TMP"; WATCH_CHAIN="$WATCH_TMP/chain"; cmd_run "$d" --expect "$e")
+  else
+    (WATCH_OUT="$WATCH_TMP"; cmd_run "$d" --expect "$e")
+  fi
+  rc=$?
+  if [ -f "$WATCH_TMP/said-no" ]; then
+    watch_reply "$n" run "the user said no" "" ""
+    return 0
+  fi
+  report="$(cat "$WATCH_TMP/report" 2>/dev/null)"
+  if [ -z "$report" ] || [ ! -f "$report" ]; then
+    if [ "$rc" -eq "$EXIT_LATER" ]; then
+      watch_reply "$n" run failed "the deliverable did not arrive in time" ""
+    else
+      watch_reply "$n" run failed "the run wrote no report" ""
+    fi
+    return 0
+  fi
+  # The run's own last line says how it went, as relay apply reads it.
+  if tail -n 1 "$report" | grep -q ' RUN: PASS$'; then result=PASS; else result=FAIL; fi
+  WATCH_MORE="result: $result"
+  uploaded=no
+  if [ -f "$COWORK/relay/$task/reports/${report##*/}" ]; then
+    uploaded=yes
+    WATCH_MORE="$WATCH_MORE
+report: Documents/Cowork/relay/$task/reports/${report##*/}"
+  fi
+  if [ -n "$chain" ]; then
+    # Only a y, to both, left the file. A FAIL applies nothing, whatever was pressed.
+    if [ -f "$WATCH_TMP/chain" ] && [ "$result" = PASS ]; then
+      rm -f "$WATCH_TMP/applied"
+      (WATCH_OUT="$WATCH_TMP"; WATCH_CHAIN="$WATCH_TMP/chain"; cmd_apply "$d" --expect "$e" --repo "$root")
+      if [ -f "$WATCH_TMP/applied" ]; then
+        WATCH_MORE="$WATCH_MORE
+applied: yes"
+        watch_after_apply "$n" "$name"
+      else
+        WATCH_MORE="$WATCH_MORE
+applied: no"
+      fi
+    else
+      if [ -f "$WATCH_TMP/chain" ]; then
+        ui_item ok "That run didn't pass, so nothing is applied."
+      else
+        ui_item ok "You chose to run only, so nothing is applied."
+      fi
+      WATCH_MORE="$WATCH_MORE
+applied: no"
+    fi
+  fi
+  if [ "$uploaded" = yes ]; then
+    watch_reply "$n" run "done" "" "$WATCH_MORE"
+  else
+    watch_reply "$n" run failed "the report was not put in OneDrive" "$WATCH_MORE"
+  fi
+}
+
+# watch_do_apply <n>: relay apply, then a scan of what it changed.
+watch_do_apply() {
+  local n="$1" d="$Q_deliverable" e="$Q_expect" name="$Q_repository" root rc
+  root="$(watch_root "$name")"
+  watch_seen "$n" "asking the user to press a key, to apply $d to $name"
+  ui_stage REQUEST "Request $n: apply $d to $name"
+  watch_call_user "apply $d to $name?"
+  rm -f "$WATCH_TMP/said-no" "$WATCH_TMP/applied"
+  (WATCH_OUT="$WATCH_TMP"; cmd_apply "$d" --expect "$e" --repo "$root")
+  rc=$?
+  WATCH_MORE=""
+  if [ -f "$WATCH_TMP/said-no" ]; then
+    watch_reply "$n" apply "the user said no" "" "applied: no"
+  elif [ -f "$WATCH_TMP/applied" ]; then
+    WATCH_MORE="applied: yes"
+    watch_after_apply "$n" "$name"
+    watch_reply "$n" apply "done" "" "$WATCH_MORE"
+  elif [ "$rc" -eq "$EXIT_LATER" ]; then
+    watch_reply "$n" apply failed "the deliverable did not arrive in time" "applied: no"
+  else
+    watch_reply "$n" apply failed "the patches were not applied" "applied: no"
+  fi
+}
+
+# watch_do_review <n>: relay review.
+watch_do_review() {
+  local n="$1" d="$Q_deliverable" e="$Q_expect" rc
+  watch_seen "$n" "asking the user to press a key, to save the review in $d"
+  ui_stage REQUEST "Request $n: review $d"
+  watch_call_user "save the review in $d?"
+  rm -f "$WATCH_TMP/said-no"
+  (WATCH_OUT="$WATCH_TMP"; cmd_review "$d" --expect "$e")
+  rc=$?
+  if [ -f "$WATCH_TMP/said-no" ]; then
+    watch_reply "$n" review "the user said no" "" ""
+  elif [ "$rc" -eq 0 ]; then
+    watch_reply "$n" review "done" "" ""
+  elif [ "$rc" -eq "$EXIT_LATER" ]; then
+    watch_reply "$n" review failed "the deliverable did not arrive in time" ""
+  else
+    watch_reply "$n" review failed "the review was not saved" ""
+  fi
+}
+
+# watch_request <n>: reads request <n>, which is there, and does it. Sets WATCH_STOP for a request
+# to stop.
+watch_request() {
+  local n="$1"
+  ui_wait_clear
+  if ! watch_parse "$WATCH_TMP/request" "$n"; then
+    ui_item warn "Request $n was refused: $WHY. Copilot Cowork has the reason in its reply."
+    watch_reply "$n" nothing refused "$WHY" ""
+    return 0
+  fi
+  case "$Q_do" in
+    scan) watch_do_scan "$n" ;;
+    run) watch_do_run "$n" ;;
+    apply) watch_do_apply "$n" ;;
+    review) watch_do_review "$n" ;;
+    stop)
+      watch_seen "$n" "stopping"
+      ui_stage REQUEST "Request $n: stop"
+      watch_reply "$n" stop "done" "" ""
+      WATCH_STOP="Copilot Cowork asked it to stop"
+      ;;
+  esac
+}
+
+# ---- the watch
+
+# watch_exit: on every way out, tells Copilot Cowork the watch has ended, so it goes back to
+# handing over commands, and says so here.
+watch_exit() {
+  local why="${WATCH_WHY:-the watch stopped for a reason the relay has no word for}"
+  ui_wait_clear
+  if [ -d "$WATCH_REPLIES" ]; then
+    {
+      echo "LLM-RELAY WATCH ENDED"
+      echo "session: $WATCH_ID"
+      echo "at: $(now)"
+      echo "why: $why"
+    } >"$WATCH_TMP/ended.txt"
+    watch_put "$WATCH_TMP/ended.txt" "$WATCH_REPLIES/ended.txt" || ui_item warn "Couldn't write replies/ended.txt in OneDrive."
+    ui_stage ENDED "relay watch ended: $why" "session $WATCH_ID"
+    ui_detail "Copilot Cowork is told in replies/ended.txt, and goes back to handing you commands."
+  fi
+  [ -z "$WATCH_TMP" ] || rm -rf "$WATCH_TMP"
+}
+
+# watch_loop: one request at a time, in order, until something ends the watch. Reads each request
+# by its name, and never lists the folder, because a listing of a new folder once came back empty
+# while its files could be read.
+watch_loop() {
+  local next=1 found k tick=0 idle_from="$SECONDS"
+  WATCH_STOP=""
+  while :; do
+    if [ -f "$WATCH_REQUESTS/$((next + 20)).txt" ]; then
+      ui_wait_clear
+      ui_item warn "Too many requests are waiting, 20 or more. The watch stops. Run it again when Copilot Cowork has stopped asking."
+      WATCH_WHY="too many requests were waiting"
+      WATCH_RC=1
+      return 0
+    fi
+    # A skipped number shouldn't stall the session, so it looks three ahead.
+    found=""
+    for k in 0 1 2 3; do
+      if [ -f "$WATCH_REQUESTS/$((next + k)).txt" ]; then found=$((next + k)); break; fi
+    done
+    if [ -n "$found" ] && watch_load "$found"; then
+      if [ "$found" -gt "$next" ]; then
+        ui_wait_clear
+        ui_item warn "Request $next didn't come, and $found did, so it goes on with $found."
+      fi
+      watch_request "$found"
+      next=$((found + 1))
+      idle_from="$SECONDS"
+      if [ -n "$WATCH_STOP" ]; then WATCH_WHY="$WATCH_STOP"; return 0; fi
+      continue
+    fi
+    if [ $((SECONDS - idle_from)) -ge "$WATCH_IDLE" ]; then
+      WATCH_WHY="no request came for $WATCH_IDLE seconds"
+      return 0
+    fi
+    ui_wait "$tick" "Waiting for Copilot Cowork's request $next" "$((SECONDS - idle_from))s of ${WATCH_IDLE}s with none. Ctrl-C ends it"
+    tick=$((tick + 1))
+    sleep "$WATCH_POLL" || sleep 5
+  done
+}
+
+cmd_watch() {
+  local d root name prompt
+  case "${1:-}" in -h | --help) usage; return 0 ;; esac
+  for d in "$@"; do
+    case "$d" in -*) die_usage "relay watch: unknown option $d. Try relay --help" ;; esac
+  done
+  [ $# -gt 0 ] || die_usage "relay watch needs a repository, as: relay watch REPOSITORY..."
+  needs_terminal watch
+  WATCH_TMP="$(mktemp -d "${TMPDIR:-/tmp}/llm-relay.XXXXXX")" || die "can't make a scratch folder"
+  trap watch_exit EXIT
+  trap 'WATCH_WHY="the user pressed Ctrl-C"; exit 0' INT
+  trap 'WATCH_WHY="the relay was told to stop"; exit 1' TERM HUP
+  for d in "$@"; do
+    root="$(git -C "$d" rev-parse --show-toplevel 2>/dev/null)" || die "not a git repository: $d"
+    name="${root##*/}"
+    case "$name" in '' | *[!A-Za-z0-9._-]*) die_usage "relay watch can't use a repository called $name. A name may have letters, digits, dots, dashes and underscores. Rename the folder, or name another." ;; esac
+    ! watch_is_name "$name" || die_usage "two of those repositories are both called $name, and Copilot Cowork asks for one by name. Name only one of them."
+    WATCH_NAMES="${WATCH_NAMES:+$WATCH_NAMES }$name"
+    printf '%s\n' "$root" >"$WATCH_TMP/root.$name"
+  done
+  WATCH_ID="$(date -u +%Y%m%d-%H%M%S)"
+  ui_stage WATCH "relay $RELAY_VERSION" "session $WATCH_ID" "${WATCH_NAMES// /, }"
+  # Each repository is scanned as relay scan scans it, with the same questions, since a session
+  # needs a scan first. One that isn't sent stops the start, with nothing written to OneDrive.
+  for name in $WATCH_NAMES; do
+    watch_scan "$name" "" || die "$name wasn't scanned, so the watch didn't start. Run it again, and answer the question about secrets if it asks."
+  done
+  mkdir -p "$COWORK/relay/watch" && mkdir "$COWORK/relay/watch/$WATCH_ID" || die "can't make Documents/Cowork/relay/watch/$WATCH_ID. Run it again."
+  WATCH_REQUESTS="$COWORK/relay/watch/$WATCH_ID/requests"
+  WATCH_REPLIES="$COWORK/relay/watch/$WATCH_ID/replies"
+  mkdir "$WATCH_REQUESTS" "$WATCH_REPLIES" || die "can't make the folders for requests and replies in OneDrive"
+  # Copilot Cowork lists a folder to find a reply, and needs something in it to list.
+  echo "Copilot Cowork writes its requests here, as 1.txt, 2.txt and so on. relay watch session $WATCH_ID." >"$WATCH_REQUESTS/README.txt"
+  echo "relay watch writes its replies here, as 1.txt and 1.seen for request 1. relay watch session $WATCH_ID." >"$WATCH_REPLIES/README.txt"
+  {
+    echo "LLM-RELAY WATCH"
+    echo "session: $WATCH_ID"
+    echo "relay: $RELAY_VERSION"
+    echo "runlib: $RUNLIB_VERSION"
+    echo "started: $(now)"
+    echo "repositories: ${WATCH_NAMES// /, }"
+    echo "requests: Documents/Cowork/relay/watch/$WATCH_ID/requests"
+    echo "replies: Documents/Cowork/relay/watch/$WATCH_ID/replies"
+    echo "next request: 1"
+    echo "debrief: $DEBRIEF"
+  } >"$WATCH_TMP/note.txt"
+  watch_put "$WATCH_TMP/note.txt" "$COWORK/relay/watch/note.txt" || die "couldn't write Documents/Cowork/relay/watch/note.txt in OneDrive"
+  ui_stage NOTE "OneDrive: Documents/Cowork/relay/watch/note.txt"
+  prompt="relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/note.txt from my OneDrive."
+  ui_turn
+  if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
+    ui_step --done --emoji "📋" 1 "Paste the prompt into Copilot Cowork." "A prompt for Copilot Cowork is on your clipboard."
+  else
+    ui_step 1 "Paste this into Copilot Cowork:"
+    ui_card "$prompt"
+    echo
+  fi
+  ui_detail "Leave this open. It asks you before anything runs or lands, and Ctrl-C ends it."
+  WATCH_RC=0
+  watch_loop
+  return "$WATCH_RC"
 }
 
 # ---- ticket ------------------------------------------------------------------
@@ -3510,6 +4104,7 @@ Start from a Jira ticket|acli python3|ticket
 Run Go checks in a review|go|mr
 Lint a review with the repository's pre-commit|pre-commit|mr
 Send a repository's wiki with it|wiki|scan
+Let Copilot Cowork ask for scans and runs|git|watch
 Have Claude Code ask Copilot Cowork|security curl|ask"
 
 # tool_commands <tool>: the parts of its hint that are commands to type, one a line, so a
@@ -4084,7 +4679,7 @@ cmd_complete() {
   sub="${1:-}"
   if [ "$i" -gt 1 ] && [ "$sub" = --dir ]; then sub="${3:-}"; at=3; fi
   if [ "$i" -le "$at" ]; then
-    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nbranch\nreview\napply\nask\nanswer\nskills\nfield-test\ncompletion\n'
+    printf 'start\npractice\nsetup\nrun\nscan\nmr\nticket\nbranch\nreview\napply\nwatch\nask\nanswer\nskills\nfield-test\ncompletion\n'
     [ "$at" -eq 3 ] || echo --dir
     return 0
   fi
@@ -4100,6 +4695,7 @@ cmd_complete() {
     field-test) printf -- '--clean\n--asks\n' ;;
     practice) echo --clean ;;
     apply) printf -- '--repo\n--expect\n' ;;
+    watch) echo __dirs__ ;;
     completion) printf 'zsh\nbash\n' ;;
   esac
   return 0
@@ -4870,7 +5466,7 @@ if [ "${1:-}" = --dir ]; then
 fi
 case "${1:-}" in
   setup) shift; cmd_setup "$ONEDRIVE" "$@"; exit $? ;;
-  start | practice | run | scan | mr | ticket | branch | review | apply | skills | field-test | ask | answer)
+  start | practice | run | scan | mr | ticket | branch | review | apply | watch | skills | field-test | ask | answer)
     command -v git >/dev/null 2>&1 || die "relay needs git"
     [ -n "$ONEDRIVE" ] || ONEDRIVE="$(onedrive_folder)" || exit 1
     [ -d "$ONEDRIVE" ] || die "no such folder: $ONEDRIVE"
@@ -4888,6 +5484,7 @@ case "${1:-}" in
   branch) shift; cmd_branch "$@"; exit $? ;;
   review) shift; cmd_review "$@"; exit $? ;;
   apply) shift; cmd_apply "$@"; exit $? ;;
+  watch) shift; cmd_watch "$@"; exit $? ;;
   skills) shift; cmd_skills "$@"; exit $? ;;
   field-test) shift; cmd_field_test "$@"; exit $? ;;
   ask) shift; cmd_ask "$@"; exit $? ;;

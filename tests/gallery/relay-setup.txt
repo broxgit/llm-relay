@@ -18,6 +18,7 @@
 [2m│[0m   [1m[33m![0m Run Go checks in a review                      needs go: [36mbrew install go[0m
 [2m│[0m   [1m[33m![0m Lint a review with the repository's pre-commit needs pre-commit: [36mbrew install pre-commit[0m
 [2m│[0m   [1m[33m![0m Send a repository's wiki with it               needs wiki: optional, from github.com/broxgit/llm-wiki
+[2m│[0m   [32m✓[0m Let Copilot Cowork ask for scans and runs      ready
 [2m│[0m   [1m[33m![0m Have Claude Code ask Copilot Cowork            set up with: [36mrelay ask --setup[0m
 [2m│[0m     Copilot Cowork finds it when a new session starts, but its copy can lag OneDrive by several minutes, so give it 10. Ask it to change code in a repository, and it will give you a relay run command. Run that in Apple's Terminal: macOS can refuse other terminal apps.
 [2m│[0m     To let Claude Code ask Copilot Cowork questions: [36mrelay ask --setup[0m

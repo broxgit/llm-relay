@@ -13,6 +13,7 @@
        relay [--dir ONEDRIVE_FOLDER] branch [REPOSITORY] [--against NAME] [--plan FILE | --no-plan] [--checks | --no-checks] [--test COMMAND] [--no-wiki] [--ask]
        relay [--dir ONEDRIVE_FOLDER] review TASK-FOLDER/DELIVERABLE [--expect VERSION]
        relay [--dir ONEDRIVE_FOLDER] apply TASK-FOLDER/DELIVERABLE --repo PATH [--expect VERSION]
+       relay [--dir ONEDRIVE_FOLDER] watch REPOSITORY [REPOSITORY]...
        relay [--dir ONEDRIVE_FOLDER] ask QUESTION... [--from FILE] [--scan REPOSITORY]... [--file FILE]... [--ask]
        relay [--dir ONEDRIVE_FOLDER] answer [ID]
        relay [--dir ONEDRIVE_FOLDER] ask --setup
@@ -86,6 +87,13 @@
          <name>.previous.
   apply  Waits for a deliverable, and when you press y applies its patches to the repository's
          working tree. It never commits. Use it once a run has passed.
+  watch  Stays open, and does what Copilot Cowork asks for in requests it writes to OneDrive, so
+         you don't carry a command to the terminal for each step. It scans the repositories you
+         name, writes a note for Copilot Cowork, and puts a prompt on your clipboard. A scan
+         it is asked for needs no key. A run, an apply or a review still waits for your key
+         here, and a run can be offered as "run it, and apply it if it passes", which one y
+         answers. It never commits. It ends on Ctrl-C, on a request to stop, or after two
+         hours with no request.
   ask    Hands Copilot Cowork a question, for an assistant on this Mac that wants the bulk reading
          done elsewhere. The question goes to OneDrive with any file you name with --file,
          after the check for secrets, and --scan sends a repository for Copilot Cowork to read. Then

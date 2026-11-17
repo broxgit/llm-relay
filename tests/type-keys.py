@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Runs a command at a pseudo-terminal and types answers at its prompts, for tests/smoke.sh.
 
-  type-keys.py [--pipe-stdin TEXT] KEYS COMMAND [ARG...]
+  type-keys.py [--pipe-stdin TEXT] [--hold FILE] KEYS COMMAND [ARG...]
 
 relay takes its answers from the terminal, so a test can't pipe one in. Each character of KEYS
 is typed when the command's output ends in a prompt, one per prompt. A newline is Enter.
 --pipe-stdin gives the command a pipe holding TEXT as its standard input, with the terminal
-still there. Prints what the terminal showed, and exits as the command did. If a prompt comes
-with no keys left, the command is stopped and the exit code is 125. After 300 seconds, 124.
+still there. --hold FILE types nothing while FILE exists, so a test can look at a command that is
+waiting for a key before it gets one. Prints what the terminal showed, and exits as the command
+did. If a prompt comes with no keys left, the command is stopped and the exit code is 125. After
+300 seconds, 124.
 """
 import os
 import pty
@@ -24,16 +26,23 @@ LIMIT = 300
 def main():
     args = sys.argv[1:]
     piped = None
-    if args[:1] == ["--pipe-stdin"]:
-        piped = args[1].encode()
+    hold = None
+    while args[:1] in (["--pipe-stdin"], ["--hold"]):
+        if args[0] == "--pipe-stdin":
+            piped = args[1].encode()
+        else:
+            hold = args[1]
         args = args[2:]
     if len(args) < 2:
-        sys.exit("usage: type-keys.py [--pipe-stdin TEXT] KEYS COMMAND [ARG...]")
+        sys.exit("usage: type-keys.py [--pipe-stdin TEXT] [--hold FILE] KEYS COMMAND [ARG...]")
     keys = [k.encode() for k in args[0]]
     command = args[1:]
 
     pid, fd = pty.fork()
     if pid == 0:
+        # A command started in the background by a shell has SIGINT ignored, and a terminal's
+        # command shouldn't, so Ctrl-C and kill -INT reach it as they would in a window.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
         if piped is not None:
             r, w = os.pipe()
             os.write(w, piped)
@@ -68,7 +77,9 @@ def main():
         if code is not None and not ready:
             break
         if shown[answered:].endswith(PROMPTS):
-            if keys:
+            if hold and os.path.exists(hold):
+                pass
+            elif keys:
                 os.write(fd, keys.pop(0))
                 answered = len(shown)
             else:
