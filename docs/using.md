@@ -125,6 +125,7 @@ Most of the relay needs no settings. These are the ones you can change.
 - **`--skills` and `--skills-from`:** the skills of your own that Copilot Cowork gets a copy of, and where they live. [Your own skills in Copilot Cowork](#your-own-skills-in-copilot-cowork) has them.
 - **`--palette`:** `default`, or `colorblind` for blue and magenta in place of green and red, which stay apart for most kinds of colour blindness. The marks and words are the same either way.
 - **`--theme`:** `auto`, `dark` or `light`, the terminal's background, so the colours read on it. `auto` takes the terminal's word for it where it gives one, and is dark otherwise. macOS's Terminal gives none, so say `light` there if yours is light.
+- **`--debrief`:** `ask` or `off`. With `ask`, the default, Copilot Cowork offers once, when a session seems to be ending, to write a debrief on how relay did for the relay's developer. It's one line at the end of a message, and you can ignore it. If you say yes, it asks you two questions, writes the report with your work's names left out, and hands it over with `relay review`. Read it before you pass it on. `off` stops the offer. Every note the relay sends says which, on its `debrief:` line.
 
 At a terminal, `setup` asks about reviews, clones, the palette and the theme the first time, with the default in brackets. Pressing Return takes it. The flags answer for you. With `LLM_PALETTE` or `LLM_THEME` set, it doesn't ask about that one, since the variable decides. The relay also remembers, in the same folder, the clones it has used, the test command you named for a repository with `--test`, and the repositories where you said yes to the secrets question.
 
@@ -508,7 +509,7 @@ relay [--dir ONEDRIVE_FOLDER] start
 
 - `--dir ONEDRIVE_FOLDER`: the OneDrive folder to use.
 
-It takes nothing else. [Start here](#start-here) has what it does. Under "Where things are" it gives your clones, reviews and plans folders, and the colours: the palette and theme `relay setup` records.
+It takes nothing else. [Start here](#start-here) has what it does. Under "Where things are" it gives your clones, reviews and plans folders, the colours: the palette and theme `relay setup` records, and whether Copilot Cowork offers a debrief.
 
 ### `practice`
 

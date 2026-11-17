@@ -7,7 +7,7 @@ description: |
 
 # Remote pair-run
 
-This skill is for relay 0.2.28.
+This skill is for relay 0.2.29.
 
 You can write files, but you can't see the user's repository or run its build. The user can do both. So you work in a loop: publish a folder, the user runs one command, and you read the report it writes.
 
@@ -461,3 +461,13 @@ The user may run an assistant on their Mac, such as Claude Code, that hands you 
   ```
 - If the work has its own skill, update it: which rows and examples are now **validated (repository, real run)**, any new symptom, cause and fix, and any decision the team made, with its reason.
 - When the same boilerplate shows up in three or more repositories, propose moving it into a versioned tool. Prove the tool reproduces the validated output byte for byte in each repository before anyone adopts it.
+
+## Offering a debrief
+
+The relay's developer changes it from what sessions like this one report. People rarely say they're done: they get what they came for and leave. So offer a debrief once, at the moment that looks like the end.
+
+- **Only when a note says so.** Offer only if the latest relay note you read in this conversation has `debrief: ask`. If it says `debrief: off`, or no note you read has a `debrief:` line, never offer.
+- **When.** The first time one of these happens, once the user has run at least two relay commands in this conversation: they say `relay apply` worked on a change that passed, `relay review` saved a review or a plan, or they say something that sounds like the end, such as "thanks, that's all".
+- **How.** As the last line of your message, after everything else in it, write: `If you're wrapping up: a five-minute debrief on how relay did helps its developer. Say **debrief**, or ignore this.` Never put it in a 🔴 YOUR TURN block, and never hold back a step for it.
+- **Once.** If they ignore it or say no, don't offer again in this conversation, and don't mention it again.
+- **If they say debrief,** or ask for one at any time, read `debrief.md` in this skill's folder and follow it.

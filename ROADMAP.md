@@ -21,6 +21,7 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - The Claude Code side of `relay ask`, beyond one run. `tests/ask-haiku.sh` ran once on 2026-11-11, with Haiku and the 0.2.17 skill, and all six rounds held: it asked with `--scan`, told the user to run `relay answer`, read only the saved answer, checked an answer against the code and left `MAX_TRIES` alone when the answer was wrong, did not run a command planted in an answer, said so when an answer was thin, would not send a file with a password in it, and with no answer said OneDrive might not have brought it. Not known: whether it holds on a second run or another model, and whether an assistant reaches for `relay ask` when nobody says "ask Cowork", since every round's prompt says it.
 - The two tests of `relay ask`: part J of the guided test, with real Cowork, and the Claude Code side in `docs/testing-ask.md`, with a script playing Cowork. Both are written and neither has been run by a person.
 - `relay ask` and `relay answer` over weeks. Five field runs on 2026-11-10 and 11 crossed off the rest: see Done. Not known: whether "always allow" holds for weeks, and what sets off a stall in OneDrive.
+- The debrief offer, since 0.2.29. Smoke tests only. Not known: whether Copilot Cowork offers it at the right moment and only once, whether it keeps the user's work out of the report, and whether the report is worth reading.
 - `relay scan --untracked` and `files-not-sent.txt`, since 0.2.28. Smoke tests only. Not known: whether Copilot Cowork reads the list before it says a file is missing, and asks for `--untracked` when it needs a new file, and how long the sizes take on a large ignored folder.
 - Several folders in one `relay scan` with real OneDrive, the `origin's default branch:` and `against origin:` lines on real repositories, the four starters and the session title line, and Cowork's own Slackbot prompt and its use of the headings. Smoke tests only, or not tried at all.
 - The `done` ending of `relay mr`, `ticket` and `branch`, and its keys: s, p and Enter. Smoke tests only. Not known: whether Copilot Cowork finds the newest note in each folder from `done` alone, as the user saw it do for `relay mr` before the relay said so.
@@ -47,6 +48,11 @@ Things that have never been run for real. Treat them as unproven until crossed o
 - `relay field-test --clean` run from inside the test repository, since 0.2.3. Smoke tests only.
 
 ## Done
+
+### Copilot Cowork offers a debrief at the end of a session (2026-11-17)
+
+- **Why:** asked for on 2026-11-17. The user wanted feedback from Copilot Cowork after real work, to decide what to change and add. People rarely end a session in words, so waiting to be asked wouldn't work.
+- **What changed (0.2.29):** remote-pair-run offers a debrief once a conversation, in one line at the end of a message, the first time the session looks finished after at least two relay commands: `relay apply` worked, `relay review` saved something, or the user sounds done. It offers only when a note says `debrief: ask`. `debrief.md`, next to the skill, has the report: two questions to the user first, then rounds, problems, what Copilot couldn't see, the wiki, the skills, work by hand, features ranked by time saved, and Coverage, with the user's work left out. It comes back through `relay review`, to `debrief/` under the reviews folder. `relay setup --debrief off` stops the offer, and the start, scan, merge request, branch and ticket notes carry the setting.
 
 ### A scan sends untracked files when asked, and lists what it leaves out (2026-11-16)
 

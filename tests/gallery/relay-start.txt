@@ -16,6 +16,7 @@
 [2m│[0m     reviews  ~/mr-reviews
 [2m│[0m     plans    ~/plans
 [2m│[0m     colours  palette default, theme auto
+[2m│[0m     debrief  ask
 [2m│[0m     [36mrelay setup[0m changes any of them.
 [2m│[0m   [1m[33m![0m This is a terminal app that gives no name, not Apple's Terminal. Use Apple's Terminal for relay run, review and apply: macOS has refused other terminal apps on OneDrive files.
 [2m│[0m

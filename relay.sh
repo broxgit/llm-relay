@@ -55,7 +55,7 @@ wait_draw() {
 wait_clear() { ui_wait_clear; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.28"
+RELAY_VERSION="0.2.29"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -103,6 +103,10 @@ REVIEWS_DIR="$(setting reviews "$HOME/mr-reviews")"
 ANSWERS_DIR="$(setting answers "$HOME/relay-answers")"
 PLANS_DIR="$(setting plans "$HOME/plans")"
 CLONES_DIRS="$(setting clones "$HOME/dev")"
+# Whether Copilot Cowork offers a debrief on relay when a session seems to be ending: ask or off.
+# A note carries it, and anything but off is ask.
+DEBRIEF="$(setting debrief ask)"
+[ "$DEBRIEF" = off ] || DEBRIEF=ask
 # The user's own skills that Cowork gets a copy of, by name, and where they live.
 SKILLS="$(setting skills "")"
 SKILLS_FROM="$(setting skills_from "$HOME/.claude/skills")"
@@ -1201,6 +1205,7 @@ EOF
     [ -z "$behind" ] || echo "against origin: $behind"
     echo "taken: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "wiki: $WIKI_LINE"
+    echo "debrief: $DEBRIEF"
     echo "secrets check: $SECRETS_LINE"
     if [ "$dirty" = yes ]; then
       echo "uncommitted changes: yes, in uncommitted.patch"
@@ -2003,6 +2008,7 @@ EOF
     echo "clone: $clone"
     echo "local branch: $local_line"
     echo "wiki: $WIKI_LINE"
+    echo "debrief: $DEBRIEF"
     echo "secrets check: $SECRETS_LINE"
     echo "go modules: $MODULES_LINE"
     echo "changed files: $(grep -c '^diff --git' "$WORK/mr/diff.patch")"
@@ -2763,6 +2769,7 @@ EOF
       echo "Confluence pages: none. A ticket's links to pages don't come with it, so ask the user for any you need, with --page"
     fi
     echo "attachments: not sent"
+    echo "debrief: $DEBRIEF"
     echo "secrets check: $SECRETS_LINE"
     echo "archive: $key.tar.gz"
     echo "archive sha256: $hash"
@@ -2942,6 +2949,7 @@ cmd_branch() {
     fi
     echo "plan: $plan_line"
     echo "wiki: $WIKI_LINE"
+    echo "debrief: $DEBRIEF"
     echo "secrets check: $SECRETS_LINE"
     echo "checks: $CHECKS_LINE"
     echo "earlier review: $existing"
@@ -3719,6 +3727,7 @@ begin_session() {
   ui_detail "reviews  $(tilde "$REVIEWS_DIR")"
   ui_detail "plans    $(tilde "$PLANS_DIR")"
   ui_detail "colours  palette $PALETTE, theme $THEME"
+  ui_detail "debrief  $DEBRIEF"
   ui_detail "$(typed "relay setup") changes any of them."
   # Reviews and plans are made when the first is saved. Clones have to be there already.
   if ! clones_folder_there; then
@@ -3739,6 +3748,7 @@ begin_session() {
     echo "terminal app: ${TERM_PROGRAM:-unknown}"
     echo "the relay's own skills in Cowork's folder: $OWN_SKILL_STATE${changed:+, installed just now}"
     echo "runs on this Mac so far: ${runs:-0}"
+    echo "debrief: $DEBRIEF"
     if [ "$mode" = practice ]; then
       echo "practice: yes. The repository is ~/relay-practice, $PRACTICE_LINE, with greeting.txt on main, which says hello"
     else
@@ -3917,7 +3927,7 @@ relay_choice() {
 
 # Copies the remote pair-run skill into the OneDrive folder Copilot Cowork reads skills from.
 cmd_setup() {
-  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget="" palette="" theme=""
+  local dir="$1" reviews="" clones="" plans="" skills="" named="" skills_from="" before="$SKILLS" key value rc=0 forget="" palette="" theme="" debrief=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -3949,6 +3959,10 @@ cmd_setup() {
         case "${2:-}" in auto | dark | light) theme="$2" ;; *) die_usage "--theme needs auto, dark or light" ;; esac
         shift 2
         ;;
+      --debrief)
+        case "${2:-}" in ask | off) debrief="$2" ;; *) die_usage "--debrief needs ask or off" ;; esac
+        shift 2
+        ;;
       --forget)
         [ -n "${2:-}" ] || die_usage "--forget needs the folder of a clone the relay remembers"
         forget="$2"
@@ -3971,6 +3985,7 @@ cmd_setup() {
 Usage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS]
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
                    [--palette default|colorblind] [--theme auto|dark|light]
+                   [--debrief ask|off]
        relay setup --forget FOLDER
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
@@ -3987,6 +4002,10 @@ which stay apart for most kinds of colour blindness. --theme light suits a termi
 light background; auto reads the terminal's word for it where it gives one, and is dark
 otherwise. At a terminal, it asks for each the first time. LLM_PALETTE and LLM_THEME, which
 llm-wiki reads too, win over both for one shell.
+
+--debrief off stops Copilot Cowork offering, when a session seems to be ending, to write a
+debrief on how relay did for the relay's developer. It's ask unless you say otherwise. Each
+note the relay sends Copilot Cowork says which.
 
 --forget drops one clone from the ones the relay remembers and tells Copilot Cowork about, and
 does nothing else. The folder isn't touched. relay start lists them.
@@ -4023,7 +4042,8 @@ EOF
   [ -z "$plans" ] || relay_setting plans "$plans" "$HOME/plans" ""
   relay_choice palette "$palette" default LLM_PALETTE "Colours: default, or colorblind for blue and magenta in place of green and red?" default colorblind
   relay_choice theme "$theme" auto LLM_THEME "Your terminal's background: auto, dark or light?" auto dark light
-  for key in reviews clones plans palette theme; do
+  [ -z "$debrief" ] || save_setting debrief "$debrief"
+  for key in reviews clones plans palette theme debrief; do
     value="$(setting "$key" "")"
     [ -z "$value" ] || ui_detail "relay setting: $key=$value"
   done
@@ -4069,7 +4089,7 @@ cmd_complete() {
     return 0
   fi
   case "$sub" in
-    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--palette\n--theme\n--forget\n' ;;
+    setup) printf -- '--dir\n--reviews\n--clones\n--plans\n--skills\n--skills-from\n--palette\n--theme\n--debrief\n--forget\n' ;;
     run) printf -- '--expect\n--no-install\n' ;;
     scan) printf -- '--branch\n--untracked\n--no-wiki\n--ask\n' ;;
     mr) printf -- '--repo\n--also\n--go-prefix\n--checks\n--no-checks\n--test\n--no-wiki\n--ask\n' ;;

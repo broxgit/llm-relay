@@ -1,6 +1,7 @@
 [1mUsage: relay setup [--dir ONEDRIVE_FOLDER] [--reviews FOLDER] [--clones FOLDERS][0m
                    [--plans FOLDER] [--skills NAMES] [--skills-from FOLDER]
                    [--palette default|colorblind] [--theme auto|dark|light]
+                   [--debrief ask|off]
        relay setup --forget FOLDER
 
 Copies the remote-pair-run skill to Documents/Cowork/skills in your work OneDrive, for
@@ -17,6 +18,10 @@ which stay apart for most kinds of colour blindness. --theme light suits a termi
 light background; auto reads the terminal's word for it where it gives one, and is dark
 otherwise. At a terminal, it asks for each the first time. LLM_PALETTE and LLM_THEME, which
 llm-wiki reads too, win over both for one shell.
+
+--debrief off stops Copilot Cowork offering, when a session seems to be ending, to write a
+debrief on how relay did for the relay's developer. It's ask unless you say otherwise. Each
+note the relay sends Copilot Cowork says which.
 
 --forget drops one clone from the ones the relay remembers and tells Copilot Cowork about, and
 does nothing else. The folder isn't touched. relay start lists them.
