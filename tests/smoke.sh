@@ -3499,8 +3499,10 @@ check "the prompt for Copilot Cowork, naming the session's note, is on the clipb
 check "nothing but the watch's prompt was put there by the scans" test "$(grep -c . "$T/watch-clip")" = 1
 
 # A scan needs no key.
-w_do 1 'do: scan' 'repository: wa-one'
+w_do 1 'from: abc123' 'do: scan' 'repository: wa-one'
 check "a scan request is answered with no key" w_says 1 'outcome: done'
+check "the reply repeats the request's from word" w_says 1 'from: abc123'
+check "and so does the seen file" grep -qx 'from: abc123' "$WREP/1.seen"
 check "and names what it sent" w_says 1 'scan: Documents/Cowork/relay/scans/wa-one.txt'
 check "and says what did not change since" w_says 1 'changed since its scan: wa-one: no, wa-two: no'
 check "and what comes next" w_says 1 'next request: 2'
@@ -3527,17 +3529,19 @@ check "with its result" w_says 2 'result: PASS'
 check "and where its report is" grep -q "^report: Documents/Cowork/relay/t41/reports/demo-v$V41-" "$WREP/2.txt"
 check "and the report is there" bash -c "ls '$WC'/relay/t41/reports/demo-v$V41-*.txt"
 w_hasnt 2 'applied:' && ok "a plain run says nothing of applying" || bad "a plain run says nothing of applying"
+w_hasnt 2 'from:' && ok "a request with no from word gets none back" || bad "a request with no from word gets none back"
 
 # A run, on n.
 echo hello >"$WRE/wa-two/new.txt"
 w_do 3 'do: run' 'deliverable: t42/other' "expect: $V42"
 check "a run on n says the user said no" w_says 3 'outcome: the user said no'
+check "and why" w_says 3 "why: the user pressed n at the terminal's question"
 w_hasnt 3 'result:' && ok "with no result" || bad "with no result"
 check "and nothing ran: no report went to OneDrive" test ! -e "$WC/relay/t42"
 check "and the reply says the other repository moved" w_says 3 'changed since its scan: wa-one: no, wa-two: yes'
 
 # A run that is applied if it passes, on y: applied, scanned again, nothing committed.
-w_do 4 'do: run' 'deliverable: t43/fix' "expect: $V43" 'then: apply' 'repository: wa-one'
+w_do 4 'from: other9' 'do: run' 'deliverable: t43/fix' "expect: $V43" 'then: apply' 'repository: wa-one'
 check "run then apply on y is done" w_says 4 'outcome: done'
 check "it passed" w_says 4 'result: PASS'
 check "and was applied" w_says 4 'applied: yes'
@@ -3577,6 +3581,8 @@ check "and nothing is committed there" test "$(git -C "$WRE/wa-two" rev-parse HE
 w_do 9 'do: review' 'deliverable: t46/rev' "expect: $V46"
 check "a review on y is done" w_says 9 'outcome: done'
 check "and saved where reviews are kept" grep -q 'a review' "$T/watch-reviews/ABC-12/r.md"
+check "and the reply says where" grep -q '^saved: .*watch-reviews/ABC-12/r\.md$' "$WREP/9.txt"
+check "once" test "$(grep -c '^saved: ' "$WREP/9.txt")" = 1
 
 # A run that never arrives, and a scan with its untracked files.
 w_do 10 'do: run' 'deliverable: t99/none' 'expect: 1'
@@ -3626,14 +3632,27 @@ check "none of those had a seen file, since none was done" bash -c "! ls '$WREP'
 check "nothing was scanned that wasn't asked" test ! -e "$WC/relay/scans/ZZoutside.txt"
 if grep -rq 'ZZ' "$WREP"; then bad "no word of a refused request is in a reply" "$(grep -r ZZ "$WREP" | head -n 3)"; else ok "no word of a refused request is in a reply"; fi
 
+# The from word: letters and digits, 16 at most, and a refusal for something else keeps it.
+w_do 34 'from: ZZ345678901234567' 'do: scan' 'repository: wa-one'
+w_do 35 'from: ZZ-bad' 'do: scan' 'repository: wa-one'
+w_do 36 'from: abc123' 'do: ZZdo'
+check "a from word of 17 characters is refused" w_says 34 'why: from is not 1 to 16 letters and digits'
+check "and one with a dash" w_says 35 'why: from is not 1 to 16 letters and digits'
+w_hasnt 35 'from:' && ok "a from word that was refused is in no reply" || bad "a from word that was refused is in no reply"
+check "a request refused for something else keeps its from word" w_says 36 'from: abc123'
+check "and is still refused" w_says 36 'outcome: refused'
+if grep -rq 'ZZ' "$WREP"; then bad "no word of those is in a reply either" "$(grep -r ZZ "$WREP" | head -n 3)"; else ok "no word of those is in a reply either"; fi
+
 # A number that is skipped.
-w_do 36 'do: scan' 'repository: wa-one'
-check "a skipped number is passed over" w_says 36 'outcome: done'
-check "and its reply says what comes next" w_says 36 'next request: 37'
-check "and the note names no number the watch has passed" w_next 37
+w_do 39 'do: scan' 'repository: wa-one'
+check "a skipped number is passed over" w_says 39 'outcome: done'
+check "and its reply says what comes next" w_says 39 'next request: 40'
+check "and the note names no number the watch has passed" w_next 40
 # Stop.
-w_do 37 'do: stop'
-check "a request to stop is answered" w_says 37 'did: stop'
+w_do 40 'do: stop'
+check "a request to stop is answered" w_says 40 'did: stop'
+w_hasnt 40 'next request:' && ok "and its reply names no next request" || bad "and its reply names no next request"
+check "and the note still names the stop's own number" grep -qx 'next request: 40' "$WN"
 w_end
 check "and the watch ends cleanly" test "$WRC" = 0
 check "it wrote its ended file" grep -qx 'LLM-RELAY WATCH ENDED' "$WREP/ended.txt"
@@ -3645,7 +3664,12 @@ case "$W_OUT" in *"WATCH  relay $WVERSION"*"session $WSID"*"wa-one, wa-two"*) ok
 case "$W_OUT" in *"relay watch ended: Copilot Cowork asked it to stop"*) ok "and says why it ended" ;; *) bad "and says why it ended" "$W_OUT" ;; esac
 case "$W_OUT" in *"Nothing more to do here. Copilot Cowork reads the reply itself"*) ok "each request ends by saying nothing more is needed" ;; *) bad "each request ends by saying nothing more is needed" "$W_OUT" ;; esac
 case "$W_OUT" in *"Request 13 was refused: the repository is not one this watch was started with"*) ok "a refused request is one line in the terminal" ;; *) bad "a refused request is one line in the terminal" "$W_OUT" ;; esac
-case "$W_OUT" in *"Request 34 didn't come, and 36 did, so it goes on with 36."*) ok "a skipped number is said in a line" ;; *) bad "a skipped number is said in a line" "$W_OUT" ;; esac
+case "$W_OUT" in *"Request 37 didn't come, and 39 did, so it goes on with 39."*) ok "a skipped number is said in a line" ;; *) bad "a skipped number is said in a line" "$W_OUT" ;; esac
+case "$W_OUT" in *"tell Copilot Cowork"*) bad "a run in a watch doesn't say to tell Copilot Cowork it is done" ;; *) ok "a run in a watch doesn't say to tell Copilot Cowork it is done" ;; esac
+case "$W_OUT" in *"Request 4 is from another Copilot Cowork conversation than the one before it."*) ok "a request from another conversation is said in a line" ;; *) bad "a request from another conversation is said in a line" "$W_OUT" ;; esac
+case "$W_OUT" in *"Request 2 is from another"* | *"Request 1 is from another"*) bad "and only when the from word changed" ;; *) ok "and only when the from word changed" ;; esac
+case "$W_OUT" in *abc123* | *other9*) bad "a from word is never in the terminal" ;; *) ok "a from word is never in the terminal" ;; esac
+case "$W_OUT" in *"Paste the prompt into Copilot Cowork, unless it has this watch's note already."*) ok "the start says the prompt is for a conversation that hasn't the note" ;; *) bad "the start says the prompt is for a conversation that hasn't the note" "$W_OUT" ;; esac
 case "$W_OUT" in *ZZ*) bad "no word of a refused request is in the terminal" "$(printf '%s\n' "$W_OUT" | grep ZZ | head -n 3)" ;; *) ok "no word of a refused request is in the terminal" ;; esac
 case "$W_OUT" in *"? Run it, and apply it if it passes?"*"[y]es to both  [r]un only  [v]iew the files  [n]o  › "*) ok "a run that may be applied asks for both, with the keys the design gives" ;; *) bad "a run that may be applied asks for both, with the keys the design gives" "$W_OUT" ;; esac
 [ "$(printf '%s\n' "$W_OUT" | grep -c 'Apply it, uncommitted?')" = 2 ] && ok "and only the two plain applies asked their own question" || bad "and only the two plain applies asked their own question" "$(printf '%s\n' "$W_OUT" | grep -c 'Apply it, uncommitted?')"
