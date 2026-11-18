@@ -2457,6 +2457,7 @@ case "$WATCH_IDLE" in '' | *[!0-9]*) WATCH_IDLE=7200 ;; esac
 # open, and never inside OneDrive. WATCH_NAMES are the repositories, by name, and
 # $WATCH_TMP/root.<name> holds where each is. WATCH_SCAN is the name of the scan made last.
 WATCH_ID=""
+WATCH_CLAIMED=""
 WATCH_STARTED=""
 WATCH_TMP=""
 WATCH_NAMES=""
@@ -2511,16 +2512,22 @@ watch_note() {
   watch_put "$WATCH_TMP/note.txt" "$COWORK/relay/watch/$WATCH_ID/note.txt"
 }
 
-# watch_claim_id: takes a session id, the UTC date and time, by making its folder, so two watches
-# started in the same second can't both have it. When the id is taken it waits a second and tries
-# again, five times at most.
+# watch_claim_id: takes a session id, the UTC date and time, so two watches started in the same
+# second can't both have it. The claim is a file in the session's folder that the shell itself
+# creates only if it isn't there (set -C). Making the folder isn't the claim: on GitHub's Linux
+# runners two mkdirs of one folder at once have both succeeded. When the id is taken it waits a
+# second and tries again, five times at most. WATCH_CLAIMED says the id is this watch's.
 watch_claim_id() {
-  local tries=0
+  local tries=0 dir
   mkdir -p "$COWORK/relay/watch" || die "can't make Documents/Cowork/relay/watch. Run it again."
   while :; do
     WATCH_ID="$(date -u +%Y%m%d-%H%M%S)"
-    mkdir "$COWORK/relay/watch/$WATCH_ID" 2>/dev/null && return 0
-    [ -d "$COWORK/relay/watch/$WATCH_ID" ] || die "can't make Documents/Cowork/relay/watch/$WATCH_ID. Run it again."
+    dir="$COWORK/relay/watch/$WATCH_ID"
+    mkdir -p "$dir" 2>/dev/null || die "can't make Documents/Cowork/relay/watch/$WATCH_ID. Run it again."
+    if (set -C; echo "relay watch session $WATCH_ID" >"$dir/claimed.txt") 2>/dev/null; then
+      WATCH_CLAIMED=yes
+      return 0
+    fi
     tries=$((tries + 1))
     [ "$tries" -lt 5 ] || die "another relay watch has taken every session id for five seconds. Run it again."
     sleep 1
@@ -2913,7 +2920,7 @@ watch_request() {
 watch_exit() {
   local why="${WATCH_WHY:-the watch stopped for a reason the relay has no word for}"
   ui_wait_clear
-  if [ -d "$WATCH_REPLIES" ]; then
+  if [ -n "$WATCH_CLAIMED" ] && [ -d "$WATCH_REPLIES" ]; then
     {
       echo "LLM-RELAY WATCH ENDED"
       echo "session: $WATCH_ID"
@@ -2924,8 +2931,12 @@ watch_exit() {
     ui_stage ENDED "relay watch ended: $why" "session $WATCH_ID"
     ui_detail "Copilot Cowork is told in replies/ended.txt, and goes back to handing you commands."
   fi
-  # An id claimed by a watch that never started leaves its folder empty. rmdir leaves any other.
-  [ -z "$WATCH_ID" ] || [ -z "${COWORK:-}" ] || rmdir "$COWORK/relay/watch/$WATCH_ID" 2>/dev/null
+  # An id claimed by a watch that never started leaves a folder with only its claim in it. A
+  # folder that isn't this watch's, or has anything more, is left as it is.
+  if [ -n "$WATCH_CLAIMED" ] && [ -n "${COWORK:-}" ] && [ ! -e "$COWORK/relay/watch/$WATCH_ID/note.txt" ] && [ ! -d "$COWORK/relay/watch/$WATCH_ID/requests" ]; then
+    rm -f "$COWORK/relay/watch/$WATCH_ID/claimed.txt"
+    rmdir "$COWORK/relay/watch/$WATCH_ID" 2>/dev/null
+  fi
   [ -z "$WATCH_TMP" ] || rm -rf "$WATCH_TMP"
 }
 
