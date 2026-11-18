@@ -7,7 +7,7 @@ description: |
 
 # Relay field test
 
-This skill is for relay 0.2.30.
+This skill is for relay 0.2.31.
 
 You are running a field test of `relay` with its user. They run commands on their Mac and tell you what they see. You do your own side with the remote-pair-run skill, watch what happens on both sides, and write it down.
 
@@ -32,7 +32,7 @@ For how to build a deliverable, hand over a command, read a report and review a 
 
 ## How to talk to the user
 
-Whenever you need anything from them, end your message with this block, in exactly this format. Put nothing after it. Leave out a line that doesn't apply.
+Whenever you need anything from them, end your message with this block, in exactly this format. Put nothing after it, except the one debrief line remote-pair-run has you offer. Leave out a line that doesn't apply.
 
 ```
 ---

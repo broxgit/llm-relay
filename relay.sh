@@ -55,7 +55,7 @@ wait_draw() {
 wait_clear() { ui_wait_clear; }
 
 # The release this is. docs/releasing.md says how to make the next one.
-RELAY_VERSION="0.2.30"
+RELAY_VERSION="0.2.31"
 
 # The exit code for "not now, try later", as docs/conventions.md has it: a wait that ran out,
 # where the same command may well work in a while. 1 is for something that failed.
@@ -544,8 +544,11 @@ send_report() {
   while [ "$i" -lt 3 ]; do
     if mkdir -p "$dir" 2>/dev/null && cp "$report" "$dir/" 2>/dev/null && cmp -s "$report" "$dir/$(basename "$report")"; then
       ui_stage SENT "OneDrive: Documents/Cowork/relay/$task/reports/$(basename "$report")"
-      ui_turn
-      ui_next "tell Copilot Cowork: $(typed "done")"
+      # In a relay watch, Copilot Cowork reads the reply itself, so there is nothing to tell it.
+      if [ -z "$WATCH_OUT" ]; then
+        ui_turn
+        ui_next "tell Copilot Cowork: $(typed "done")"
+      fi
       return 0
     fi
     i=$((i + 1))
@@ -2325,6 +2328,7 @@ EOF
     fi
     cp "$copy/$f" "$dest" || die "couldn't save $dest"
     ui_item ok "Saved: $dest"
+    [ -z "$WATCH_OUT" ] || printf 'saved: %s\n' "$(tilde "$dest")" >>"$WATCH_OUT/saved"
     [ ! -f "$dest.previous" ] || ui_detail "Your earlier copy: $dest.previous"
   done <<EOF
 $files
@@ -2470,6 +2474,12 @@ WATCH_HAVE=" "
 WHY=""
 # What a request said, once watch_parse has accepted it.
 Q_session="" Q_n="" Q_do="" Q_deliverable="" Q_expect="" Q_then="" Q_repository="" Q_untracked=""
+# The request's from: line, which is the one thing of a request's that a reply repeats. It names
+# the conversation that wrote it, so a conversation can tell a reply to another's request from
+# its own. watch_parse keeps it only when it is 1 to 16 letters and digits, and it goes into the
+# .seen file and the reply, never to the terminal. WATCH_FROM is the last one a request gave.
+Q_from=""
+WATCH_FROM=""
 
 # watch_put <file> <where>: puts a file where Copilot Cowork reads it, by a rename in the same
 # folder, so it never reads half of one. False when it couldn't.
@@ -2588,6 +2598,7 @@ watch_seen() {
     echo "LLM-RELAY SEEN"
     echo "session: $WATCH_ID"
     echo "n: $1"
+    [ -z "$Q_from" ] || echo "from: $Q_from"
     echo "at: $(now)"
     echo "doing: $2"
   } >"$WATCH_TMP/seen.txt"
@@ -2595,22 +2606,25 @@ watch_seen() {
 }
 
 # watch_reply <n> <did> <outcome> <why> <more lines>: the answer to a request. The lines that
-# don't apply are left out.
+# don't apply are left out. A stop is the last request, so its reply names no next one.
 watch_reply() {
+  local why="$4"
+  [ "$3" != "the user said no" ] || [ -n "$why" ] || why="the user pressed n at the terminal's question"
   {
     echo "LLM-RELAY REPLY"
     echo "session: $WATCH_ID"
     echo "n: $1"
+    [ -z "$Q_from" ] || echo "from: $Q_from"
     echo "did: $2"
     echo "outcome: $3"
-    [ -z "$4" ] || echo "why: $4"
+    [ -z "$why" ] || echo "why: $why"
     [ -z "$5" ] || printf '%s\n' "$5"
     echo "changed since its scan: $(watch_changed)"
-    echo "next request: $(($1 + 1))"
+    [ "$2" = stop ] || echo "next request: $(($1 + 1))"
     echo "at: $(now)"
   } >"$WATCH_TMP/reply.txt"
   watch_put "$WATCH_TMP/reply.txt" "$WATCH_REPLIES/$1.txt" || ui_item warn "Couldn't write the reply for request $1 to OneDrive. Tell Copilot Cowork that it is done."
-  watch_note "$(($1 + 1))" || ui_item warn "Couldn't update the note in OneDrive. Copilot Cowork counts on from the reply's next request."
+  [ "$2" = stop ] || watch_note "$(($1 + 1))" || ui_item warn "Couldn't update the note in OneDrive. Copilot Cowork counts on from the reply's next request."
   ui_detail "Nothing more to do here. Copilot Cowork reads the reply itself, and says if it needs you."
 }
 
@@ -2626,7 +2640,7 @@ watch_parse() {
   local file="$1" n="$2" cr line first=yes key value k needed allowed
   cr="$(printf '\r')"
   WATCH_HAVE=" "
-  Q_session="" Q_n="" Q_do="" Q_deliverable="" Q_expect="" Q_then="" Q_repository="" Q_untracked=""
+  Q_session="" Q_n="" Q_do="" Q_deliverable="" Q_expect="" Q_then="" Q_repository="" Q_untracked="" Q_from=""
   [ "$(wc -c <"$file" | tr -d ' ')" -le 2048 ] || { WHY="the request is longer than 2048 bytes"; return 1; }
   # Printable characters and line ends, and nothing else: no control character of any kind.
   [ "$(LC_ALL=C tr -d '[:print:]\r\n' <"$file" | wc -c | tr -d ' ')" -eq 0 ] || { WHY="the request has a control character"; return 1; }
@@ -2652,6 +2666,12 @@ watch_parse() {
       then) Q_then="$value" ;;
       repository) Q_repository="$value" ;;
       untracked) Q_untracked="$value" ;;
+      from)
+        # Checked here, before anything can refuse the request, so a refusal's reply has it too.
+        case "$value" in '' | *[!A-Za-z0-9]*) WHY="from is not 1 to 16 letters and digits"; return 1 ;; esac
+        [ "${#value}" -le 16 ] || { WHY="from is not 1 to 16 letters and digits"; return 1; }
+        Q_from="$value"
+        ;;
       *) WHY="a line has a key the relay doesn't use"; return 1 ;;
     esac
     WATCH_HAVE="$WATCH_HAVE$key "
@@ -2675,7 +2695,7 @@ watch_parse() {
     watch_has "$k" || { WHY="a line the request needs is missing"; return 1; }
   done
   for k in $WATCH_HAVE; do
-    case " session n do $allowed " in *" $k "*) ;; *) WHY="the request has a line it may not have"; return 1 ;; esac
+    case " session n do from $allowed " in *" $k "*) ;; *) WHY="the request has a line it may not have"; return 1 ;; esac
   done
   # A run is applied only when it says so, and then it says where.
   if [ "$Q_do" = run ]; then
@@ -2842,13 +2862,13 @@ watch_do_review() {
   watch_seen "$n" "asking the user to press a key, to save the review in $d"
   ui_stage REQUEST "Request $n: review $d"
   watch_call_user "save the review in $d?"
-  rm -f "$WATCH_TMP/said-no"
+  rm -f "$WATCH_TMP/said-no" "$WATCH_TMP/saved"
   (WATCH_OUT="$WATCH_TMP"; cmd_review "$d" --expect "$e")
   rc=$?
   if [ -f "$WATCH_TMP/said-no" ]; then
     watch_reply "$n" review "the user said no" "" ""
   elif [ "$rc" -eq 0 ]; then
-    watch_reply "$n" review "done" "" ""
+    watch_reply "$n" review "done" "" "$(cat "$WATCH_TMP/saved" 2>/dev/null)"
   elif [ "$rc" -eq "$EXIT_LATER" ]; then
     watch_reply "$n" review failed "the deliverable did not arrive in time" ""
   else
@@ -2865,6 +2885,12 @@ watch_request() {
     ui_item warn "Request $n was refused: $WHY. Copilot Cowork has the reason in its reply."
     watch_reply "$n" nothing refused "$WHY" ""
     return 0
+  fi
+  if [ -n "$Q_from" ]; then
+    if [ -n "$WATCH_FROM" ] && [ "$Q_from" != "$WATCH_FROM" ]; then
+      ui_item warn "Request $n is from another Copilot Cowork conversation than the one before it. A watch serves one conversation at a time: if two are working at once, start a second relay watch for the other."
+    fi
+    WATCH_FROM="$Q_from"
   fi
   case "$Q_do" in
     scan) watch_do_scan "$n" ;;
@@ -2986,9 +3012,9 @@ cmd_watch() {
   prompt="relay watch is running. With nothing attached, read Documents/Cowork/relay/watch/$WATCH_ID/note.txt from my OneDrive."
   ui_turn
   if command -v pbcopy >/dev/null 2>&1 && printf '%s\n' "$prompt" | pbcopy 2>/dev/null; then
-    ui_step --done --emoji "📋" 1 "Paste the prompt into Copilot Cowork." "A prompt for Copilot Cowork is on your clipboard."
+    ui_step --done --emoji "📋" 1 "Paste the prompt into Copilot Cowork, unless it has this watch's note already." "A prompt for Copilot Cowork is on your clipboard."
   else
-    ui_step 1 "Paste this into Copilot Cowork:"
+    ui_step 1 "Paste this into Copilot Cowork, unless it has this watch's note already:"
     ui_card "$prompt"
     echo
   fi

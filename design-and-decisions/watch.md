@@ -74,6 +74,8 @@ repository: thing
 | `review` | `deliverable:`, `expect:` | `relay review`, with the keypress |
 | `stop` | none | Ends the watch |
 
+Any request may also have `from:`, a word of 1 to 16 letters and digits that the conversation picks for itself. It is the one thing of a request's that the relay repeats: in the `.seen` file and the reply, never in the terminal. A conversation that finds another word in a reply, or a reply it didn't ask for, knows a second conversation is on the watch. The terminal says so in a line when a request's word differs from the one before. Added at 0.2.31, after the field test below.
+
 A request with any other line, a `do:` not in the table, a repository not in the session, or another session's id is refused. The terminal says so in a line, and the reply says why.
 
 Requests never fetch a ticket or a merge request. Those commands run with Brock's sign-ins to Jira and GitLab, so a planted instruction could use a request to pull anything he can read into OneDrive.
@@ -207,3 +209,16 @@ Made on 2026-11-17:
 6. The unattended mode applies changes as well as running them. It still never commits or pushes.
 7. No fence round credentials in the unattended mode, because his Go builds need them.
 8. The unattended mode lasts 60 minutes a session, then the watch goes back to asking.
+
+## The first field test (2026-11-18)
+
+Copilot Cowork ran a whole session through one watch on the work Mac, at 0.2.30: 13 requests, with no command typed. A request was seen in 6 to 15 seconds, a scan was answered in 13 to 18, and the watch answered after 32 minutes idle. None of Copilot's waits ended without a reply.
+
+What it found, and what 0.2.31 changed:
+
+- **Two conversations on one watch took the same number.** The skill had Copilot take its next number from the last reply it read, and a second conversation had used that number since. Only OneDrive's refusal to overwrite a file stopped it. The relay never reads an answered number again, so with a tool that overwrites, the second writer would have read the other's reply as its own. Now the skill lists the replies folder before every request and stops at a reply it didn't ask for, and requests carry `from:`. Refusing a number that already has a reply was considered and left out: the relay would have to read old request files again on every look.
+- **A line written just before a wait didn't reach the user.** Copilot wrote "press n" and then waited in the same turn, and the user never saw it. A `say:` line for the terminal to print was proposed and turned down, because the watch never prints a request's text. The skill now says to end the turn first when the user needs to know something.
+- **Small things.** A run in a watch no longer says to tell Copilot Cowork "done". "The user said no" has a `why:`. A review's reply has `saved:`. The reply to a stop names no next request. The skill says that a refusal may have no `.seen`, what the question for `then: apply` looks like, and that the watch ends after two hours idle.
+
+Not known: whether the notification reaches a user who is in another window. They noticed none at the first question and both at later ones.
+
