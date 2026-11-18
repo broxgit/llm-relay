@@ -3475,6 +3475,7 @@ WSTALE=1
 if w_start ynyyrnyy "$WRE/wa-one" "$WRE/wa-two"; then ok "relay watch starts, and writes its note"; else bad "relay watch starts, and writes its note" "$(cat "$WLOG")"; fi
 WSTALE=""
 check "the note is the session's own, in its folder" test -f "$WC/relay/watch/$WSID/note.txt"
+check "and the folder holds the watch's claim to its id" grep -qx "relay watch session $WSID" "$WC/relay/watch/$WSID/claimed.txt"
 check "an old shared note is removed when a watch starts" test ! -e "$WC/relay/watch/note.txt"
 check "and no shared note is written" test -z "$(find "$WC/relay/watch" -maxdepth 1 -type f)"
 check "the note says it is a watch" grep -qx 'LLM-RELAY WATCH' "$WN"
